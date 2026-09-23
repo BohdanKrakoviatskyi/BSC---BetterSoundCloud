@@ -1,0 +1,6 @@
+appId: com.bettersoundcloud.app
+productName: BetterSoundCloud
+directories:
+  output: release
+files:
+  - dist/**/*
