@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 import requests
 import time
+import os
 
-ACCESS_TOKEN = "2-329470-1323227109-UiFoQydVOgK5z"
-CLIENT_ID    = "3uJIGBRwdofKn6QKzONvDxUM1Vs4bTv9"
+ACCESS_TOKEN = os.environ.get("SOUNDCLOUD_ACCESS_TOKEN", "").strip()
+CLIENT_ID    = os.environ.get("SOUNDCLOUD_CLIENT_ID", "").strip()
 USER_ID      = 1323227109
 TRACK_ID     = 2366824175
+
+if not ACCESS_TOKEN or not CLIENT_ID:
+    raise SystemExit("Задайте SOUNDCLOUD_ACCESS_TOKEN и SOUNDCLOUD_CLIENT_ID в окружении.")
 
 BASE = "https://api-v2.soundcloud.com"
 

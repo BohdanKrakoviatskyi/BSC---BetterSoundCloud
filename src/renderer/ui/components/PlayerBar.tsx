@@ -9,6 +9,9 @@ type Props = {
   volume: number;
   error: string;
   hasNext: boolean;
+  liked: boolean;
+  onLike: () => void;
+  onOpenTrack: () => void;
   onTogglePlayback: () => void;
   onVolumeCommit: (volume: number) => void;
   onNext: () => void;
@@ -27,7 +30,7 @@ function formatTime(seconds: number): string {
 
 const soundCloudLogo = 'https://developers.soundcloud.com/assets/logo_big_white-a38cb93cd8fa05a93183280f295e13aff1a4ae0945ca2fb0efbe85b82588431e.png';
 
-export function PlayerBar({ track, loading, shouldPlay, volume, error, hasNext, onTogglePlayback, onVolumeCommit, onNext, onPrevious, onEnded, onReady, onError, onPlaybackStateChange }: Props) {
+export function PlayerBar({ track, loading, shouldPlay, volume, error, hasNext, liked, onLike, onOpenTrack, onTogglePlayback, onVolumeCommit, onNext, onPrevious, onEnded, onReady, onError, onPlaybackStateChange }: Props) {
   const [widgetControls, setWidgetControls] = useState<SoundCloudWidgetControls | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -66,7 +69,7 @@ export function PlayerBar({ track, loading, shouldPlay, volume, error, hasNext, 
   }
 
   return (
-    <div className="player-bar" aria-label="Аудиоплеер">
+    <footer className="player-bar" aria-label="Аудиоплеер">
       {track && (
         <SoundCloudWidget
           key={track.id}
@@ -84,33 +87,27 @@ export function PlayerBar({ track, loading, shouldPlay, volume, error, hasNext, 
         />
       )}
 
-      <div className="player-track">
-        {track?.artwork
-          ? <img className="player-artwork" src={track.artwork} alt="" />
-          : <div className="player-artwork player-artwork-fallback" aria-hidden="true">♫</div>}
-        <div className="player-track-meta">
-          {track?.permalink
-            ? <a className="player-track-title" href={track.permalink} target="_blank" rel="noreferrer" title={track.title}>{track.title}</a>
-            : <strong title={track?.title}>{track?.title ?? 'Выберите трек'}</strong>}
-          {track && (
-            <a className="player-attribution" href={track.permalink || 'https://soundcloud.com/'} target="_blank" rel="noreferrer">
-              <img src={soundCloudLogo} alt="SoundCloud" />
-              <span>от {track.artist.name}</span>
-            </a>
-          )}
-          {error && <span className="player-error" title={error}>{error}</span>}
+      <div className={`now-playing ${track ? '' : 'empty'}`}>
+        <button className="now-playing-cover" type="button" disabled={!track} onClick={onOpenTrack} aria-label="Открыть страницу трека">
+          {track?.artwork && <img src={track.artwork} alt="" />}
+        </button>
+        <div className="track-copy">
+          <button type="button" className="track-title-button" onClick={onOpenTrack} title={track?.title}><b>{track?.title ?? 'Выбери музыку'}</b></button>
+          {track?.permalink ? <a href={track.permalink} target="_blank" rel="noreferrer">{track.artist.name || 'SoundCloud'}</a> : <span>{track?.artist.name || 'Здесь начнётся твоё звучание'}</span>}
+          {error && <small className="player-error" title={error}>{error}</small>}
         </div>
+        <button className={`like-button ${liked ? 'liked' : ''}`} type="button" onClick={onLike} disabled={!track} aria-label={liked ? 'Убрать из любимых' : 'Добавить в любимые'} title={liked ? 'В любимых' : 'Добавить в любимые'}>♥</button>
       </div>
 
       <div className="player-center">
-        <div className="player-controls">
-          <button type="button" aria-label="Предыдущий трек" onClick={onPrevious} disabled={!track}>⏮</button>
-          <button className="player-play-button" type="button" aria-label={shouldPlay ? 'Пауза' : 'Воспроизвести'} onClick={onTogglePlayback} disabled={!track || loading || !widgetControls}>
+        <div className="transport">
+          <button className="player-icon" type="button" aria-label="Предыдущий трек" onClick={onPrevious} disabled={!track}>⏮</button>
+          <button className="play-button" type="button" aria-label={shouldPlay ? 'Пауза' : 'Воспроизвести'} onClick={onTogglePlayback} disabled={!track || loading || !widgetControls}>
             {loading || (track && !widgetControls) ? <span className="player-spinner" /> : shouldPlay ? 'Ⅱ' : '▶'}
           </button>
-          <button type="button" aria-label="Следующий трек" onClick={onNext} disabled={!hasNext}>⏭</button>
+          <button className="player-icon" type="button" aria-label="Следующий трек" onClick={onNext} disabled={!hasNext}>⏭</button>
         </div>
-        <div className="player-seek-row">
+        <div className="timeline">
           <span>{formatTime(currentTime)}</span>
           <input
             aria-label="Позиция воспроизведения"
@@ -120,6 +117,7 @@ export function PlayerBar({ track, loading, shouldPlay, volume, error, hasNext, 
             step={1}
             value={Math.min(scrubPosition ?? currentTime, duration || 1)}
             disabled={!widgetControls || !duration}
+            style={{ background: `linear-gradient(to right,var(--accent) 0%,var(--accent) ${Math.min(100, ((scrubPosition ?? currentTime) / (duration || 1)) * 100)}%,#39393e ${Math.min(100, ((scrubPosition ?? currentTime) / (duration || 1)) * 100)}%,#39393e 100%)` }}
             onChange={(event) => {
               const requestedSeconds = Number(event.currentTarget.value);
               scrubPositionRef.current = requestedSeconds;
@@ -133,20 +131,21 @@ export function PlayerBar({ track, loading, shouldPlay, volume, error, hasNext, 
         </div>
       </div>
 
-      <label className="player-volume" title={`Громкость ${volumeValue}%`}>
-        <span aria-hidden="true">{volumeValue === 0 ? '◖' : '◖))'}</span>
+      <label className="player-right" title={`Громкость ${volumeValue}%`}>
+        <span className="player-icon" aria-hidden="true">{volumeValue === 0 ? '◖' : '◖))'}</span>
         <input
           aria-label="Громкость"
           type="range"
           min={0}
           max={100}
           value={volumeValue}
+          style={{ background: `linear-gradient(to right,#e9e9eb 0%,#e9e9eb ${volumeValue}%,#515155 ${volumeValue}%,#515155 100%)` }}
           onChange={(event) => setVolumeValue(Number(event.currentTarget.value))}
           onPointerUp={() => onVolumeCommit(volumeValue)}
           onBlur={() => onVolumeCommit(volumeValue)}
           onKeyUp={() => onVolumeCommit(volumeValue)}
         />
       </label>
-    </div>
+    </footer>
   );
 }

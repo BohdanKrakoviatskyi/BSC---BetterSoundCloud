@@ -16,11 +16,13 @@ type Props = {
 
 export function HomePage({ selections, loading, error, artistFallback, currentTrackId, isPlaying, playbackLoading, onPlayTrack, onOpenTrack, onRetry }: Props) {
   return (
-    <div className="home-page">
-      <section className="home-welcome">
-        <div className="card-kicker">ВАША МУЗЫКА</div>
-        <h1>Откройте что-то новое</h1>
-        <p>Персональные подборки и миксы SoundCloud для вас.</p>
+    <div className="page-content home-page">
+      <div className="category-tabs" aria-label="Разделы главной"><span className="category active">Для тебя</span><span className="category">Музыка</span><span className="category">Подкасты</span></div>
+      <section className="welcome">
+        <div className="welcome-copy"><div className="eyebrow">ТВОЯ МУЗЫКА, ТВОЙ РИТМ</div>
+        <h1>Открой что-то новое</h1>
+        <p>Персональные подборки SoundCloud для тебя.</p></div>
+        <div className="welcome-art" aria-hidden="true"><i />sound<b>cloud</b></div>
       </section>
       {error && <div className="error-message" role="alert">{error} <button type="button" className="home-retry" onClick={onRetry}>Повторить</button></div>}
       {loading && selections.length === 0

@@ -86,7 +86,7 @@ export function SoundCloudWidget({ track, volume, onControlsReady, onReady, onPl
   iframeUrl.searchParams.set('show_reposts', 'false');
   iframeUrl.searchParams.set('show_teaser', 'false');
   iframeUrl.searchParams.set('visual', 'false');
-  iframeUrl.searchParams.set('color', '#f0c75e');
+  iframeUrl.searchParams.set('color', '#ff765d');
 
   useEffect(() => {
     let disposed = false;

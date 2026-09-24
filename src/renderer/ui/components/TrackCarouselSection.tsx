@@ -23,9 +23,9 @@ export function TrackCarouselSection({ title, kicker = 'SOUNDCLOUD', tracks, art
   }
 
   return (
-    <section className="tracks-section" aria-label={title}>
-      <div className="panel-heading tracks-heading">
-        <div><div className="card-kicker">{kicker}</div><h2>{title}<span className="track-count">{tracks.length}</span></h2></div>
+    <section className="shelf" aria-label={title}>
+      <div className="section-heading">
+        <div><div className="eyebrow">{kicker}</div><h2>{title}<span className="track-count"> {tracks.length}</span></h2></div>
         {tracks.length > 3 && <div className="carousel-controls" aria-label="Прокрутка треков"><button type="button" aria-label="Прокрутить влево" onClick={() => scroll(-1)}>‹</button><button type="button" aria-label="Прокрутить вправо" onClick={() => scroll(1)}>›</button></div>}
       </div>
       {error && <div className="error-message" role="alert">{error}</div>}
@@ -33,7 +33,7 @@ export function TrackCarouselSection({ title, kicker = 'SOUNDCLOUD', tracks, art
         ? <p className="tracks-empty">Загружаю подборку…</p>
         : tracks.length === 0
           ? <p className="tracks-empty">Пока нет треков для этой подборки.</p>
-          : <div ref={ref} className="track-carousel">
+          : <div ref={ref} className="card-row">
               {tracks.map((track) => <TrackCard
                 key={track.id}
                 track={track}

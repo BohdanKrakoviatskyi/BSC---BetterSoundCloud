@@ -1,6 +1,6 @@
 import { Command, type Child } from '@tauri-apps/plugin-shell';
 
-type Settings = { accent: string; compact: boolean; volume: number };
+export type Settings = { accent: string; compact: boolean; volume: number; clientId: string };
 type AppInfo = { name: string; version: string; backend: string };
 export type SoundCloudProfile = {
   id: number;

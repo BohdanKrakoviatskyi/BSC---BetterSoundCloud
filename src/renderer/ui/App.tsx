@@ -11,7 +11,7 @@ import { TrackDetailsPage } from './components/TrackDetailsPage';
 import { Sidebar } from './components/Sidebar';
 import type { Page, Profile, Settings } from './types';
 
-const defaultSettings: Settings = { accent: '#f0c75e', compact: false, volume: 70 };
+const defaultSettings: Settings = { accent: '#ff765d', compact: false, volume: 70, clientId: '' };
 
 function reasonText(reason: unknown, fallback: string): string {
   return reason instanceof Error ? reason.message : fallback;
@@ -138,6 +138,11 @@ export function App() {
 
   function togglePlayback() {
     setShouldPlay((playing) => !playing);
+  }
+
+  function focusGlobalSearch() {
+    setPage('search');
+    window.setTimeout(() => document.querySelector<HTMLInputElement>('#globalSearch')?.focus(), 0);
   }
 
   async function openTrackDetails(track: Track) {
@@ -283,6 +288,27 @@ export function App() {
     }
   }
 
+  async function saveAccessToken(token: string): Promise<boolean> {
+    setLoginBusy(true);
+    setLoginError('');
+    try {
+      const result = await appGateway.authLogin(token);
+      if (!result.authorized || !result.profile) throw new Error('SoundCloud не подтвердил токен');
+      setProfile(result.profile);
+      setAuth('authorized');
+      void loadTracks();
+      void loadMixedSelections();
+      return true;
+    } catch (reason) {
+      const message = reasonText(reason, 'Не удалось сохранить access token');
+      console.error('[ui.settings.token] save failed', { error: message });
+      setLoginError(message);
+      return false;
+    } finally {
+      setLoginBusy(false);
+    }
+  }
+
   async function logout() {
     setLoginError('');
     try {
@@ -323,12 +349,14 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <Sidebar profile={profile} page={page} backendReady={ready} onNavigate={setPage} onLogout={() => void logout()} />
-      <main className="main-content">
-        <header className="topbar">
-          <div className="breadcrumbs">BetterSoundCloud <span>/</span> {page === 'home' ? 'Главная' : page === 'likes' ? 'Мои лайки' : page === 'settings' ? 'Настройки' : detailsTrack?.title || 'Трек'}</div>
-          <TrackSearch onSelect={selectTrack} />
-        </header>
+      <header className="topbar">
+        <div className="window-tools"><button className="icon-button" type="button" onClick={() => setPage('likes')} aria-label="Назад">‹</button><button className="icon-button" type="button" onClick={() => setPage('home')} aria-label="Главная">›</button></div>
+        <div className="global-search"><button type="button" className="home-button" onClick={() => setPage('home')} aria-label="Главная">⌂</button><TrackSearch onSelect={selectTrack} /></div>
+        <div className="top-actions"><button className="icon-button" type="button" onClick={() => setPage('settings')} aria-label="Настройки">⚙</button><button className="profile" type="button" onClick={() => void logout()} title="Выйти из SoundCloud">{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" /> : (profile?.username?.[0] || 'S').toUpperCase()}</button></div>
+      </header>
+      <div className="workspace">
+        <Sidebar profile={profile} page={page} tracks={tracks} backendReady={ready} onNavigate={setPage} onSearch={focusGlobalSearch} onPlayTrack={selectTrack} onLogout={() => void logout()} />
+        <main className="main-view panel" id="mainView"><div className="main-scroll">
         {page === 'home'
           ? <HomePage
               selections={selections}
@@ -342,6 +370,8 @@ export function App() {
               onOpenTrack={(track) => void openTrackDetails(track)}
               onRetry={() => void loadMixedSelections()}
             />
+          : page === 'search'
+            ? <section className="page-content search-landing"><span className="eyebrow">ПОИСК SOUNDCLOUD</span><h1>Найди свой следующий трек</h1><p>Введи название песни или имя исполнителя в строку поиска.</p><button type="button" className="primary-button" onClick={focusGlobalSearch}>Начать поиск <span>⌕</span></button></section>
           : page === 'likes'
           ? <LikedTracksSection
               tracks={tracks}
@@ -359,8 +389,8 @@ export function App() {
               playbackLoading={playbackLoading}
             />
           : page === 'settings'
-            ? <SettingsPanel settings={settings} saved={saved} error={error} onUpdate={(patch) => void updateSettings(patch)} />
-            : <TrackDetailsPage
+            ? <SettingsPanel settings={settings} saved={saved} error={error} profile={profile} tokenError={loginError} tokenBusy={loginBusy} onSaveToken={saveAccessToken} onUpdate={(patch) => void updateSettings(patch)} />
+          : <TrackDetailsPage
                 track={detailsTrack}
                 loading={detailsLoading}
                 error={detailsError}
@@ -377,7 +407,9 @@ export function App() {
                 onBack={() => setPage('likes')}
                 onPlay={playDetailsTrack}
               />}
-      </main>
+        {tracksError && page !== 'likes' && <div className="error-message app-track-error" role="alert">{tracksError}</div>}
+        </div></main>
+      </div>
       <PlayerBar
         key={currentTrack?.id ?? 'empty'}
         track={currentTrack}
@@ -385,6 +417,9 @@ export function App() {
         shouldPlay={shouldPlay}
         volume={settings.volume}
         error={playbackError}
+        liked={currentTrack ? (likedTracks[currentTrack.id] ?? false) : false}
+        onLike={() => { if (currentTrack) void toggleTrackLike(currentTrack); }}
+        onOpenTrack={() => { if (currentTrack) void openTrackDetails(currentTrack); }}
         onTogglePlayback={togglePlayback}
         onVolumeCommit={(volume) => void savePlayerVolume(volume)}
         onPrevious={() => void loadTrackAt(Math.max(currentTrackIndex - 1, 0))}

@@ -27,10 +27,10 @@ export function LikedTracksSection({ tracks, likedTracks, likeBusy, loading, err
   }
 
   return (
-    <section className="tracks-section" aria-label="Мои лайки">
-      <div className="panel-heading tracks-heading">
+    <section className="shelf" aria-label="Мои лайки">
+      <div className="section-heading">
         <div>
-          <div className="card-kicker">МЕДИАТЕКА SOUNDCLOUD</div>
+          <div className="eyebrow">МЕДИАТЕКА SOUNDCLOUD</div>
           <h2>Треки из моих лайков <span className="track-count">{tracks.length}</span></h2>
         </div>
         <div className="tracks-actions">
@@ -38,8 +38,8 @@ export function LikedTracksSection({ tracks, likedTracks, likeBusy, loading, err
             <button type="button" aria-label="Прокрутить влево" onClick={() => scrollCarousel(-1)}>‹</button>
             <button type="button" aria-label="Прокрутить вправо" onClick={() => scrollCarousel(1)}>›</button>
           </div>
-          <button className="refresh-tracks" type="button" onClick={onRefresh} disabled={loading}>
-            {loading ? 'Загружаю…' : 'Обновить'}
+          <button className="text-action" type="button" onClick={onRefresh} disabled={loading}>
+            {loading ? 'Загружаю…' : 'Обновить'} <span aria-hidden="true">↻</span>
           </button>
         </div>
       </div>
@@ -48,7 +48,7 @@ export function LikedTracksSection({ tracks, likedTracks, likeBusy, loading, err
         ? <p className="tracks-empty">Загружаю ваши треки…</p>
         : tracks.length === 0
           ? <p className="tracks-empty">В лайках пока нет треков.</p>
-          : <div ref={carouselRef} className="track-carousel">
+          : <div ref={carouselRef} className="card-row">
             {tracks.map((track) => (
               <TrackCard
                 key={track.id}

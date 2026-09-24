@@ -46,7 +46,7 @@ func (s *service) RPCTrackStream(params trackStreamParams) (trackStreamResult, e
 	if trackURN == "" {
 		return trackStreamResult{}, errors.New("у трека отсутствует URN")
 	}
-	endpoint, err := soundcloudV2URL("/tracks/"+url.PathEscape(trackURN), nil)
+	endpoint, err := s.soundcloudV2URL("/tracks/"+url.PathEscape(trackURN), nil)
 	if err != nil {
 		return trackStreamResult{}, fmt.Errorf("не удалось сформировать запрос метаданных трека: %w", err)
 	}
@@ -101,7 +101,7 @@ func (s *service) resolveTrackTranscoding(transcodingURL string) (string, error)
 		return "", errors.New("SoundCloud вернул некорректную ссылку транскодирования")
 	}
 	if strings.EqualFold(parsedTranscoding.Hostname(), "api-v2.soundcloud.com") {
-		endpoint, err := soundcloudV2URLFromAbsolute(transcodingURL)
+		endpoint, err := s.soundcloudV2URLFromAbsolute(transcodingURL)
 		if err != nil {
 			return "", fmt.Errorf("SoundCloud вернул некорректную ссылку транскодирования: %w", err)
 		}
@@ -204,7 +204,7 @@ func aacBitrateKbps(transcoding soundcloudStreamTranscoding) int {
 	return bitrate
 }
 
-func soundcloudV2URL(path string, query url.Values) (string, error) {
+func (s *service) soundcloudV2URL(path string, query url.Values) (string, error) {
 	endpoint, err := url.Parse(strings.TrimRight(webAPIBase, "/") + path)
 	if err != nil {
 		return "", err
@@ -215,18 +215,18 @@ func soundcloudV2URL(path string, query url.Values) (string, error) {
 			values.Add(key, entry)
 		}
 	}
-	values.Set("client_id", soundcloudClientID)
+	values.Set("client_id", s.settings.ClientID)
 	endpoint.RawQuery = values.Encode()
 	return endpoint.String(), nil
 }
 
-func soundcloudV2URLFromAbsolute(rawURL string) (string, error) {
+func (s *service) soundcloudV2URLFromAbsolute(rawURL string) (string, error) {
 	endpoint, err := url.Parse(rawURL)
 	if err != nil || endpoint.Scheme != "https" || !strings.EqualFold(endpoint.Hostname(), "api-v2.soundcloud.com") {
 		return "", errors.New("ожидался HTTPS URL api-v2.soundcloud.com")
 	}
 	query := endpoint.Query()
-	query.Set("client_id", soundcloudClientID)
+	query.Set("client_id", s.settings.ClientID)
 	endpoint.RawQuery = query.Encode()
 	return endpoint.String(), nil
 }

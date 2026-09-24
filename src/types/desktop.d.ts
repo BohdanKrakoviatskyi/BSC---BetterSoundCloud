@@ -8,11 +8,12 @@ declare global {
       start(): Promise<void>;
       stop(): Promise<void>;
       getInfo(): Promise<{ name: string; version: string; backend: string }>;
-      getSettings(): Promise<{ accent: string; compact: boolean; volume: number }>;
-      updateSettings(patch: Partial<{ accent: string; compact: boolean; volume: number }>): Promise<{
+      getSettings(): Promise<{ accent: string; compact: boolean; volume: number; clientId: string }>;
+      updateSettings(patch: Partial<{ accent: string; compact: boolean; volume: number; clientId: string }>): Promise<{
         accent: string;
         compact: boolean;
         volume: number;
+        clientId: string;
       }>;
       authStatus(): Promise<AuthStatus>;
       authLogin(token: string): Promise<AuthStatus>;

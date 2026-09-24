@@ -72,10 +72,11 @@ export function TrackSearch({ onSelect }: Props) {
 
   return (
     <div className="track-search" ref={wrapperRef}>
-      <label className="track-search-box">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.5 4.5" /></svg>
+      <label className="search-box track-search-box">
+        <svg className="search-glyph" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.5 4.5" /></svg>
         <input
           type="search"
+          id="globalSearch"
           value={query}
           placeholder="Найти трек или исполнителя"
           aria-label="Поиск треков SoundCloud"

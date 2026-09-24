@@ -21,7 +21,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' https://w.soundcloud.com; frame-src https://w.soundcloud.com; img-src 'self' asset: data: https://*.sndcdn.com https://*.soundcloud.com; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost ws://127.0.0.1:5173"
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' https://w.soundcloud.com; frame-src https://w.soundcloud.com; img-src 'self' asset: data: https://*.sndcdn.com https://*.soundcloud.com https://images.unsplash.com; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' ipc: http://ipc.localhost ws://127.0.0.1:5173"
     }
   },
   "bundle": {

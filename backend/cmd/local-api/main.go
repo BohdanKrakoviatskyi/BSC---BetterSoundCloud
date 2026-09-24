@@ -59,15 +59,17 @@ type appInfo struct {
 type emptyParams struct{}
 
 type settings struct {
-	Accent  string `json:"accent"`
-	Compact bool   `json:"compact"`
-	Volume  int    `json:"volume"`
+	Accent   string `json:"accent"`
+	Compact  bool   `json:"compact"`
+	Volume   int    `json:"volume"`
+	ClientID string `json:"clientId"`
 }
 
 type settingsPatch struct {
-	Accent  *string `json:"accent"`
-	Compact *bool   `json:"compact"`
-	Volume  *int    `json:"volume"`
+	Accent   *string `json:"accent"`
+	Compact  *bool   `json:"compact"`
+	Volume   *int    `json:"volume"`
+	ClientID *string `json:"clientId"`
 }
 
 type profile struct {
@@ -599,6 +601,13 @@ func (s *service) RPCSettingsUpdate(patch settingsPatch) (settings, error) {
 		}
 		updated.Volume = *patch.Volume
 	}
+	if patch.ClientID != nil {
+		clientID := strings.TrimSpace(*patch.ClientID)
+		if !validSoundCloudClientID(clientID) {
+			return settings{}, errors.New("client_id должен содержать от 8 до 128 латинских букв, цифр, дефисов или подчёркиваний")
+		}
+		updated.ClientID = clientID
+	}
 	if err := s.saveSettings(updated); err != nil {
 		return settings{}, fmt.Errorf("save settings: %w", err)
 	}
@@ -673,7 +682,7 @@ func (s *service) RPCTrackDetails(params trackDetailsParams) (soundcloudTrackDet
 		return soundcloudTrackDetails{}, errors.New("некорректный ID трека")
 	}
 	startedAt := time.Now()
-	endpoint, err := soundcloudV2URL("/tracks/"+strconv.FormatInt(params.TrackID, 10), nil)
+	endpoint, err := s.soundcloudV2URL("/tracks/"+strconv.FormatInt(params.TrackID, 10), nil)
 	if err != nil {
 		return soundcloudTrackDetails{}, fmt.Errorf("не удалось сформировать запрос деталей трека: %w", err)
 	}
@@ -737,7 +746,7 @@ func (s *service) RPCSearchTracks(params searchTracksParams) ([]soundcloudSearch
 	values := url.Values{}
 	values.Set("q", query)
 	values.Set("limit", "5")
-	endpoint, err := soundcloudV2URL("/search/tracks", values)
+	endpoint, err := s.soundcloudV2URL("/search/tracks", values)
 	if err != nil {
 		return nil, fmt.Errorf("не удалось сформировать запрос поиска: %w", err)
 	}
@@ -792,7 +801,7 @@ func (s *service) RPCTrackRelated(params relatedTracksParams) ([]soundcloudSearc
 	}
 	query := url.Values{}
 	query.Set("limit", "10")
-	endpoint, err := soundcloudV2URL("/tracks/"+strconv.FormatInt(params.TrackID, 10)+"/related", query)
+	endpoint, err := s.soundcloudV2URL("/tracks/"+strconv.FormatInt(params.TrackID, 10)+"/related", query)
 	if err != nil {
 		return nil, fmt.Errorf("не удалось сформировать запрос похожих треков: %w", err)
 	}
@@ -829,7 +838,7 @@ func (s *service) RPCMixedSelections(_ emptyParams) ([]mixedSelection, error) {
 	if s.auth.Token == "" {
 		return nil, errors.New("сначала подключите аккаунт SoundCloud")
 	}
-	endpoint, err := soundcloudV2URL("/mixed-selections", nil)
+	endpoint, err := s.soundcloudV2URL("/mixed-selections", nil)
 	if err != nil {
 		return nil, fmt.Errorf("не удалось сформировать запрос подборок: %w", err)
 	}
@@ -1261,11 +1270,11 @@ func (s *service) loadSettings() error {
 	if err != nil {
 		return fmt.Errorf("read settings: %w", err)
 	}
-	var loaded settings
+	loaded := defaultSettings()
 	if err := json.Unmarshal(data, &loaded); err != nil {
 		return fmt.Errorf("parse settings: %w", err)
 	}
-	if !validAccent(loaded.Accent) || loaded.Volume < 0 || loaded.Volume > 100 {
+	if !validAccent(loaded.Accent) || loaded.Volume < 0 || loaded.Volume > 100 || !validSoundCloudClientID(loaded.ClientID) {
 		return errors.New("saved settings are invalid")
 	}
 	s.settings = loaded
@@ -1360,7 +1369,19 @@ func apiBase() string {
 }
 
 func defaultSettings() settings {
-	return settings{Accent: "#f0c75e", Compact: false, Volume: 70}
+	return settings{Accent: "#ff765d", Compact: false, Volume: 70, ClientID: soundcloudClientID}
+}
+
+func validSoundCloudClientID(value string) bool {
+	if len(value) < 8 || len(value) > 128 {
+		return false
+	}
+	for _, char := range value {
+		if !((char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || char == '-' || char == '_') {
+			return false
+		}
+	}
+	return true
 }
 
 func validAccent(value string) bool {
