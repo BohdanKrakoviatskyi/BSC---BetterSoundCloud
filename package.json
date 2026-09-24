@@ -2,16 +2,14 @@
   "name": "better-soundcloud",
   "version": "0.1.0",
   "private": true,
-  "description": "Локальный улучшенный клиент SoundCloud",
-  "main": "electron/main.js",
+  "description": "Local music client for BetterSoundCloud",
   "scripts": {
-    "dev": "electron .",
-    "build": "tsc",
-    "package": "electron-builder"
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "package": "tauri build",
+    "tauri": "tauri"
   },
   "devDependencies": {
-    "electron": "^44.4.5",
-    "electron-builder": "^26.15.3",
-    "typescript": "^7.0.2"
+    "@tauri-apps/cli": "^2.0.0"
   }
 }

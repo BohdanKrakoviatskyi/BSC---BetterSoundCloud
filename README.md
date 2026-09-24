@@ -1,93 +1,36 @@
 # BetterSoundCloud
 
-Локальное desktop-приложение для улучшенного интерфейса SoundCloud.
+A local desktop music client with search, a library, playlists, listening history, and a playback queue. The desktop shell uses Tauri 2; the interface uses plain HTML, CSS, and JavaScript.
 
-## Идея
+## Frontend location
 
-Приложение запускается на компьютере пользователя, авторизует его в SoundCloud и работает с его аккаунтом. Музыка, лайки и плейлисты остаются в SoundCloud.
+The complete frontend is in `src/renderer/`:
 
-## Структура проекта
+- `src/renderer/index.html` - app entry point and page structure
+- `src/renderer/styles.css` - layout, theme, and responsive styles
+- `src/renderer/app.js` - interface rendering and client-side behavior
 
-```text
-src/
-├── app/          # Корневое окно приложения и маршруты
-├── components/   # Общие UI-компоненты
-├── pages/        # Страницы: главная, поиск, плейлисты
-├── player/       # Плеер, очередь и управление воспроизведением
-├── api/          # Запросы к SoundCloud API
-├── auth/         # Авторизация и работа с токенами
-├── storage/      # Локальные настройки, история и кэш
-├── state/        # Состояние приложения
-└── styles/       # Темы, цвета и общие стили
-electron/
-├── main.ts       # Точка входа Electron
-├── preload.ts    # Безопасный мост между UI и Electron
-└── auth-server.ts# Локальный сервер OAuth (будущее)
-shared/
-├── types/        # Общие типы TypeScript
-└── constants/    # Общие константы
-public/
-└── assets/       # Иконки, изображения и звуки
-scripts/          # Скрипты сборки и разработки
-```
+Tauri and Rust configuration and source files are in `src-tauri/`.
 
-## Запуск и сборка
+## Requirements
 
-`src/renderer/index.html` — интерфейс приложения, который отображается внутри окна Electron. `electron/main.js` — оболочка приложения, которая создаёт окно и загружает этот интерфейс.
+- Node.js and npm
+- Rust with the MSVC toolchain to build on Windows
+- Microsoft C++ Build Tools and WebView2 Runtime on Windows
 
-Для разработки:
+See the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for platform-specific requirements.
 
-```bash
+## Install and run
+
+```sh
 npm install
 npm run dev
 ```
 
-После изменения `src/renderer/index.html` сохрани файл и нажми `Ctrl + R` в окне приложения.
+## Build
 
-Для сборки установщиков:
-
-```bash
-npm run package
-```
-
-Готовые файлы появляются в папке `release/`: `.exe` для Windows и `.dmg` для macOS. Сборка Windows выполняется на Windows, сборка macOS — на macOS.
-
-
-Проект использует Electron и может собираться под обе платформы:
-
-```bash
-npm install
-npm run dev
+```sh
 npm run build
-npm run package
 ```
 
-Сборка Windows выполняется на Windows и создаёт `.exe`. Сборка macOS выполняется на macOS и создаёт `.dmg`. Готовые файлы появляются в папке `release/`.
-
-## План интерфейса
-
-### Навигация
-
-В левой панели будут отдельные пункты:
-
-- Главная;
-- Лайкнутые треки;
-- Плейлисты;
-- Загрузки;
-- История.
-
-### Очередь
-
-Панель очереди будет скрыта по умолчанию. Она автоматически появляется только после того, как пользователь добавил хотя бы один трек в очередь. После этого в интерфейсе появляется кнопка `Очередь`/`Queue` с количеством треков.
-
-Если очередь пуста, панель не занимает место в интерфейсе.
-
-### Подборки SoundCloud
-
-Карточки рекомендаций на главной будут браться из подборок SoundCloud, например «Недавно прослушано», «Миксы», персонализированные миксы и похожие исполнители. Для каждой карточки нужно показывать первый доступный трек подборки.
-
-Карточка плейлиста показывает первый трек плейлиста, а карточка лайкнутых треков — самый новый лайк пользователя. Эти данные должны обновляться после синхронизации с SoundCloud.
-
-
-Плеер остаётся закреплённым внизу окна и содержит текущий трек, кнопки управления, прогресс и громкость. Лайк текущего трека отображается отдельной кнопкой.
-
+`package.json` and `package-lock.json` define the npm scripts and dependencies. `LICENSE` contains the project license. Build artifacts and local dependencies are excluded from the repository.

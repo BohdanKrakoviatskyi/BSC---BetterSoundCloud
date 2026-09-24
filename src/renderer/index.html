@@ -23,6 +23,7 @@
           <button class="nav-link active" data-route="home"><span data-icon="house"></span>Главная</button>
           <button class="nav-link" data-route="search"><span data-icon="search"></span>Поиск</button>
           <button class="nav-link" data-route="collection"><span data-icon="library"></span>Моя медиатека</button>
+          <button class="nav-link" data-route="history"><span data-icon="clock"></span>Недавние прослушивания</button>
         </nav>
         <div class="library-block">
           <div class="library-heading"><button class="library-title" data-route="collection"><span data-icon="library"></span>Моя медиатека</button><button class="icon-button" data-action="create" aria-label="Создать плейлист" data-icon="plus"></button><button class="icon-button" data-action="expand-library" aria-label="Развернуть" data-icon="arrow-up-right"></button></div>
@@ -35,7 +36,7 @@
       <main class="main-view panel" id="mainView"><div class="main-scroll" id="mainScroll"></div></main>
     </div>
     <footer class="player-bar">
-      <div class="now-playing"><img id="playerArt" alt="Обложка трека"/><div class="track-copy"><b id="playerTitle">Выбери музыку</b><button id="playerArtist" data-action="current-artist">Здесь начнётся твоё звучание</button></div><button class="like-button" id="likeButton" aria-label="Добавить в любимые" data-icon="heart"></button></div>
+      <div class="now-playing empty"><button class="now-playing-cover" data-action="now-playing" aria-label="Открыть текущий трек"><img id="playerArt" alt="Обложка трека"/></button><div class="track-copy"><button class="track-title-button" data-action="now-playing"><b id="playerTitle">Выбери музыку</b></button><button id="playerArtist" data-action="current-artist">Здесь начнётся твоё звучание</button></div><button class="like-button" id="likeButton" aria-label="Добавить в любимые" data-icon="heart"></button></div>
       <div class="player-center"><div class="transport"><button class="player-icon" data-action="shuffle" aria-label="Перемешать" data-icon="shuffle"></button><button class="player-icon" id="previousButton" aria-label="Предыдущий" data-icon="skip-back"></button><button class="play-button" id="playButton" aria-label="Воспроизвести" data-icon="play"></button><button class="player-icon" id="nextButton" aria-label="Следующий" data-icon="skip-forward"></button><button class="player-icon" data-action="repeat" aria-label="Повтор" data-icon="repeat"></button></div><div class="timeline"><span id="elapsed">0:00</span><input id="progress" type="range" min="0" max="100" value="0"/><span id="duration">0:00</span></div></div>
       <div class="player-right"><button class="player-icon" id="queueButton" aria-label="Очередь" data-icon="list-music"></button><button class="player-icon" data-action="device" aria-label="Устройства" data-icon="cast"></button><button class="player-icon" data-action="mute" aria-label="Громкость" data-icon="volume-2"></button><input class="volume" type="range" min="0" max="100" value="72" aria-label="Громкость"/><button class="player-icon" data-action="full-screen" aria-label="На весь экран" data-icon="maximize"></button></div>
     </footer>
