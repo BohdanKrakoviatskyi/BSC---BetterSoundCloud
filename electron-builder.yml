@@ -3,7 +3,9 @@ productName: BetterSoundCloud
 directories:
   output: release
 files:
-  - dist/**/*
+  - electron/main.js
+  - src/renderer/**/*
+  - package.json
 win:
   target:
     - nsis
