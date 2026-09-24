@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Локальный улучшенный клиент SoundCloud",
-  "main": "dist/electron/main.js",
+  "main": "electron/main.js",
   "scripts": {
     "dev": "electron .",
     "build": "tsc",
