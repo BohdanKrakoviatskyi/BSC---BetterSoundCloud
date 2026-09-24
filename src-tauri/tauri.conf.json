@@ -1,0 +1,39 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "BetterSoundCloud",
+  "version": "0.1.0",
+  "identifier": "com.bettersoundcloud.app",
+  "build": {
+    "beforeDevCommand": "npm run prepare:dev",
+    "devUrl": "http://127.0.0.1:5173",
+    "beforeBuildCommand": "npm run build:frontend",
+    "frontendDist": "../dist/renderer"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "BetterSoundCloud",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1000,
+        "minHeight": 650,
+        "backgroundColor": "#0b0d12"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' https://w.soundcloud.com; frame-src https://w.soundcloud.com; img-src 'self' asset: data: https://*.sndcdn.com https://*.soundcloud.com; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost ws://127.0.0.1:5173"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "externalBin": ["binaries/local-api"]
+  }
+}

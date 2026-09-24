@@ -3,15 +3,30 @@
   "version": "0.1.0",
   "private": true,
   "description": "Локальный улучшенный клиент SoundCloud",
-  "main": "electron/main.js",
   "scripts": {
-    "dev": "electron .",
-    "build": "tsc",
-    "package": "electron-builder"
+    "dev": "tauri dev",
+    "backend": "node scripts/backend-console.mjs",
+    "test:go": "cd backend && go test ./...",
+    "test:go:live": "node scripts/test-backend-live.mjs",
+    "build:go": "node scripts/build-go.mjs",
+    "build:frontend": "tsc --noEmit && vite build",
+    "vite": "vite",
+    "prepare:dev": "npm run build:go && npm run vite",
+    "build": "npm run build:frontend",
+    "package": "npm run build:go && tauri build"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.8.0",
+    "@tauri-apps/plugin-shell": "^2.3.3",
+    "hls.js": "^1.7.3",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
   },
   "devDependencies": {
-    "electron": "^44.4.5",
-    "electron-builder": "^26.15.3",
-    "typescript": "^7.0.2"
+    "@tauri-apps/cli": "^2.8.4",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "typescript": "^7.0.2",
+    "vite": "^7.1.12"
   }
 }
