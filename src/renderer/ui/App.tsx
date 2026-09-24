@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
-import type { SoundCloudTrack, SoundCloudTrackDetails } from '../lib/desktop';
+import type { Track, TrackDetails, TrackCollection } from '../domain/models';
+import { appGateway } from '../lib/appGateway';
 import { AuthScreen } from './components/AuthScreen';
+import { HomePage } from './components/HomePage';
 import { LikedTracksSection } from './components/LikedTracksSection';
 import { PlayerBar } from './components/PlayerBar';
 import { SettingsPanel } from './components/SettingsPanel';
@@ -24,26 +26,48 @@ export function App() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loginBusy, setLoginBusy] = useState(false);
   const [loginError, setLoginError] = useState('');
-  const [tracks, setTracks] = useState<SoundCloudTrack[]>([]);
+  const [tracks, setTracks] = useState<Track[]>([]);
   const [likedTracks, setLikedTracks] = useState<Record<number, boolean>>({});
   const [likeBusy, setLikeBusy] = useState<Record<number, boolean>>({});
   const [tracksLoading, setTracksLoading] = useState(false);
   const [tracksError, setTracksError] = useState('');
-  const [currentTrack, setCurrentTrack] = useState<SoundCloudTrack | null>(null);
-  const [detailsTrack, setDetailsTrack] = useState<SoundCloudTrackDetails | null>(null);
+  const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
+  const [detailsTrack, setDetailsTrack] = useState<TrackDetails | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsError, setDetailsError] = useState('');
   const [currentTrackIndex, setCurrentTrackIndex] = useState(-1);
   const [playbackLoading, setPlaybackLoading] = useState(false);
   const [shouldPlay, setShouldPlay] = useState(false);
   const [playbackError, setPlaybackError] = useState('');
-  const [page, setPage] = useState<Page>('likes');
+  const [page, setPage] = useState<Page>('home');
+  const [selections, setSelections] = useState<TrackCollection[]>([]);
+  const [selectionsLoading, setSelectionsLoading] = useState(false);
+  const [selectionsError, setSelectionsError] = useState('');
+  const [relatedTracks, setRelatedTracks] = useState<Track[]>([]);
+  const [relatedLoading, setRelatedLoading] = useState(false);
+  const [relatedError, setRelatedError] = useState('');
+
+  async function loadMixedSelections() {
+    setSelectionsLoading(true);
+    setSelectionsError('');
+    try {
+      const loaded = await appGateway.mixedSelections();
+      setSelections(loaded);
+      console.info('[ui.mixed-selections] loaded', { count: loaded.length, tracks: loaded.reduce((count, selection) => count + selection.tracks.length, 0) });
+    } catch (reason) {
+      const message = reasonText(reason, 'Не удалось загрузить подборки');
+      setSelectionsError(message);
+      console.error('[ui.mixed-selections] failed', { error: message });
+    } finally {
+      setSelectionsLoading(false);
+    }
+  }
 
   async function loadTracks() {
     setTracksLoading(true);
     setTracksError('');
     try {
-      const loaded = await window.desktop.myTracks();
+      const loaded = await appGateway.myTracks();
       setTracks(loaded);
       setLikedTracks(Object.fromEntries(loaded.map((track) => [track.id, true])));
       console.info('[ui.tracks] loaded', { count: loaded.length });
@@ -56,7 +80,7 @@ export function App() {
     }
   }
 
-  async function toggleTrackLike(track: SoundCloudTrack) {
+  async function toggleTrackLike(track: Track) {
     const wasLiked = likedTracks[track.id] ?? true;
     const operation = wasLiked ? 'unlike' : 'like';
     setLikedTracks((current) => ({ ...current, [track.id]: !wasLiked }));
@@ -65,8 +89,8 @@ export function App() {
     console.info(`[ui.track.${operation}] started`, { trackId: track.id });
     try {
       const result = wasLiked
-        ? await window.desktop.unlikeTrack(track.id, track.trackUrn)
-        : await window.desktop.likeTrack(track.id, track.trackUrn);
+        ? await appGateway.unlikeTrack(track.id, track.urn)
+        : await appGateway.likeTrack(track.id, track.urn);
       setLikedTracks((current) => ({ ...current, [track.id]: result.liked }));
       console.info(`[ui.track.${operation}] completed`, { trackId: track.id, liked: result.liked });
     } catch (reason) {
@@ -90,10 +114,10 @@ export function App() {
     setPlaybackLoading(true);
     setPlaybackError('');
     setShouldPlay(true);
-    console.info('[ui.player] loading official SoundCloud widget', { trackId: track.id, permalinkUrl: track.permalinkUrl });
+    console.info('[ui.player] loading official SoundCloud widget', { trackId: track.id, permalinkUrl: track.permalink });
   }
 
-  function selectTrack(track: SoundCloudTrack) {
+  function selectTrack(track: Track) {
     if (currentTrack?.id === track.id) {
       setShouldPlay((playing) => !playing);
       setPlaybackError('');
@@ -109,30 +133,44 @@ export function App() {
     setPlaybackLoading(true);
     setPlaybackError('');
     setShouldPlay(true);
-    console.info('[ui.player] loading selected search result', { trackId: track.id, permalinkUrl: track.permalinkUrl });
+    console.info('[ui.player] loading selected search result', { trackId: track.id, permalinkUrl: track.permalink });
   }
 
   function togglePlayback() {
     setShouldPlay((playing) => !playing);
   }
 
-  async function openTrackDetails(track: SoundCloudTrack) {
+  async function openTrackDetails(track: Track) {
     setPage('track');
     setDetailsTrack(null);
     setDetailsLoading(true);
     setDetailsError('');
+    setRelatedTracks([]);
+    setRelatedLoading(true);
+    setRelatedError('');
     console.info('[ui.track.details] loading', { trackId: track.id });
-    try {
-      const details = await window.desktop.trackDetails(track.id);
-      setDetailsTrack(details);
-      console.info('[ui.track.details] loaded', { trackId: details.id, title: details.title });
-    } catch (reason) {
-      const message = reasonText(reason, 'Не удалось загрузить информацию о треке');
+    const [detailsResult, relatedResult] = await Promise.allSettled([
+      appGateway.trackDetails(track.id),
+      appGateway.relatedTracks(track.id),
+    ]);
+    if (detailsResult.status === 'fulfilled') {
+      setDetailsTrack(detailsResult.value);
+      console.info('[ui.track.details] loaded', { trackId: detailsResult.value.id, title: detailsResult.value.title });
+    } else {
+      const message = reasonText(detailsResult.reason, 'Не удалось загрузить информацию о треке');
       console.error('[ui.track.details] failed', { trackId: track.id, error: message });
       setDetailsError(message);
-    } finally {
-      setDetailsLoading(false);
     }
+    if (relatedResult.status === 'fulfilled') {
+      setRelatedTracks(relatedResult.value);
+      console.info('[ui.track.related] loaded', { trackId: track.id, count: relatedResult.value.length });
+    } else {
+      const message = reasonText(relatedResult.reason, 'Не удалось загрузить похожие треки');
+      console.error('[ui.track.related] failed', { trackId: track.id, error: message });
+      setRelatedError(message);
+    }
+    setDetailsLoading(false);
+    setRelatedLoading(false);
   }
 
   function playDetailsTrack() {
@@ -149,13 +187,13 @@ export function App() {
     setPlaybackLoading(true);
     setPlaybackError('');
     setShouldPlay(true);
-    console.info('[ui.player] loading official SoundCloud widget from details', { trackId: track.id, permalinkUrl: track.permalinkUrl });
+    console.info('[ui.player] loading official SoundCloud widget from details', { trackId: track.id, permalinkUrl: track.permalink });
   }
 
   async function savePlayerVolume(volume: number) {
     setSettings((current) => ({ ...current, volume }));
     try {
-      const stored = await window.desktop.updateSettings({ volume });
+      const stored = await appGateway.updateSettings({ volume });
       setSettings(stored);
     } catch (reason) {
       console.error('[ui.player] volume save failed', { error: reasonText(reason, 'unknown error') });
@@ -164,8 +202,8 @@ export function App() {
 
   useEffect(() => {
     let active = true;
-    window.desktop.start()
-      .then(() => Promise.all([window.desktop.getSettings(), window.desktop.authStatus()]))
+    appGateway.start()
+      .then(() => Promise.all([appGateway.getSettings(), appGateway.authStatus()]))
       .then(([storedSettings, status]) => {
         if (!active) return;
         setSettings(storedSettings);
@@ -174,7 +212,8 @@ export function App() {
         setReady(true);
         if (status.authorized) {
           void loadTracks();
-          window.desktop.authRefresh()
+          void loadMixedSelections();
+          appGateway.authRefresh()
             .then((fresh) => {
               if (!active) return;
               if (!fresh.authorized) {
@@ -195,7 +234,7 @@ export function App() {
       });
     return () => {
       active = false;
-      void window.desktop.stop().catch((reason: unknown) => {
+      void appGateway.stop().catch((reason: unknown) => {
         console.warn('[local-backend] stop failed during app cleanup', { error: reasonText(reason, String(reason)) });
       });
     };
@@ -212,7 +251,7 @@ export function App() {
     setSaved(false);
     setError('');
     try {
-      const stored = await window.desktop.updateSettings(patch);
+      const stored = await appGateway.updateSettings(patch);
       setSettings(stored);
       setSaved(true);
     } catch (reason) {
@@ -230,7 +269,7 @@ export function App() {
     setLoginBusy(true);
     setLoginError('');
     try {
-      const result = await window.desktop.authLogin(token);
+      const result = await appGateway.authLogin(token);
       if (!result.authorized || !result.profile) throw new Error('SoundCloud не подтвердил токен');
       setProfile(result.profile);
       setAuth('authorized');
@@ -247,7 +286,7 @@ export function App() {
   async function logout() {
     setLoginError('');
     try {
-      await window.desktop.authLogout();
+      await appGateway.authLogout();
     } catch (reason) {
       const message = reasonText(reason, 'Не удалось выйти');
       console.error('[ui.auth.logout] failed', { error: message });
@@ -256,6 +295,8 @@ export function App() {
     }
     setProfile(null);
     setTracks([]);
+    setSelections([]);
+    setRelatedTracks([]);
     setLikedTracks({});
     setCurrentTrack(null);
     setCurrentTrackIndex(-1);
@@ -285,10 +326,23 @@ export function App() {
       <Sidebar profile={profile} page={page} backendReady={ready} onNavigate={setPage} onLogout={() => void logout()} />
       <main className="main-content">
         <header className="topbar">
-          <div className="breadcrumbs">BetterSoundCloud <span>/</span> {page === 'likes' ? 'Мои лайки' : page === 'settings' ? 'Настройки' : detailsTrack?.title || 'Трек'}</div>
+          <div className="breadcrumbs">BetterSoundCloud <span>/</span> {page === 'home' ? 'Главная' : page === 'likes' ? 'Мои лайки' : page === 'settings' ? 'Настройки' : detailsTrack?.title || 'Трек'}</div>
           <TrackSearch onSelect={selectTrack} />
         </header>
-        {page === 'likes'
+        {page === 'home'
+          ? <HomePage
+              selections={selections}
+              loading={selectionsLoading}
+              error={selectionsError}
+              artistFallback={profile?.username}
+              currentTrackId={currentTrack?.id ?? null}
+              isPlaying={shouldPlay}
+              playbackLoading={playbackLoading}
+              onPlayTrack={selectTrack}
+              onOpenTrack={(track) => void openTrackDetails(track)}
+              onRetry={() => void loadMixedSelections()}
+            />
+          : page === 'likes'
           ? <LikedTracksSection
               tracks={tracks}
               likedTracks={likedTracks}
@@ -313,6 +367,13 @@ export function App() {
                 isCurrent={currentTrack?.id === detailsTrack?.id}
                 isPlaying={shouldPlay}
                 playbackLoading={currentTrack?.id === detailsTrack?.id && playbackLoading}
+                relatedTracks={relatedTracks}
+                relatedLoading={relatedLoading}
+                relatedError={relatedError}
+                currentTrackId={currentTrack?.id ?? null}
+                isPlayingNow={shouldPlay}
+                onPlayRelated={selectTrack}
+                onOpenRelated={(track) => void openTrackDetails(track)}
                 onBack={() => setPage('likes')}
                 onPlay={playDetailsTrack}
               />}

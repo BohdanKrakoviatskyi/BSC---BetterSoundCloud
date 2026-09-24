@@ -43,6 +43,7 @@ export type SoundCloudTrackDetails = SoundCloudTrack & {
   };
 };
 export type SoundCloudSearchTrack = SoundCloudTrack;
+export type SoundCloudMixedSelection = { id: string; title: string; description?: string; tracks: SoundCloudSearchTrack[] };
 type BackendResponse<T> = { id: number; result?: T; error?: string };
 type PendingRequest = {
   method: string;
@@ -142,6 +143,14 @@ class LocalBackend {
     return this.request<SoundCloudSearchTrack[]>('search.tracks', { query }, 15_000);
   }
 
+  async relatedTracks(trackId: number): Promise<SoundCloudSearchTrack[]> {
+    return this.request<SoundCloudSearchTrack[]>('track.related', { trackId }, 30_000);
+  }
+
+  async mixedSelections(): Promise<SoundCloudMixedSelection[]> {
+    return this.request<SoundCloudMixedSelection[]>('mixed.selections', {}, 30_000);
+  }
+
   async likeTrack(trackId: number, trackUrn: string): Promise<TrackLikeResult> {
     return this.request<TrackLikeResult>('track.like', { trackId, trackUrn }, 30_000);
   }
@@ -237,6 +246,8 @@ export const desktop = {
   myTracks: () => backend.myTracks(),
   trackDetails: (trackId: number) => backend.trackDetails(trackId),
   searchTracks: (query: string) => backend.searchTracks(query),
+  relatedTracks: (trackId: number) => backend.relatedTracks(trackId),
+  mixedSelections: () => backend.mixedSelections(),
   likeTrack: (trackId: number, trackUrn: string) => backend.likeTrack(trackId, trackUrn),
   unlikeTrack: (trackId: number, trackUrn: string) => backend.unlikeTrack(trackId, trackUrn),
 };

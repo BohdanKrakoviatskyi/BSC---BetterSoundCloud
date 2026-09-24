@@ -139,6 +139,12 @@ button { color: inherit; }
 .track-detail-profile-link { display: inline-flex; gap: 7px; margin-top: 19px; color: #c5c9d1; font-size: 11px; text-decoration: none; }
 .track-detail-profile-link:hover { color: var(--accent); }
 .track-detail-inline-error { margin-top: 14px; }
+.home-page { padding-top: 25px; }
+.home-welcome { padding: 18px 0 4px; }
+.home-welcome h1 { margin: 10px 0 7px; font: 750 clamp(27px, 3.7vw, 42px)/1.1 system-ui, sans-serif; letter-spacing: -1.4px; }
+.home-welcome p { margin: 0; color: #9297a3; font-size: 12px; }
+.home-page > .tracks-section:first-of-type { margin-top: 31px; }
+.home-retry { margin-left: 10px; padding: 0; border: 0; background: transparent; color: var(--accent); font-size: inherit; cursor: pointer; }
 .player-bar { position: fixed; z-index: 20; right: 0; bottom: 0; left: 244px; min-height: 91px; display: grid; grid-template-columns: minmax(160px, 1fr) minmax(260px, 1.35fr) minmax(120px, .7fr); align-items: center; gap: 24px; padding: 13px 30px; border-top: 1px solid #ffffff14; background: #10131af2; box-shadow: 0 -12px 36px #0005; backdrop-filter: blur(18px); }
 .soundcloud-widget-engine { position: absolute; top: 0; left: 0; width: 1px; height: 1px; overflow: hidden; opacity: .01; pointer-events: none; }
 .soundcloud-widget-engine iframe { display: block; width: 1px; height: 1px; border: 0; }

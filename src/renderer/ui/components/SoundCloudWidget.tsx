@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { SoundCloudTrack } from '../../lib/desktop';
+import type { Track } from '../../domain/models';
 
 type Widget = {
   bind: (event: string, callback: (data?: unknown) => void) => void;
@@ -62,7 +62,7 @@ function loadWidgetApi(): Promise<WidgetApi> {
 }
 
 type Props = {
-  track: SoundCloudTrack;
+  track: Track;
   volume: number;
   onControlsReady: (controls: SoundCloudWidgetControls) => void;
   onReady: () => void;
@@ -77,7 +77,7 @@ export function SoundCloudWidget({ track, volume, onControlsReady, onReady, onPl
   const callbacksRef = useRef({ onControlsReady, onReady, onPlaybackStateChange, onProgress, onEnded, onError });
   callbacksRef.current = { onControlsReady, onReady, onPlaybackStateChange, onProgress, onEnded, onError };
 
-  const trackUrl = track.permalinkUrl || `https://api.soundcloud.com/tracks/${track.id}`;
+  const trackUrl = track.permalink || `https://api.soundcloud.com/tracks/${track.id}`;
   const iframeUrl = new URL('https://w.soundcloud.com/player/');
   iframeUrl.searchParams.set('url', trackUrl);
   iframeUrl.searchParams.set('auto_play', 'false');

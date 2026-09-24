@@ -16,7 +16,9 @@ Tauri webview не получает Node.js доступ. Frontend запуск�
 ## Компоненты
 
 - `src/renderer` — интерфейс React, стили и точка входа Vite.
-- `src/renderer/lib/desktop.ts` — запускает sidecar, связывает ID запросов с ответами и ограничивает доступ UI методами приложения.
+- `src/renderer/domain/models.ts` — интерфейсные модели, не зависящие от RPC или SoundCloud DTO.
+- `src/renderer/lib/appGateway.ts` — адаптер UI/backend; преобразует DTO в доменные модели и предоставляет приложению операции.
+- `src/renderer/lib/desktop.ts` — транспорт JSON-RPC: запускает sidecar и связывает ID запросов с ответами.
 - `src-tauri/src/main.rs` — запускает Tauri и подключает shell plugin.
 - `src-tauri/tauri.conf.json` — окно, CSP, frontend и sidecar bundle.
 - `src-tauri/capabilities/default.json` — разрешает запуск только Go sidecar без аргументов и запись в его stdin.
@@ -40,10 +42,37 @@ Tauri webview не получает Node.js доступ. Frontend запуск�
 | `auth.status` | Признак входа и кэшированный профиль (без токена) |
 | `auth.refresh` | Перепроверка сохранённого токена; отклонённый токен удаляется |
 | `auth.logout` | Локальное удаление токена |
+| `tracks.mine` | Лайкнутые треки аккаунта |
+| `search.tracks` | Поиск треков SoundCloud |
+| `track.details` | Детали трека по ID |
+| `track.related` | Похожие треки по ID |
+| `mixed.selections` | Подборки SoundCloud для главной |
+| `track.like` / `track.unlike` | Изменение лайка |
 
 Настройки: цвет акцента, компактный режим и начальная громкость. Go валидирует цвет и диапазон громкости, пишет JSON во временный файл и атомарно заменяет `settings.json` в системном каталоге конфигурации пользователя.
 
-Новые функции следует добавлять как узкие методы этого API и явные функции в `desktop.ts`; не предоставлять renderer произвольный запуск процессов или системный доступ.
+Новые функции добавляются как узкие RPC-методы Go и операции в `desktop.ts`. Их вызовы и преобразование данных подключаются в `appGateway.ts`. UI использует только доменные модели и gateway: React-компоненты не импортируют backend DTO, не вызывают `window.desktop`, не формируют SoundCloud URL и не знают имена RPC. Не предоставлять renderer произвольный запуск процессов или системный доступ.
+
+### Граница UI и backend
+
+```mermaid
+flowchart LR
+  C[React components] --> A[App state]
+  A --> G[appGateway: application operations]
+  G -->|map DTO ↔ domain models| B[desktop.ts: JSON-RPC transport]
+  B -->|stdin/stdout| GO[Go sidecar]
+  G -.-> D[domain/models.ts]
+  C -.-> D
+```
+
+Правила переноса или полной замены интерфейса:
+
+1. Компоненты получают данные и действия через props, используют только типы из `domain/models.ts` и не обращаются к `window.desktop`.
+2. `appGateway.ts` — единственное место renderer, которое знает wire-типы и имена backend-операций. Backend-поля преобразуются здесь в стабильную модель UI.
+3. `desktop.ts` отвечает только за запуск sidecar и JSON-RPC. Он не содержит UI-логику и не импортирует React.
+4. Go не знает о компонентах, страницах или дизайне. Изменения интерфейса не требуют изменений Go, пока имеющегося контракта достаточно.
+5. Для новых backend-данных добавляется отдельный RPC и DTO, затем mapping в gateway. Существующий контракт не меняется несовместимо без необходимости.
+6. Renderer передаёт только узкие параметры, например ID трека или поисковый запрос. Токен, произвольные URL и команды остаются на стороне sidecar.
 
 В режиме разработки `BSC_SWAGGER=1 npm run dev` sidecar дополнительно слушает только `127.0.0.1` на случайном порту, печатает URL Swagger UI в stderr и публикует `/openapi.json` и `POST /rpc`. Генератор автоматически находит экспортированные методы `RPC...` на `service`; имена методов, типы параметров и результатов берутся из сигнатур Go, а поля моделей — из Go-типов и JSON-тегов. Добавление метода не требует отдельной записи в реестре. Этот HTTP bridge выключен по умолчанию; desktop-приложение продолжает использовать stdin/stdout. Swagger UI раздаётся через unpkg CDN.
 

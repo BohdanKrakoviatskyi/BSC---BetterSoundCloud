@@ -1,11 +1,11 @@
-import type { SoundCloudTrack } from '../../lib/desktop';
+import type { Track } from '../../domain/models';
 
 type Props = {
-  track: SoundCloudTrack;
+  track: Track;
   artistFallback?: string;
   liked: boolean;
   busy: boolean;
-  onToggleLike: (track: SoundCloudTrack) => void;
+  onToggleLike: (track: Track) => void;
   isCurrent: boolean;
   isPlaying: boolean;
   isLoading: boolean;
@@ -20,8 +20,8 @@ export function TrackCard({ track, artistFallback, liked, busy, onToggleLike, is
     <article className="track-card">
       <div className="track-cover">
         <button className="track-cover-image track-details-trigger" type="button" onClick={onOpenDetails} aria-label={`Подробнее о треке ${track.title}`}>
-          {track.artworkUrl
-            ? <img src={track.artworkUrl} alt="" loading="lazy" />
+          {track.artwork
+            ? <img src={track.artwork} alt="" loading="lazy" />
             : <div className="track-cover-fallback" aria-hidden="true">♫</div>}
         </button>
         <button
@@ -54,10 +54,10 @@ export function TrackCard({ track, artistFallback, liked, busy, onToggleLike, is
       </div>
       <div className="track-details">
         <button className="track-title track-details-trigger" type="button" onClick={onOpenDetails} title={track.title}>{track.title}</button>
-        <span className="track-artist">{track.user.username || artistFallback || 'SoundCloud'}</span>
+        <span className="track-artist">{track.artist.name || artistFallback || 'SoundCloud'}</span>
         <div className="track-stats">
-          <span><i aria-hidden="true">▶</i> {Number(track.playbackCount ?? 0).toLocaleString('ru-RU')}</span>
-          <span><i aria-hidden="true">♥</i> {Number(track.likesCount ?? 0).toLocaleString('ru-RU')}</span>
+          <span><i aria-hidden="true">▶</i> {Number(track.playCount ?? 0).toLocaleString('ru-RU')}</span>
+          <span><i aria-hidden="true">♥</i> {Number(track.likeCount ?? 0).toLocaleString('ru-RU')}</span>
         </div>
       </div>
     </article>

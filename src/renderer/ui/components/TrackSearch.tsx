@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import type { SoundCloudSearchTrack } from '../../lib/desktop';
+import type { Track } from '../../domain/models';
+import { appGateway } from '../../lib/appGateway';
 
-type Props = { onSelect: (track: SoundCloudSearchTrack) => void };
+type Props = { onSelect: (track: Track) => void };
 
 function formatDuration(ms: number): string {
   const seconds = Math.floor(ms / 1000);
@@ -10,7 +11,7 @@ function formatDuration(ms: number): string {
 
 export function TrackSearch({ onSelect }: Props) {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SoundCloudSearchTrack[]>([]);
+  const [results, setResults] = useState<Track[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
@@ -30,7 +31,7 @@ export function TrackSearch({ onSelect }: Props) {
       setLoading(true);
       setError('');
       console.info('[ui.search] started', { query: trimmed });
-      window.desktop.searchTracks(trimmed)
+      appGateway.searchTracks(trimmed)
         .then((tracks) => {
           if (!active) return;
           setResults(tracks);
@@ -60,7 +61,7 @@ export function TrackSearch({ onSelect }: Props) {
     return () => document.removeEventListener('mousedown', closeOnOutsideClick);
   }, []);
 
-  function choose(track: SoundCloudSearchTrack) {
+  function choose(track: Track) {
     onSelect(track);
     setQuery('');
     setResults([]);
@@ -93,13 +94,13 @@ export function TrackSearch({ onSelect }: Props) {
           {error && <div className="track-search-message track-search-error">{error}</div>}
           {results.map((track) => (
             <button className="track-search-result" type="button" role="option" aria-selected="false" key={track.id} onClick={() => choose(track)}>
-              {track.artworkUrl
-                ? <img src={track.artworkUrl} alt="" loading="lazy" />
-                : track.user.username
-                  ? <span className="track-search-cover-fallback">{Array.from(track.user.username)[0]?.toUpperCase() || '♫'}</span>
+              {track.artwork
+                ? <img src={track.artwork} alt="" loading="lazy" />
+                : track.artist.name
+                  ? <span className="track-search-cover-fallback">{Array.from(track.artist.name)[0]?.toUpperCase() || '♫'}</span>
                   : <span className="track-search-cover-fallback">♫</span>}
-              <span className="track-search-result-info"><strong>{track.title}</strong><small>{track.user.username || 'SoundCloud'}</small></span>
-              <span className="track-search-duration">{formatDuration(track.duration)}</span>
+              <span className="track-search-result-info"><strong>{track.title}</strong><small>{track.artist.name || 'SoundCloud'}</small></span>
+              <span className="track-search-duration">{formatDuration(track.durationMs)}</span>
             </button>
           ))}
         </div>

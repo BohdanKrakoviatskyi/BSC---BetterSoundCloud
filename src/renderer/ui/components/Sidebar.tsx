@@ -19,6 +19,7 @@ export function Sidebar({ profile, page, backendReady, onNavigate, onLogout }: P
       <div className="brand">Better<span>SoundCloud</span></div>
       <div className="sidebar-label">ПРИЛОЖЕНИЕ</div>
       <nav aria-label="Главная навигация">
+        <button type="button" className={`nav-item ${page === 'home' ? 'active' : ''}`} onClick={() => onNavigate('home')}>⌂ <span>Главная</span></button>
         <button type="button" className={`nav-item ${page === 'likes' ? 'active' : ''}`} onClick={() => onNavigate('likes')}>♥ <span>Мои лайки</span></button>
         <button type="button" className={`nav-item ${page === 'settings' ? 'active' : ''}`} onClick={() => onNavigate('settings')}>⚙ <span>Настройки</span></button>
       </nav>

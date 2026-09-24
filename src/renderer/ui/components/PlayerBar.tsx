@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import type { SoundCloudTrack } from '../../lib/desktop';
+import type { Track } from '../../domain/models';
 import { SoundCloudWidget, type SoundCloudWidgetControls } from './SoundCloudWidget';
 
 type Props = {
-  track: SoundCloudTrack | null;
+  track: Track | null;
   loading: boolean;
   shouldPlay: boolean;
   volume: number;
@@ -85,17 +85,17 @@ export function PlayerBar({ track, loading, shouldPlay, volume, error, hasNext, 
       )}
 
       <div className="player-track">
-        {track?.artworkUrl
-          ? <img className="player-artwork" src={track.artworkUrl} alt="" />
+        {track?.artwork
+          ? <img className="player-artwork" src={track.artwork} alt="" />
           : <div className="player-artwork player-artwork-fallback" aria-hidden="true">♫</div>}
         <div className="player-track-meta">
-          {track?.permalinkUrl
-            ? <a className="player-track-title" href={track.permalinkUrl} target="_blank" rel="noreferrer" title={track.title}>{track.title}</a>
+          {track?.permalink
+            ? <a className="player-track-title" href={track.permalink} target="_blank" rel="noreferrer" title={track.title}>{track.title}</a>
             : <strong title={track?.title}>{track?.title ?? 'Выберите трек'}</strong>}
           {track && (
-            <a className="player-attribution" href={track.permalinkUrl || 'https://soundcloud.com/'} target="_blank" rel="noreferrer">
+            <a className="player-attribution" href={track.permalink || 'https://soundcloud.com/'} target="_blank" rel="noreferrer">
               <img src={soundCloudLogo} alt="SoundCloud" />
-              <span>от {track.user.username}</span>
+              <span>от {track.artist.name}</span>
             </a>
           )}
           {error && <span className="player-error" title={error}>{error}</span>}

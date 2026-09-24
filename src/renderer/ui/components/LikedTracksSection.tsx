@@ -1,18 +1,18 @@
-import type { SoundCloudTrack } from '../../lib/desktop';
+import type { Track } from '../../domain/models';
 import { TrackCard } from './TrackCard';
 import { useRef } from 'react';
 
 type Props = {
-  tracks: SoundCloudTrack[];
+  tracks: Track[];
   likedTracks: Record<number, boolean>;
   likeBusy: Record<number, boolean>;
   loading: boolean;
   error: string;
   artistFallback?: string;
   onRefresh: () => void;
-  onToggleLike: (track: SoundCloudTrack) => void;
-  onPlayTrack: (track: SoundCloudTrack) => void;
-  onOpenTrack: (track: SoundCloudTrack) => void;
+  onToggleLike: (track: Track) => void;
+  onPlayTrack: (track: Track) => void;
+  onOpenTrack: (track: Track) => void;
   currentTrackId: number | null;
   isPlaying: boolean;
   playbackLoading: boolean;

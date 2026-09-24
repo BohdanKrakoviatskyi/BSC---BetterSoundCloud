@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -159,6 +160,17 @@ type searchTracksParams struct {
 	Query string `json:"query"`
 }
 
+type relatedTracksParams struct {
+	TrackID int64 `json:"trackId"`
+}
+
+type mixedSelection struct {
+	ID          string                  `json:"id"`
+	Title       string                  `json:"title"`
+	Description string                  `json:"description,omitempty"`
+	Tracks      []soundcloudSearchTrack `json:"tracks"`
+}
+
 type soundcloudSearchTrack struct {
 	ID           int64  `json:"id"`
 	URN          string `json:"urn"`
@@ -169,6 +181,19 @@ type soundcloudSearchTrack struct {
 	User         struct {
 		Username  string `json:"username"`
 		AvatarURL string `json:"avatarUrl"`
+	} `json:"user"`
+}
+
+type soundcloudSearchTrackSource struct {
+	ID           int64  `json:"id"`
+	URN          string `json:"urn"`
+	Title        string `json:"title"`
+	PermalinkURL string `json:"permalink_url"`
+	ArtworkURL   string `json:"artwork_url"`
+	Duration     int64  `json:"duration"`
+	User         struct {
+		Username  string `json:"username"`
+		AvatarURL string `json:"avatar_url"`
 	} `json:"user"`
 }
 
@@ -756,6 +781,155 @@ func (s *service) RPCSearchTracks(params searchTracksParams) ([]soundcloudSearch
 	}
 	log.Printf("tracks.search stage=complete count=%d elapsed_ms=%d", len(results), time.Since(startedAt).Milliseconds())
 	return results, nil
+}
+
+func (s *service) RPCTrackRelated(params relatedTracksParams) ([]soundcloudSearchTrack, error) {
+	if s.auth.Token == "" {
+		return nil, errors.New("сначала подключите аккаунт SoundCloud")
+	}
+	if params.TrackID <= 0 {
+		return nil, errors.New("некорректный ID трека")
+	}
+	query := url.Values{}
+	query.Set("limit", "10")
+	endpoint, err := soundcloudV2URL("/tracks/"+strconv.FormatInt(params.TrackID, 10)+"/related", query)
+	if err != nil {
+		return nil, fmt.Errorf("не удалось сформировать запрос похожих треков: %w", err)
+	}
+	var response struct {
+		Collection []struct {
+			ID           int64  `json:"id"`
+			URN          string `json:"urn"`
+			Title        string `json:"title"`
+			PermalinkURL string `json:"permalink_url"`
+			ArtworkURL   string `json:"artwork_url"`
+			Duration     int64  `json:"duration"`
+			User         struct {
+				Username  string `json:"username"`
+				AvatarURL string `json:"avatar_url"`
+			} `json:"user"`
+		} `json:"collection"`
+	}
+	startedAt := time.Now()
+	log.Printf("track.related stage=request track_id=%d limit=10", params.TrackID)
+	if err := s.getSoundCloudJSON(endpoint, &response); err != nil {
+		log.Printf("track.related stage=failed track_id=%d elapsed_ms=%d error=%q", params.TrackID, time.Since(startedAt).Milliseconds(), err.Error())
+		return nil, fmt.Errorf("не удалось загрузить похожие треки: %w", err)
+	}
+	results := make([]soundcloudSearchTrack, 0, len(response.Collection))
+	for _, item := range response.Collection {
+		track := normalizeSearchTrack(item.ID, item.URN, item.Title, item.PermalinkURL, item.ArtworkURL, item.User.AvatarURL, item.Duration, item.User.Username)
+		results = append(results, track)
+	}
+	log.Printf("track.related stage=complete track_id=%d count=%d elapsed_ms=%d", params.TrackID, len(results), time.Since(startedAt).Milliseconds())
+	return results, nil
+}
+
+func (s *service) RPCMixedSelections(_ emptyParams) ([]mixedSelection, error) {
+	if s.auth.Token == "" {
+		return nil, errors.New("сначала подключите аккаунт SoundCloud")
+	}
+	endpoint, err := soundcloudV2URL("/mixed-selections", nil)
+	if err != nil {
+		return nil, fmt.Errorf("не удалось сформировать запрос подборок: %w", err)
+	}
+	var response struct {
+		Collection []struct {
+			ID          string          `json:"id"`
+			Title       string          `json:"title"`
+			Description string          `json:"description"`
+			Items       json.RawMessage `json:"items"`
+		} `json:"collection"`
+	}
+	startedAt := time.Now()
+	log.Printf("mixed-selections stage=request")
+	if err := s.getSoundCloudJSON(endpoint, &response); err != nil {
+		log.Printf("mixed-selections stage=failed elapsed_ms=%d error=%q", time.Since(startedAt).Milliseconds(), err.Error())
+		return nil, fmt.Errorf("не удалось загрузить подборки SoundCloud: %w", err)
+	}
+	selections := make([]mixedSelection, 0, len(response.Collection))
+	for index, item := range response.Collection {
+		itemPayloads := mixedSelectionItemPayloads(item.Items)
+		selection := mixedSelection{ID: item.ID, Title: item.Title, Description: item.Description, Tracks: make([]soundcloudSearchTrack, 0, len(itemPayloads))}
+		if selection.ID == "" {
+			selection.ID = fmt.Sprintf("selection-%d", index)
+		}
+		for _, raw := range itemPayloads {
+			candidate, ok := decodeMixedSelectionTrack(raw)
+			if !ok {
+				continue
+			}
+			selection.Tracks = append(selection.Tracks, normalizeSearchTrack(candidate.ID, candidate.URN, candidate.Title, candidate.PermalinkURL, candidate.ArtworkURL, candidate.User.AvatarURL, candidate.Duration, candidate.User.Username))
+		}
+		if selection.Title != "" && len(selection.Tracks) > 0 {
+			selections = append(selections, selection)
+		}
+	}
+	log.Printf("mixed-selections stage=complete count=%d elapsed_ms=%d", len(selections), time.Since(startedAt).Milliseconds())
+	return selections, nil
+}
+
+func mixedSelectionItemPayloads(raw json.RawMessage) []json.RawMessage {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil
+	}
+	if trimmed[0] == '[' {
+		var items []json.RawMessage
+		if json.Unmarshal(trimmed, &items) == nil {
+			return items
+		}
+		return nil
+	}
+	if trimmed[0] != '{' {
+		return nil
+	}
+	var object map[string]json.RawMessage
+	if json.Unmarshal(trimmed, &object) != nil {
+		return nil
+	}
+	for _, key := range []string{"collection", "items", "tracks", "data"} {
+		if nested, ok := object[key]; ok {
+			if items := mixedSelectionItemPayloads(nested); len(items) > 0 {
+				return items
+			}
+		}
+	}
+	return nil
+}
+
+func decodeMixedSelectionTrack(raw json.RawMessage) (soundcloudSearchTrackSource, bool) {
+	var source soundcloudSearchTrackSource
+	if json.Unmarshal(raw, &source) == nil && source.ID > 0 && source.Title != "" {
+		return source, true
+	}
+	var object map[string]json.RawMessage
+	if json.Unmarshal(raw, &object) != nil {
+		return soundcloudSearchTrackSource{}, false
+	}
+	for _, key := range []string{"track", "item", "resource", "data"} {
+		if nested, ok := object[key]; ok {
+			if source, valid := decodeMixedSelectionTrack(nested); valid {
+				return source, true
+			}
+		}
+	}
+	return soundcloudSearchTrackSource{}, false
+}
+
+func normalizeSearchTrack(id int64, urn, title, permalinkURL, artworkURL, avatarURL string, duration int64, username string) soundcloudSearchTrack {
+	if artworkURL == "" {
+		artworkURL = avatarURL
+	}
+	if artworkURL != "" {
+		artworkURL = strings.Replace(artworkURL, "-large.", "-t300x300.", 1)
+	}
+	if urn == "" {
+		urn = fmt.Sprintf("soundcloud:tracks:%d", id)
+	}
+	track := soundcloudSearchTrack{ID: id, URN: urn, Title: title, PermalinkURL: permalinkURL, ArtworkURL: artworkURL, Duration: duration}
+	track.User.Username = username
+	return track
 }
 
 func (s *service) RPCTrackLike(params trackLikeParams) (trackLikeResult, error) {
