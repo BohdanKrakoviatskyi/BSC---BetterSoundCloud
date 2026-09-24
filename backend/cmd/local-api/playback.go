@@ -23,6 +23,14 @@ type trackStreamParams struct {
 }
 
 type trackStreamResult struct {
+	URL          string              `json:"url"`
+	Preview      bool                `json:"preview"`
+	HLS          bool                `json:"hls"`
+	Quality      string              `json:"quality"`
+	Alternatives []trackStreamOption `json:"alternatives,omitempty"`
+}
+
+type trackStreamOption struct {
 	URL     string `json:"url"`
 	Preview bool   `json:"preview"`
 	HLS     bool   `json:"hls"`
@@ -65,6 +73,7 @@ func (s *service) RPCTrackStream(params trackStreamParams) (trackStreamResult, e
 		return trackStreamResult{}, errors.New("SoundCloud не предоставил для этого трека AAC HLS-поток или превью")
 	}
 	var lastErr error
+	resolvedChoices := make([]trackStreamOption, 0, len(choices))
 	hasUnsupportedDRM := false
 	for index, choice := range choices {
 		if strings.Contains(choice.Protocol, "encrypted-hls") {
@@ -87,7 +96,14 @@ func (s *service) RPCTrackStream(params trackStreamParams) (trackStreamResult, e
 			continue
 		}
 		log.Printf("track.stream stage=complete preview=%t hls=%t quality=%q protocol=%q", choice.Preview, choice.HLS, choice.Quality, choice.Protocol)
-		return trackStreamResult{URL: resolvedURL, Preview: choice.Preview, HLS: choice.HLS, Quality: choice.Quality}, nil
+		resolvedChoices = append(resolvedChoices, trackStreamOption{URL: resolvedURL, Preview: choice.Preview, HLS: choice.HLS, Quality: choice.Quality})
+	}
+	if len(resolvedChoices) > 0 {
+		if len(resolvedChoices) > 4 {
+			resolvedChoices = resolvedChoices[:4]
+		}
+		primary := resolvedChoices[0]
+		return trackStreamResult{URL: primary.URL, Preview: primary.Preview, HLS: primary.HLS, Quality: primary.Quality, Alternatives: resolvedChoices[1:]}, nil
 	}
 	if hasUnsupportedDRM {
 		return trackStreamResult{}, errors.New("этот трек доступен только в DRM-защищённом потоке SoundCloud, который текущий плеер не поддерживает")
@@ -232,6 +248,10 @@ func (s *service) soundcloudV2URLFromAbsolute(rawURL string) (string, error) {
 }
 
 func (s *service) getSoundCloudJSON(endpoint string, destination any) error {
+	return s.getSoundCloudJSONLimit(endpoint, destination, 2<<20)
+}
+
+func (s *service) getSoundCloudJSONLimit(endpoint string, destination any, maxBytes int64) error {
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
 	if err != nil {
 		return err
@@ -247,11 +267,21 @@ func (s *service) getSoundCloudJSON(endpoint string, destination any) error {
 		return fmt.Errorf("сетевая ошибка: %w", err)
 	}
 	defer resp.Body.Close()
-	log.Printf("track.stream stage=api_response host=%s status=%d content_type=%q", hostForLog(webAPIBase), resp.StatusCode, resp.Header.Get("Content-Type"))
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("SoundCloud API v2 вернул HTTP %d", resp.StatusCode)
+	parsedEndpoint, _ := url.Parse(endpoint)
+	endpointHost := "unknown"
+	if parsedEndpoint != nil {
+		endpointHost = parsedEndpoint.Host
 	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 2<<20)).Decode(destination); err != nil {
+	log.Printf("soundcloud.api stage=response host=%s status=%d content_type=%q", endpointHost, resp.StatusCode, resp.Header.Get("Content-Type"))
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		detail := strings.TrimSpace(string(body))
+		if detail != "" {
+			return fmt.Errorf("SoundCloud API вернул HTTP %d: %s", resp.StatusCode, detail)
+		}
+		return fmt.Errorf("SoundCloud API вернул HTTP %d", resp.StatusCode)
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBytes)).Decode(destination); err != nil {
 		return fmt.Errorf("ошибка чтения JSON: %w", err)
 	}
 	return nil

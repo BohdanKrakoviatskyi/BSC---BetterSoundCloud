@@ -4,6 +4,7 @@ import type { Track } from '../../domain/models';
 type Widget = {
   bind: (event: string, callback: (data?: unknown) => void) => void;
   unbind: (event: string) => void;
+  load: (url: string, options: Record<string, unknown>) => void;
   play: () => void;
   pause: () => void;
   seekTo: (milliseconds: number) => void;
@@ -74,8 +75,15 @@ type Props = {
 
 export function SoundCloudWidget({ track, volume, onControlsReady, onReady, onPlaybackStateChange, onProgress, onEnded, onError }: Props) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const widgetRef = useRef<Widget | null>(null);
+  const initialTrackUrlRef = useRef('');
+  const currentTrackUrlRef = useRef('');
+  const volumeRef = useRef(volume);
+  const loadGenerationRef = useRef(0);
+  const widgetInitializedRef = useRef(false);
   const callbacksRef = useRef({ onControlsReady, onReady, onPlaybackStateChange, onProgress, onEnded, onError });
   callbacksRef.current = { onControlsReady, onReady, onPlaybackStateChange, onProgress, onEnded, onError };
+  volumeRef.current = volume;
 
   const trackUrl = track.permalink || `https://api.soundcloud.com/tracks/${track.id}`;
   const iframeUrl = new URL('https://w.soundcloud.com/player/');
@@ -87,21 +95,57 @@ export function SoundCloudWidget({ track, volume, onControlsReady, onReady, onPl
   iframeUrl.searchParams.set('show_teaser', 'false');
   iframeUrl.searchParams.set('visual', 'false');
   iframeUrl.searchParams.set('color', '#ff765d');
+  currentTrackUrlRef.current = iframeUrl.searchParams.get('url') || trackUrl;
+  if (!initialTrackUrlRef.current) initialTrackUrlRef.current = currentTrackUrlRef.current;
 
   useEffect(() => {
     let disposed = false;
     let widget: Widget | null = null;
 
+    const markReady = (generation: number) => {
+      if (disposed || generation !== loadGenerationRef.current || !widget) return;
+      widget.setVolume(volumeRef.current);
+      callbacksRef.current.onControlsReady(widget);
+      callbacksRef.current.onReady();
+      widget.getDuration((duration) => {
+        if (disposed || generation !== loadGenerationRef.current || duration <= 0 || !widget) return;
+        widget.getPosition((position) => {
+          if (!disposed && generation === loadGenerationRef.current) callbacksRef.current.onProgress(position, duration);
+        });
+      });
+    };
+
+    const loadTrack = (nextUrl: string) => {
+      if (!widget) return;
+      initialTrackUrlRef.current = nextUrl;
+      const generation = ++loadGenerationRef.current;
+      widget.load(nextUrl, {
+        auto_play: false,
+        hide_related: true,
+        show_comments: false,
+        show_reposts: false,
+        show_teaser: false,
+        visual: false,
+        color: '#ff765d',
+        callback: () => markReady(generation),
+      });
+    };
+
     void loadWidgetApi().then((api) => {
       const iframe = iframeRef.current;
       if (disposed || !iframe) return;
       widget = api.Widget(iframe);
+      widgetRef.current = widget;
       widget.bind(api.Widget.Events.READY, () => {
-        if (!widget) return;
-        widget.setVolume(volume);
-        callbacksRef.current.onControlsReady(widget);
-        callbacksRef.current.onReady();
-        widget.getDuration((duration) => callbacksRef.current.onProgress(0, duration));
+        if (!widget || disposed) return;
+        if (!widgetInitializedRef.current) {
+          widgetInitializedRef.current = true;
+          if (currentTrackUrlRef.current !== initialTrackUrlRef.current) {
+            loadTrack(currentTrackUrlRef.current);
+          } else {
+            markReady(loadGenerationRef.current);
+          }
+        }
       });
       widget.bind(api.Widget.Events.PLAY, () => callbacksRef.current.onPlaybackStateChange(true));
       widget.bind(api.Widget.Events.PAUSE, () => callbacksRef.current.onPlaybackStateChange(false));
@@ -130,10 +174,42 @@ export function SoundCloudWidget({ track, volume, onControlsReady, onReady, onPl
 
     return () => {
       disposed = true;
+      loadGenerationRef.current++;
       if (widget) {
         for (const event of Object.values(window.SC?.Widget.Events ?? {})) widget.unbind(event);
+        if (widgetRef.current === widget) widgetRef.current = null;
       }
     };
+  }, []);
+
+  useEffect(() => {
+    const nextUrl = currentTrackUrlRef.current;
+    if (nextUrl === initialTrackUrlRef.current) return;
+    const widget = widgetRef.current;
+    if (!widget) return;
+    const generation = ++loadGenerationRef.current;
+    initialTrackUrlRef.current = nextUrl;
+    widget.load(nextUrl, {
+      auto_play: false,
+      hide_related: true,
+      show_comments: false,
+      show_reposts: false,
+      show_teaser: false,
+      visual: false,
+      color: '#ff765d',
+      callback: () => {
+        if (generation !== loadGenerationRef.current) return;
+        widget.setVolume(volumeRef.current);
+        callbacksRef.current.onControlsReady(widget);
+        callbacksRef.current.onReady();
+        widget.getDuration((duration) => {
+          if (generation !== loadGenerationRef.current || duration <= 0) return;
+          widget.getPosition((position) => {
+            if (generation === loadGenerationRef.current) callbacksRef.current.onProgress(position, duration);
+          });
+        });
+      },
+    });
   }, [track.id]);
 
   return (

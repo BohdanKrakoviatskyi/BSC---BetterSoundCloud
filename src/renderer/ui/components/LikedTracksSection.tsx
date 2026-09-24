@@ -1,6 +1,5 @@
 import type { Track } from '../../domain/models';
 import { TrackCard } from './TrackCard';
-import { useRef } from 'react';
 
 type Props = {
   tracks: Track[];
@@ -19,13 +18,6 @@ type Props = {
 };
 
 export function LikedTracksSection({ tracks, likedTracks, likeBusy, loading, error, artistFallback, onRefresh, onToggleLike, onPlayTrack, onOpenTrack, currentTrackId, isPlaying, playbackLoading }: Props) {
-  const carouselRef = useRef<HTMLDivElement>(null);
-
-  function scrollCarousel(direction: -1 | 1) {
-    if (!carouselRef.current) return;
-    carouselRef.current.scrollBy({ left: direction * carouselRef.current.clientWidth * 0.8, behavior: 'smooth' });
-  }
-
   return (
     <section className="shelf" aria-label="Мои лайки">
       <div className="section-heading">
@@ -34,10 +26,6 @@ export function LikedTracksSection({ tracks, likedTracks, likeBusy, loading, err
           <h2>Треки из моих лайков <span className="track-count">{tracks.length}</span></h2>
         </div>
         <div className="tracks-actions">
-          <div className="carousel-controls" aria-label="Прокрутка треков">
-            <button type="button" aria-label="Прокрутить влево" onClick={() => scrollCarousel(-1)}>‹</button>
-            <button type="button" aria-label="Прокрутить вправо" onClick={() => scrollCarousel(1)}>›</button>
-          </div>
           <button className="text-action" type="button" onClick={onRefresh} disabled={loading}>
             {loading ? 'Загружаю…' : 'Обновить'} <span aria-hidden="true">↻</span>
           </button>
@@ -48,7 +36,7 @@ export function LikedTracksSection({ tracks, likedTracks, likeBusy, loading, err
         ? <p className="tracks-empty">Загружаю ваши треки…</p>
         : tracks.length === 0
           ? <p className="tracks-empty">В лайках пока нет треков.</p>
-          : <div ref={carouselRef} className="card-row">
+          : <div className="liked-tracks-grid">
             {tracks.map((track) => (
               <TrackCard
                 key={track.id}

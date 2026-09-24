@@ -1,5 +1,5 @@
-import type { SoundCloudMixedSelection, SoundCloudSearchTrack, SoundCloudTrack, SoundCloudTrackDetails } from './desktop';
-import type { Profile, Settings, Track, TrackCollection, TrackDetails } from '../domain/models';
+import type { SoundCloudMixedSelection, SoundCloudSearchTrack, SoundCloudTrack, SoundCloudTrackDetails, TrackStream } from './desktop';
+import type { Playlist, Profile, Settings, Track, TrackCollection, TrackDetails } from '../domain/models';
 import type { AuthStatus } from './desktop';
 
 function mapTrack(source: SoundCloudTrack | SoundCloudSearchTrack): Track {
@@ -76,7 +76,18 @@ export const appGateway = {
   },
   authLogout: () => window.desktop.authLogout(),
   myTracks: async () => (await window.desktop.myTracks()).map(mapTrack),
+  myPlaylists: async (): Promise<Playlist[]> => (await window.desktop.myPlaylists()).map((playlist) => ({
+    id: playlist.id,
+    urn: playlist.urn,
+    title: playlist.title,
+    permalink: playlist.permalinkUrl,
+    artwork: playlist.artworkUrl,
+    trackCount: playlist.trackCount,
+    artist: playlist.user?.username || '',
+  })),
+  playlistTracks: async (playlistUrn: string) => (await window.desktop.playlistTracks(playlistUrn)).map(mapTrack),
   trackDetails: async (trackId: number) => mapTrackDetails(await window.desktop.trackDetails(trackId)),
+  trackStream: (trackUrn: string): Promise<TrackStream> => window.desktop.trackStream(trackUrn),
   searchTracks: async (query: string) => (await window.desktop.searchTracks(query)).map(mapTrack),
   relatedTracks: async (trackId: number) => (await window.desktop.relatedTracks(trackId)).map(mapTrack),
   mixedSelections: async () => (await window.desktop.mixedSelections()).map(mapCollection),
