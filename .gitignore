@@ -1,7 +1,11 @@
 node_modules/
 dist/
 release/
+build/
 src-tauri/target/
-.npm-cache/
+src-tauri/binaries/local-api-*
 .env
 *.log
+.DS_Store
+__pycache__/
+/backend/local-api

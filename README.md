@@ -1,36 +1,78 @@
 # BetterSoundCloud
 
-A local desktop music client with search, a library, playlists, listening history, and a playback queue. The desktop shell uses Tauri 2; the interface uses plain HTML, CSS, and JavaScript.
+Локальное desktop-приложение на **Tauri 2 + React + TypeScript** с небольшим локальным Go sidecar для настроек и авторизации SoundCloud. Полный OAuth-вход пока не подключён: аккаунт подключается вставкой access token.
 
-## Frontend location
+Архитектура и протокол локального backend описаны в [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-The complete frontend is in `src/renderer/`:
+## Структура интерфейса
 
-- `src/renderer/index.html` - app entry point and page structure
-- `src/renderer/styles.css` - layout, theme, and responsive styles
-- `src/renderer/app.js` - interface rendering and client-side behavior
+React-интерфейс находится в `src/renderer`: точка входа — `src/renderer/main.tsx`, страницы и компоненты — в `src/renderer/ui`. Desktop-оболочка Tauri находится в `src-tauri`, исходники локального Go backend — в `backend/cmd/local-api`.
 
-Tauri and Rust configuration and source files are in `src-tauri/`.
+## Требования
 
-## Requirements
+- Node.js и npm
+- Rust toolchain, включая Cargo
+- Go 1.22+
+- Системные зависимости Tauri для вашей ОС: [официальное руководство Tauri](https://v2.tauri.app/start/prerequisites/)
 
-- Node.js and npm
-- Rust with the MSVC toolchain to build on Windows
-- Microsoft C++ Build Tools and WebView2 Runtime on Windows
+## Запуск
 
-See the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for platform-specific requirements.
-
-## Install and run
-
-```sh
+```bash
 npm install
 npm run dev
 ```
 
-## Build
+Tauri CLI собирает Go sidecar, запускает Vite и открывает desktop-окно. При первом запуске приложение попросит access token SoundCloud: скопируйте его из заголовка `Authorization: OAuth …` любого запроса к SoundCloud и вставьте в поле входа. Go sidecar проверит токен через `GET /me`, сохранит его локально с правами `0600` и покажет профиль. Настройки цветовой темы, компактного режима и громкости сохраняются локально.
 
-```sh
-npm run build
+Путь к хранилищу на время разработки можно переопределить через `BSC_DATA_DIR`, хост SoundCloud — через `BSC_SOUNDCLOUD_API_BASE`.
+
+## Тестирование backend отдельно от UI
+
+Go sidecar общается с frontend построчным JSON-RPC через stdin/stdout, поэтому его можно гонять без Tauri.
+
+Юнит-тесты на подставном SoundCloud-сервере (без сети):
+
+```bash
+npm run test:go                              # или: cd backend && go test ./...
 ```
 
-`package.json` and `package-lock.json` define the npm scripts and dependencies. `LICENSE` contains the project license. Build artifacts and local dependencies are excluded from the repository.
+Swagger UI для локального Go JSON-RPC sidecar доступен в режиме разработки:
+
+```bash
+BSC_SWAGGER=1 npm run dev
+```
+
+Откройте адрес `Swagger UI:` из stderr backend в браузере. Сервер слушает только loopback на случайном порту и запускается только при `BSC_SWAGGER=1`; его HTTP-маршрут `/rpc` описывает тот же протокол `method`/`params`, который desktop использует через stdin/stdout. OpenAPI JSON автоматически находит экспортированные методы `RPC...` у Go service и строит схемы запросов и результатов из их сигнатур, структур и JSON-тегов. Чтобы добавить метод, реализуйте `RPC<Имя>` на `service` с сигнатурой `(params Тип) (result Тип, error)` — отдельная регистрация не нужна. Swagger UI загружается с unpkg CDN.
+
+Живой тест против настоящего SoundCloud (читает `TOKEN=...` из `.env`, проверяет `GET /me` и восстановление сессии из `auth.json`):
+
+```bash
+npm run test:go:live
+```
+
+Интерактивная консоль backend — удобно вручную дёргать методы и смотреть ответы:
+
+```bash
+npm run backend
+```
+
+Доступные команды: `status`, `login <access token>`, `refresh`, `logout`, `info`, `settings`, `help`, а также произвольный JSON, например `{"method":"settings.update","params":{"volume":40}}`. Одиночный запрос без REPL: `npm run backend -- status`. Данные пишутся в `build/backend/data` и не пересекаются с desktop-приложением (у него свой каталог в системной конфигурации).
+
+То же самое сырым способом, без обёрток:
+
+```bash
+cd backend
+go build -o /tmp/local-api ./cmd/local-api
+printf '%s\n' '{"id":1,"method":"app.info","params":{}}' | BSC_DATA_DIR=/tmp/bsc /tmp/local-api
+```
+
+## Сборка
+
+```bash
+npm run build
+npm run package
+```
+
+`build` проверяет и собирает React frontend. `package` собирает Go sidecar для текущей платформы и создаёт Tauri bundle. Для сборки под другую архитектуру нужны соответствующие Go target и Tauri target triple.
+
+Приложение включает обзор, поиск, медиатеку с лайками и плейлистами, воспроизведение треков, настройки и подключение аккаунта SoundCloud по access token.
