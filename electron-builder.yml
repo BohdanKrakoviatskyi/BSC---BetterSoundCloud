@@ -4,3 +4,15 @@ directories:
   output: release
 files:
   - dist/**/*
+win:
+  target:
+    - nsis
+  artifactName: ${productName}-${version}-Windows.${ext}
+mac:
+  target:
+    - dmg
+  category: public.app-category.music
+  artifactName: ${productName}-${version}-macOS.${ext}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
