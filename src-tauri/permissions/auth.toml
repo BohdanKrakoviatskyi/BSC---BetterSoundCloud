@@ -1,0 +1,17 @@
+# Application permissions for the silent SoundCloud authentication commands.
+# Referenced by the capabilities in `src-tauri/capabilities/`.
+
+[[permission]]
+identifier = "allow-start-auth-flow"
+description = "Allows the main window to open the background SoundCloud authentication webview."
+commands.allow = ["start_auth_flow"]
+
+[[permission]]
+identifier = "allow-show-auth-window"
+description = "Allows the SoundCloud webview to reveal itself when manual sign-in is required."
+commands.allow = ["show_auth_window"]
+
+[[permission]]
+identifier = "allow-save-credentials"
+description = "Allows the SoundCloud webview to hand the captured OAuth token and client id back to the app."
+commands.allow = ["save_credentials"]

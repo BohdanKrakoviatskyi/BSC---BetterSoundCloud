@@ -387,6 +387,24 @@
       "description": "Permission identifier",
       "oneOf": [
         {
+          "description": "Allows the SoundCloud webview to hand the captured OAuth token and client id back to the app.",
+          "type": "string",
+          "const": "allow-save-credentials",
+          "markdownDescription": "Allows the SoundCloud webview to hand the captured OAuth token and client id back to the app."
+        },
+        {
+          "description": "Allows the SoundCloud webview to reveal itself when manual sign-in is required.",
+          "type": "string",
+          "const": "allow-show-auth-window",
+          "markdownDescription": "Allows the SoundCloud webview to reveal itself when manual sign-in is required."
+        },
+        {
+          "description": "Allows the main window to open the background SoundCloud authentication webview.",
+          "type": "string",
+          "const": "allow-start-auth-flow",
+          "markdownDescription": "Allows the main window to open the background SoundCloud authentication webview."
+        },
+        {
           "description": "Default core plugins set.\n#### This default permission set includes:\n\n- `core:path:default`\n- `core:event:default`\n- `core:window:default`\n- `core:webview:default`\n- `core:app:default`\n- `core:image:default`\n- `core:resources:default`\n- `core:menu:default`\n- `core:tray:default`",
           "type": "string",
           "const": "core:default",

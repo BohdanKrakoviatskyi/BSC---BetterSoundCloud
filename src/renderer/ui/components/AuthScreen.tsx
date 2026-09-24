@@ -1,12 +1,15 @@
 import { useState, type FormEvent } from 'react';
+import type { SoundCloudCredentials } from '../../lib/useSoundCloudAuth';
+import { SilentAuthButton } from './SilentAuthButton';
 
 type Props = {
   error: string;
   busy: boolean;
   onLogin: (token: string) => void;
+  onSilentLogin: (credentials: SoundCloudCredentials) => void | Promise<void>;
 };
 
-export function AuthScreen({ error, busy, onLogin }: Props) {
+export function AuthScreen({ error, busy, onLogin, onSilentLogin }: Props) {
   const [token, setToken] = useState('');
   const [showToken, setShowToken] = useState(false);
 
@@ -20,12 +23,14 @@ export function AuthScreen({ error, busy, onLogin }: Props) {
       <div className="auth-card">
         <div className="brand auth-brand">Better<span>SoundCloud</span></div>
         <div className="eyebrow">ПОДКЛЮЧЕНИЕ АККАУНТА</div>
-        <h1>Вставьте токен SoundCloud</h1>
+        <h1>Подключите SoundCloud</h1>
         <p className="auth-note">
-          Пока OAuth-вход не подключён. Скопируйте access token из запроса к SoundCloud
-          (заголовок <code>Authorization: OAuth …</code>), вставьте его сюда — локальный Go backend
-          проверит токен, сохранит его только на этом устройстве и не передаст renderer-у.
+          Нажмите кнопку ниже — приложение откроет фоновое окно SoundCloud и заберёт
+          access token из вашей сессии. Если вы ещё не вошли, окно покажется,
+          чтобы вы ввели логин и пароль.
         </p>
+        <SilentAuthButton onAuthenticated={onSilentLogin} disabled={busy} />
+        <div className="auth-divider"><span>или вставьте токен вручную</span></div>
         <form className="auth-form" onSubmit={submit}>
           <label className="auth-field">
             <span>Access token</span>

@@ -62,6 +62,7 @@ export const appGateway = {
   stop: () => window.desktop.stop(),
   getSettings: (): Promise<Settings> => window.desktop.getSettings(),
   updateSettings: (patch: Partial<Settings>): Promise<Settings> => window.desktop.updateSettings(patch),
+  clearAppData: (): Promise<Settings> => window.desktop.clearAppData(),
   authStatus: async () => {
     const status = await window.desktop.authStatus();
     return { authorized: status.authorized, profile: mapProfile(status.profile) ?? undefined };

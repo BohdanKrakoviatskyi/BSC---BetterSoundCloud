@@ -114,6 +114,10 @@ class LocalBackend {
     return this.request<Settings>('settings.update', patch);
   }
 
+  async clearAppData(): Promise<Settings> {
+    return this.request<Settings>('settings.clear');
+  }
+
   async authStatus(): Promise<AuthStatus> {
     return this.request<AuthStatus>('auth.status');
   }
@@ -239,6 +243,7 @@ export const desktop = {
   getInfo: () => backend.getInfo(),
   getSettings: () => backend.getSettings(),
   updateSettings: (patch: Partial<Settings>) => backend.updateSettings(patch),
+  clearAppData: () => backend.clearAppData(),
   authStatus: () => backend.authStatus(),
   authLogin: (token: string) => backend.authLogin(token),
   authRefresh: () => backend.authRefresh(),

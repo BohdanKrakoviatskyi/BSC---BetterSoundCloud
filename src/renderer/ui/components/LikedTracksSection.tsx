@@ -20,6 +20,7 @@ type Props = {
 
 export function LikedTracksSection({ tracks, likedTracks, likeBusy, loading, error, artistFallback, onRefresh, onToggleLike, onPlayTrack, onOpenTrack, currentTrackId, isPlaying, playbackLoading }: Props) {
   const carouselRef = useRef<HTMLDivElement>(null);
+  const uniqueTracks = Array.from(new Map(tracks.map((track) => [track.id, track])).values());
 
   function scrollCarousel(direction: -1 | 1) {
     if (!carouselRef.current) return;
@@ -46,10 +47,10 @@ export function LikedTracksSection({ tracks, likedTracks, likeBusy, loading, err
       {error && <div className="error-message" role="alert">{error}</div>}
       {loading && tracks.length === 0
         ? <p className="tracks-empty">Загружаю ваши треки…</p>
-        : tracks.length === 0
-          ? <p className="tracks-empty">В лайках пока нет треков.</p>
+          : uniqueTracks.length === 0
+            ? <p className="tracks-empty">В лайках пока нет треков.</p>
           : <div ref={carouselRef} className="card-row">
-            {tracks.map((track) => (
+            {uniqueTracks.map((track) => (
               <TrackCard
                 key={track.id}
                 track={track}

@@ -1,0 +1,51 @@
+.settings-danger-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 26px;
+  padding: 17px 0;
+  border-top: 1px solid #ffffff12;
+}
+
+.settings-danger-zone b { font-size: 10px; }
+.settings-danger-zone p { margin: 5px 0 0; color: #929299; font-size: 9px; }
+
+.danger-button {
+  min-height: 34px;
+  padding: 0 13px;
+  border: 1px solid #9b4b5c66;
+  border-radius: 6px;
+  background: #5c243122;
+  color: #ffc4ce;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.danger-button:hover:not(:disabled) { background: #7b2e3c55; border-color: #c56576; }
+.danger-button:disabled { opacity: .55; cursor: wait; }
+
+.clear-data-modal-layer {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: #000b;
+  backdrop-filter: blur(5px);
+}
+
+.clear-data-modal {
+  width: min(440px, 95vw);
+  padding: 25px;
+  border: 1px solid #ffffff20;
+  border-radius: 10px;
+  background: linear-gradient(145deg, #202023, #151517);
+  box-shadow: 0 22px 75px #000c;
+}
+
+.clear-data-modal h2 { margin: 9px 0; font-size: 20px; }
+.clear-data-modal > p { margin: 0; color: #aaaab0; font-size: 11px; line-height: 1.7; }
+.clear-data-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 22px; }

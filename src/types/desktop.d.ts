@@ -15,6 +15,7 @@ declare global {
         volume: number;
         clientId: string;
       }>;
+      clearAppData(): Promise<{ accent: string; compact: boolean; volume: number; clientId: string }>;
       authStatus(): Promise<AuthStatus>;
       authLogin(token: string): Promise<AuthStatus>;
       authRefresh(): Promise<AuthStatus>;

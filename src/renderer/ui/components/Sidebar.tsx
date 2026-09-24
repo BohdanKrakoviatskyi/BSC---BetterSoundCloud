@@ -17,6 +17,7 @@ function initials(name: string): string {
 }
 
 export function Sidebar({ profile, page, tracks, backendReady, onNavigate, onSearch, onPlayTrack, onLogout }: Props) {
+  const uniqueTracks = Array.from(new Map(tracks.map((track) => [track.id, track])).values());
   return (
     <aside className="sidebar panel">
       <nav className="primary-nav" aria-label="Главная навигация">
@@ -31,7 +32,7 @@ export function Sidebar({ profile, page, tracks, backendReady, onNavigate, onSea
         <div className="library-filters"><button type="button" className="chip active" onClick={() => onNavigate('likes')}>Всё</button><button type="button" className="chip" onClick={() => onNavigate('likes')}>Треки</button></div>
         <div className="library-tools"><button className="icon-button" type="button" aria-label="Искать в медиатеке" onClick={onSearch}>⌕</button><button className="sort-button" type="button" onClick={() => onNavigate('likes')}>Недавно добавленные <span>⌄</span></button></div>
         <div className="library-list">
-          {tracks.slice(0, 60).map((track) => (
+          {uniqueTracks.slice(0, 60).map((track) => (
             <button className="library-item" type="button" key={track.id} onClick={() => onPlayTrack(track)} title={`Воспроизвести ${track.title}`}>
               {track.artwork ? <img className="mini-art" src={track.artwork} alt="" loading="lazy" /> : <span className="mini-art mini-art-fallback">♫</span>}
               <span className="library-copy"><b>{track.title}</b><small>{track.artist.name || profile?.username || 'SoundCloud'}</small></span>

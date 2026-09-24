@@ -220,6 +220,11 @@ html[data-compact='true'] .settings-panel { padding-top: 17px; }
 .auth-button:disabled { opacity: .45; cursor: default; }
 .auth-error { margin: 18px 0 0; }
 .auth-hint { margin: 18px 0 0; color: #696f7d; font-size: 11px; }
+.silent-auth { display: grid; gap: 8px; }
+.silent-auth .auth-button { width: 100%; }
+.silent-auth .auth-hint { margin: 0; }
+.auth-divider { display: flex; align-items: center; gap: 12px; margin: 22px 0 16px; color: #696f7d; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.auth-divider::before, .auth-divider::after { content: ''; flex: 1; height: 1px; background: #ffffff12; }
 
 /* --- Аккаунт в интерфейсе --- */
 .user-card { display: flex; align-items: center; gap: 10px; margin-top: auto; padding: 10px; border: 1px solid #ffffff0f; border-radius: 11px; background: #ffffff08; }

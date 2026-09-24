@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import type { Settings } from '../types';
 import type { Profile } from '../types';
+import './SettingsPanel.css';
 
 type Props = {
   settings: Settings;
@@ -11,18 +12,28 @@ type Props = {
   tokenError: string;
   tokenBusy: boolean;
   onSaveToken: (token: string) => Promise<boolean>;
+  onClearData: () => Promise<boolean>;
 };
 
-export function SettingsPanel({ settings, saved, error, profile, tokenError, tokenBusy, onUpdate, onSaveToken }: Props) {
+export function SettingsPanel({ settings, saved, error, profile, tokenError, tokenBusy, onUpdate, onSaveToken, onClearData }: Props) {
   const [clientId, setClientId] = useState(settings.clientId);
   const [token, setToken] = useState('');
   const [showToken, setShowToken] = useState(false);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [clearBusy, setClearBusy] = useState(false);
 
   async function submitToken(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!token.trim()) return;
     const saved = await onSaveToken(token.trim());
     if (saved) setToken('');
+  }
+
+  async function confirmClearData() {
+    setClearBusy(true);
+    const cleared = await onClearData();
+    setClearBusy(false);
+    if (cleared) setClearDialogOpen(false);
   }
 
   return (
@@ -53,8 +64,24 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
           <p className="credential-security">Токен не попадает в настройки интерфейса: Go проверяет его и хранит отдельно в локальном защищённом файле.</p>
         </form>
       </div>
+      <div className="settings-danger-zone">
+        <div><b>Очистить данные приложения</b><p>Удалить сохранённый токен, Client ID и сбросить настройки.</p></div>
+        <button className="danger-button" type="button" onClick={() => setClearDialogOpen(true)}>Очистить данные</button>
+      </div>
       {error && <div className="error-message" role="alert">{error}</div>}
       </div></div>
+      {clearDialogOpen && <div className="clear-data-modal-layer" onMouseDown={(event) => { if (event.target === event.currentTarget && !clearBusy) setClearDialogOpen(false); }}>
+        <section className="clear-data-modal panel" role="alertdialog" aria-modal="true" aria-labelledby="clear-data-title" aria-describedby="clear-data-description">
+          <span className="eyebrow">СБРОС ПРИЛОЖЕНИЯ</span>
+          <h2 id="clear-data-title">Очистить все данные?</h2>
+          <p id="clear-data-description">Сохранённый токен будет удалён, а Client ID и настройки сбросятся к значениям по умолчанию. Приложение выйдет из аккаунта SoundCloud. Это действие нельзя отменить.</p>
+          {error && <div className="error-message" role="alert">{error}</div>}
+          <div className="clear-data-actions">
+            <button className="outline-button" type="button" disabled={clearBusy} onClick={() => setClearDialogOpen(false)}>Отмена</button>
+            <button className="danger-button" type="button" disabled={clearBusy} onClick={() => void confirmClearData()}>{clearBusy ? 'Очищаю…' : 'Да, очистить'}</button>
+          </div>
+        </section>
+      </div>}
     </section>
   );
 }

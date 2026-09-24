@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Track, TrackDetails, TrackCollection } from '../domain/models';
 import { appGateway } from '../lib/appGateway';
+import type { SoundCloudCredentials } from '../lib/useSoundCloudAuth';
 import { AuthScreen } from './components/AuthScreen';
 import { HomePage } from './components/HomePage';
 import { LikedTracksSection } from './components/LikedTracksSection';
@@ -46,6 +47,7 @@ export function App() {
   const [relatedTracks, setRelatedTracks] = useState<Track[]>([]);
   const [relatedLoading, setRelatedLoading] = useState(false);
   const [relatedError, setRelatedError] = useState('');
+  const detailsRequestId = useRef(0);
 
   async function loadMixedSelections() {
     setSelectionsLoading(true);
@@ -146,6 +148,7 @@ export function App() {
   }
 
   async function openTrackDetails(track: Track) {
+    const requestId = ++detailsRequestId.current;
     setPage('track');
     setDetailsTrack(null);
     setDetailsLoading(true);
@@ -158,6 +161,10 @@ export function App() {
       appGateway.trackDetails(track.id),
       appGateway.relatedTracks(track.id),
     ]);
+    if (requestId !== detailsRequestId.current) {
+      console.debug('[ui.track.details] ignored stale response', { trackId: track.id, requestId });
+      return;
+    }
     if (detailsResult.status === 'fulfilled') {
       setDetailsTrack(detailsResult.value);
       console.info('[ui.track.details] loaded', { trackId: detailsResult.value.id, title: detailsResult.value.title });
@@ -288,6 +295,17 @@ export function App() {
     }
   }
 
+  async function silentLogin(credentials: SoundCloudCredentials) {
+    try {
+      await appGateway.updateSettings({ clientId: credentials.clientId });
+      console.info('[ui.auth.silent] client id captured', { clientIdLength: credentials.clientId.length });
+    } catch (reason) {
+      // Не блокируем вход: токен всё равно можно проверить и сохранить.
+      console.warn('[ui.auth.silent] client id save failed', { error: reasonText(reason, 'unknown error') });
+    }
+    await login(credentials.token);
+  }
+
   async function saveAccessToken(token: string): Promise<boolean> {
     setLoginBusy(true);
     setLoginError('');
@@ -331,6 +349,32 @@ export function App() {
     setAuth('guest');
   }
 
+  async function clearAppData(): Promise<boolean> {
+    setError('');
+    try {
+      const resetSettings = await appGateway.clearAppData();
+      setSettings(resetSettings);
+      setSaved(true);
+      setProfile(null);
+      setTracks([]);
+      setSelections([]);
+      setRelatedTracks([]);
+      setLikedTracks({});
+      setCurrentTrack(null);
+      setCurrentTrackIndex(-1);
+      setShouldPlay(false);
+      setPlaybackError('');
+      setLoginError('');
+      setAuth('guest');
+      return true;
+    } catch (reason) {
+      const message = reasonText(reason, 'Не удалось очистить данные приложения');
+      setError(message);
+      console.error('[ui.settings.clear-data] failed', { error: message });
+      return false;
+    }
+  }
+
   if (!ready) {
     return (
       <div className="auth-shell">
@@ -345,7 +389,7 @@ export function App() {
     );
   }
 
-  if (auth === 'guest') return <AuthScreen error={loginError} busy={loginBusy} onLogin={(token) => void login(token)} />;
+  if (auth === 'guest') return <AuthScreen error={loginError} busy={loginBusy} onLogin={(token) => void login(token)} onSilentLogin={silentLogin} />;
 
   return (
     <div className="app-shell">
@@ -389,7 +433,7 @@ export function App() {
               playbackLoading={playbackLoading}
             />
           : page === 'settings'
-            ? <SettingsPanel settings={settings} saved={saved} error={error} profile={profile} tokenError={loginError} tokenBusy={loginBusy} onSaveToken={saveAccessToken} onUpdate={(patch) => void updateSettings(patch)} />
+            ? <SettingsPanel settings={settings} saved={saved} error={error} profile={profile} tokenError={loginError} tokenBusy={loginBusy} onSaveToken={saveAccessToken} onClearData={clearAppData} onUpdate={(patch) => void updateSettings(patch)} />
           : <TrackDetailsPage
                 track={detailsTrack}
                 loading={detailsLoading}
@@ -411,7 +455,6 @@ export function App() {
         </div></main>
       </div>
       <PlayerBar
-        key={currentTrack?.id ?? 'empty'}
         track={currentTrack}
         loading={playbackLoading}
         shouldPlay={shouldPlay}

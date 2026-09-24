@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "soundcloud-auth-window",
+  "description": "Allows the remote SoundCloud page loaded in the auth webview to report captured credentials.",
+  "local": false,
+  "windows": ["soundcloud-auth"],
+  "remote": {
+    "urls": ["https://soundcloud.com", "https://*.soundcloud.com"]
+  },
+  "permissions": ["allow-show-auth-window", "allow-save-credentials"]
+}

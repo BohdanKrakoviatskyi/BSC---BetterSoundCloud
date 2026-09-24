@@ -37,6 +37,8 @@ export function PlayerBar({ track, loading, shouldPlay, volume, error, hasNext, 
   const [volumeValue, setVolumeValue] = useState(volume);
   const [scrubPosition, setScrubPosition] = useState<number | null>(null);
   const scrubPositionRef = useRef<number | null>(null);
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
 
   useEffect(() => setVolumeValue(volume), [volume]);
 
@@ -47,6 +49,15 @@ export function PlayerBar({ track, loading, shouldPlay, volume, error, hasNext, 
     scrubPositionRef.current = null;
     setScrubPosition(null);
   }, [track?.id]);
+
+  useEffect(() => {
+    if (!track || !loading) return;
+    const timeout = window.setTimeout(() => {
+      console.error('[ui.player.widget] ready timeout', { trackId: track.id, timeoutMs: 25_000 });
+      onErrorRef.current('SoundCloud не завершил загрузку трека. Проверьте соединение и попробуйте ещё раз.');
+    }, 25_000);
+    return () => window.clearTimeout(timeout);
+  }, [track?.id, loading]);
 
   useEffect(() => {
     widgetControls?.setVolume(Math.max(0, Math.min(100, volumeValue)));
@@ -72,7 +83,6 @@ export function PlayerBar({ track, loading, shouldPlay, volume, error, hasNext, 
     <footer className="player-bar" aria-label="Аудиоплеер">
       {track && (
         <SoundCloudWidget
-          key={track.id}
           track={track}
           volume={volumeValue}
           onControlsReady={setWidgetControls}

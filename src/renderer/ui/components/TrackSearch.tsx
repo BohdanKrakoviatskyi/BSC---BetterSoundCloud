@@ -16,6 +16,7 @@ export function TrackSearch({ onSelect }: Props) {
   const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const uniqueResults = Array.from(new Map(results.map((track) => [track.id, track])).values());
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -93,7 +94,7 @@ export function TrackSearch({ onSelect }: Props) {
           {loading && results.length === 0 && <div className="track-search-message">Ищу треки…</div>}
           {!loading && !error && results.length === 0 && <div className="track-search-message">Ничего не найдено</div>}
           {error && <div className="track-search-message track-search-error">{error}</div>}
-          {results.map((track) => (
+          {uniqueResults.map((track) => (
             <button className="track-search-result" type="button" role="option" aria-selected="false" key={track.id} onClick={() => choose(track)}>
               {track.artwork
                 ? <img src={track.artwork} alt="" loading="lazy" />

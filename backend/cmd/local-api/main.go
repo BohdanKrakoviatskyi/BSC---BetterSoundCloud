@@ -615,6 +615,19 @@ func (s *service) RPCSettingsUpdate(patch settingsPatch) (settings, error) {
 	return updated, nil
 }
 
+// RPCSettingsClear clears locally persisted account credentials and preferences.
+func (s *service) RPCSettingsClear(_ emptyParams) (settings, error) {
+	if err := s.clearAuth(); err != nil {
+		return settings{}, fmt.Errorf("clear auth: %w", err)
+	}
+	if err := removeFileIfExists(s.settingsPath); err != nil {
+		return settings{}, fmt.Errorf("clear settings: %w", err)
+	}
+	s.auth = authState{}
+	s.settings = defaultSettings()
+	return s.settings, nil
+}
+
 func (s *service) RPCAuthStatus(_ emptyParams) (authStatus, error) {
 	return s.authStatus(), nil
 }
@@ -860,6 +873,7 @@ func (s *service) RPCMixedSelections(_ emptyParams) ([]mixedSelection, error) {
 	for index, item := range response.Collection {
 		itemPayloads := mixedSelectionItemPayloads(item.Items)
 		selection := mixedSelection{ID: item.ID, Title: item.Title, Description: item.Description, Tracks: make([]soundcloudSearchTrack, 0, len(itemPayloads))}
+		seenTrackIDs := make(map[int64]struct{}, len(itemPayloads))
 		if selection.ID == "" {
 			selection.ID = fmt.Sprintf("selection-%d", index)
 		}
@@ -868,6 +882,10 @@ func (s *service) RPCMixedSelections(_ emptyParams) ([]mixedSelection, error) {
 			if !ok {
 				continue
 			}
+			if _, exists := seenTrackIDs[candidate.ID]; exists {
+				continue
+			}
+			seenTrackIDs[candidate.ID] = struct{}{}
 			selection.Tracks = append(selection.Tracks, normalizeSearchTrack(candidate.ID, candidate.URN, candidate.Title, candidate.PermalinkURL, candidate.ArtworkURL, candidate.User.AvatarURL, candidate.Duration, candidate.User.Username))
 		}
 		if selection.Title != "" && len(selection.Tracks) > 0 {
@@ -1198,11 +1216,16 @@ func (s *service) fetchMyTracks(token string, userID int64) ([]soundcloudTrackCa
 		}
 		log.Printf("tracks.mine stage=parse shape=collection count=%d pages=%d", len(likes), pageCount)
 		result := make([]soundcloudTrackCard, 0, len(likes))
+		seenTrackIDs := make(map[int64]struct{}, len(likes))
 		for _, like := range likes {
 			if like.Track == nil {
 				continue
 			}
 			track := *like.Track
+			if _, exists := seenTrackIDs[track.ID]; exists {
+				continue
+			}
+			seenTrackIDs[track.ID] = struct{}{}
 			artwork := track.ArtworkURL
 			if strings.Contains(artwork, "-large.") {
 				artwork = strings.Replace(artwork, "-large.", "-t500x500.", 1)
@@ -1317,7 +1340,11 @@ func (s *service) saveAuth(value authState) error {
 }
 
 func (s *service) clearAuth() error {
-	err := os.Remove(s.authPath)
+	return removeFileIfExists(s.authPath)
+}
+
+func removeFileIfExists(path string) error {
+	err := os.Remove(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
