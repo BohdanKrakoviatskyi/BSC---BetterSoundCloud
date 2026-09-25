@@ -4,6 +4,10 @@
 
 Архитектура и протокол локального backend описаны в [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## Структура интерфейса
+
+React-интерфейс находится в `src/renderer`: точка входа — `src/renderer/main.tsx`, страницы и компоненты — в `src/renderer/ui`. Desktop-оболочка Tauri находится в `src-tauri`, исходники локального Go backend — в `backend/cmd/local-api`.
+
 ## Требования
 
 - Node.js и npm
@@ -80,4 +84,4 @@ npm run package:win # Windows: .exe (NSIS) и .msi
 
 Tauri собирает нативный пакет для ОС, на которой запущена команда: macOS-пакет нужно собирать на macOS, Windows-пакет — на Windows. Установщики и приложение находятся в `src-tauri/target/release/bundle/`. Для сборки под другую архитектуру нужны соответствующие Go target и Tauri target triple.
 
-Текущая основа включает обзор, настройки, IPC к локальному backend и подключение аккаунта по access token. Медиатека и проигрыватель пока не реализованы.
+Приложение включает обзор, поиск, медиатеку с лайками и плейлистами, воспроизведение треков, настройки и подключение аккаунта SoundCloud по access token.
