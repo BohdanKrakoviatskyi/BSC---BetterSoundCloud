@@ -13,7 +13,9 @@
     "vite": "vite",
     "prepare:dev": "npm run build:go && npm run vite",
     "build": "npm run build:frontend",
-    "package": "npm run build:go && tauri build"
+    "package": "npm run build:go && tauri build",
+    "package:mac": "npm run build:go && tauri build --bundles app,dmg",
+    "package:win": "npm run build:go && tauri build --bundles nsis,msi"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.8.0",

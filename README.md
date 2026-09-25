@@ -69,6 +69,13 @@ npm run build
 npm run package
 ```
 
-`build` проверяет и собирает React frontend. `package` собирает Go sidecar для текущей платформы и создаёт Tauri bundle. Для сборки под другую архитектуру нужны соответствующие Go target и Tauri target triple.
+`build` проверяет и собирает React frontend. `package` собирает Go sidecar для текущей платформы и создаёт Tauri bundle. Для production-пакетов используйте отдельную команду на машине с соответствующей ОС:
+
+```bash
+npm run package:mac # macOS: .app и .dmg
+npm run package:win # Windows: .exe (NSIS) и .msi
+```
+
+Tauri собирает нативный пакет для ОС, на которой запущена команда: macOS-пакет нужно собирать на macOS, Windows-пакет — на Windows. Установщики и приложение находятся в `src-tauri/target/release/bundle/`. Для сборки под другую архитектуру нужны соответствующие Go target и Tauri target triple.
 
 Текущая основа включает обзор, настройки, IPC к локальному backend и подключение аккаунта по access token. Медиатека и проигрыватель пока не реализованы.

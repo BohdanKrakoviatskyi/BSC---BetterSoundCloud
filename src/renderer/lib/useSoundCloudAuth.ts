@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 /** Credentials captured by the background SoundCloud webview. */
 export type SoundCloudCredentials = {
@@ -48,18 +48,20 @@ export function useSoundCloudAuth({ onCredentials }: UseSoundCloudAuthOptions = 
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState('');
   const onCredentialsRef = useRef(onCredentials);
+  const listenerReadyRef = useRef<Promise<void> | null>(null);
+  const listenerErrorRef = useRef<string | null>(null);
 
   useEffect(() => {
     onCredentialsRef.current = onCredentials;
   }, [onCredentials]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     let disposed = false;
     let unlisten: UnlistenFn | null = null;
 
-    listen<SoundCloudCredentials>(SOUNDCLOUD_CREDENTIALS_EVENT, (event) => {
+    listenerReadyRef.current = listen<SoundCloudCredentials>(SOUNDCLOUD_CREDENTIALS_EVENT, (event) => {
       if (!isCredentials(event.payload)) {
-        console.warn('[soundcloud-auth] ignored malformed credentials event', { payload: event.payload });
+        console.warn('[soundcloud-auth] ignored malformed credentials event');
         return;
       }
       setCredentials(event.payload);
@@ -74,10 +76,12 @@ export function useSoundCloudAuth({ onCredentials }: UseSoundCloudAuthOptions = 
           return;
         }
         unlisten = stopListening;
+        listenerErrorRef.current = null;
       })
       .catch((reason: unknown) => {
         if (disposed) return;
         const message = describeError(reason);
+        listenerErrorRef.current = message;
         console.error('[soundcloud-auth] listen failed', { error: message });
         setError(message);
       });
@@ -92,6 +96,8 @@ export function useSoundCloudAuth({ onCredentials }: UseSoundCloudAuthOptions = 
     setStarting(true);
     setError('');
     try {
+      await listenerReadyRef.current;
+      if (listenerErrorRef.current) throw new Error(listenerErrorRef.current);
       await invoke('start_auth_flow');
     } catch (reason) {
       const message = describeError(reason);

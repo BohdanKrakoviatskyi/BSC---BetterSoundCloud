@@ -7,6 +7,11 @@ description = "Allows the main window to open the background SoundCloud authenti
 commands.allow = ["start_auth_flow"]
 
 [[permission]]
+identifier = "allow-finish-auth-flow"
+description = "Allows the main window to close the SoundCloud sign-in webview after validating the token."
+commands.allow = ["finish_auth_flow"]
+
+[[permission]]
 identifier = "allow-show-auth-window"
 description = "Allows the SoundCloud webview to reveal itself when manual sign-in is required."
 commands.allow = ["show_auth_window"]

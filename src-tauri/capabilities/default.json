@@ -6,6 +6,7 @@
   "permissions": [
     "core:default",
     "allow-start-auth-flow",
+    "allow-finish-auth-flow",
     {
       "identifier": "shell:allow-spawn",
       "allow": [

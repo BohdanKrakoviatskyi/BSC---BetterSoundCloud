@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import type { Playlist, Track, TrackDetails, TrackCollection } from '../domain/models';
 import { appGateway } from '../lib/appGateway';
 import type { SoundCloudCredentials } from '../lib/useSoundCloudAuth';
@@ -11,6 +12,8 @@ import { TrackSearch } from './components/TrackSearch';
 import { TrackDetailsPage } from './components/TrackDetailsPage';
 import { Sidebar } from './components/Sidebar';
 import { MyLibraryPage } from './components/MyLibraryPage';
+import { PlaylistPage } from './components/PlaylistPage';
+import { ConfirmDialog } from './components/ConfirmDialog';
 import type { Page, Profile, Settings } from './types';
 
 const defaultSettings: Settings = { accent: '#ff765d', compact: false, volume: 70, clientId: '' };
@@ -36,10 +39,15 @@ export function App() {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [playlistsLoading, setPlaylistsLoading] = useState(false);
   const [playlistsError, setPlaylistsError] = useState('');
+  const [activePlaylist, setActivePlaylist] = useState<Playlist | null>(null);
+  const [activePlaylistTracks, setActivePlaylistTracks] = useState<Track[]>([]);
+  const [activePlaylistLoading, setActivePlaylistLoading] = useState(false);
+  const [activePlaylistError, setActivePlaylistError] = useState('');
   const [history, setHistory] = useState<Track[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState('');
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
+  const [playerVisible, setPlayerVisible] = useState(false);
   const currentTrackRef = useRef<Track | null>(null);
   currentTrackRef.current = currentTrack;
   const [detailsTrack, setDetailsTrack] = useState<TrackDetails | null>(null);
@@ -51,6 +59,8 @@ export function App() {
   const [shouldPlay, setShouldPlay] = useState(false);
   const [playbackError, setPlaybackError] = useState('');
   const [page, setPage] = useState<Page>('home');
+  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
+  const [logoutBusy, setLogoutBusy] = useState(false);
   const [selections, setSelections] = useState<TrackCollection[]>([]);
   const [selectionsLoading, setSelectionsLoading] = useState(false);
   const [selectionsError, setSelectionsError] = useState('');
@@ -191,6 +201,7 @@ export function App() {
       return;
     }
     setCurrentTrack(track);
+    setPlayerVisible(true);
     setCurrentTrackIndex(index);
     setQueueTracks(queue);
     setPlaybackLoading(true);
@@ -211,6 +222,7 @@ export function App() {
       return;
     }
     setCurrentTrack(track);
+    setPlayerVisible(true);
     setCurrentTrackIndex(-1);
     setQueueTracks([track]);
     setPlaybackLoading(true);
@@ -219,12 +231,23 @@ export function App() {
     console.info('[ui.player] loading selected search result', { trackId: track.id, permalinkUrl: track.permalink });
   }
 
-  async function loadPlaylistTracks(playlist: Playlist): Promise<Track[]> {
-    return appGateway.playlistTracks(playlist.urn || playlist.id);
+  async function openPlaylist(playlist: Playlist) {
+    setActivePlaylist(playlist);
+    setActivePlaylistTracks([]);
+    setActivePlaylistError('');
+    setActivePlaylistLoading(true);
+    setPage('playlist');
+    try {
+      setActivePlaylistTracks(await appGateway.playlistTracks(playlist.urn || playlist.id));
+    } catch (reason) {
+      setActivePlaylistError(reasonText(reason, 'Не удалось загрузить треки плейлиста'));
+    } finally {
+      setActivePlaylistLoading(false);
+    }
   }
 
-  function playPlaylist(tracks: Track[], index: number) {
-    if (tracks.length) void loadTrackAt(index, tracks);
+  function playPlaylist(index: number) {
+    if (activePlaylistTracks.length) void loadTrackAt(index, activePlaylistTracks);
   }
 
   function togglePlayback() {
@@ -284,6 +307,7 @@ export function App() {
     }
     const index = tracks.findIndex((item) => item.id === track.id);
     setCurrentTrack(track);
+    setPlayerVisible(true);
     setCurrentTrackIndex(index);
     setPlaybackLoading(true);
     setPlaybackError('');
@@ -364,7 +388,7 @@ export function App() {
     }
   }
 
-  async function login(token: string) {
+  async function login(token: string, clientId?: string) {
     if (!token) {
       setLoginError('Вставьте access token SoundCloud');
       return;
@@ -374,6 +398,19 @@ export function App() {
     try {
       const result = await appGateway.authLogin(token);
       if (!result.authorized || !result.profile) throw new Error('SoundCloud не подтвердил токен');
+      if (clientId) {
+        try {
+          const stored = await appGateway.updateSettings({ clientId });
+          setSettings(stored);
+        } catch (reason) {
+          console.warn('[ui.auth.silent] client id save failed', { error: reasonText(reason, 'unknown error') });
+        }
+      }
+      try {
+        await invoke('finish_auth_flow');
+      } catch (reason) {
+        console.warn('[ui.auth] could not close SoundCloud window', { error: reasonText(reason, 'unknown error') });
+      }
       setProfile(result.profile);
       setAuth('authorized');
       void loadTracks();
@@ -388,14 +425,7 @@ export function App() {
   }
 
   async function silentLogin(credentials: SoundCloudCredentials) {
-    try {
-      await appGateway.updateSettings({ clientId: credentials.clientId });
-      console.info('[ui.auth.silent] client id captured', { clientIdLength: credentials.clientId.length });
-    } catch (reason) {
-      // Не блокируем вход: токен всё равно можно проверить и сохранить.
-      console.warn('[ui.auth.silent] client id save failed', { error: reasonText(reason, 'unknown error') });
-    }
-    await login(credentials.token);
+    await login(credentials.token, credentials.clientId);
   }
 
   async function saveAccessToken(token: string): Promise<boolean> {
@@ -420,15 +450,16 @@ export function App() {
     }
   }
 
-  async function logout() {
+  async function logout(): Promise<boolean> {
     setLoginError('');
+    setError('');
     try {
       await appGateway.authLogout();
     } catch (reason) {
       const message = reasonText(reason, 'Не удалось выйти');
       console.error('[ui.auth.logout] failed', { error: message });
       setError(message);
-      return;
+      return false;
     }
     setProfile(null);
     setTracks([]);
@@ -438,10 +469,21 @@ export function App() {
     setRelatedTracks([]);
     setLikedTracks({});
     setCurrentTrack(null);
+    setPlayerVisible(false);
     setCurrentTrackIndex(-1);
     setShouldPlay(false);
     setPlaybackError('');
     setAuth('guest');
+    return true;
+  }
+
+  async function confirmLogout() {
+    setLogoutBusy(true);
+    try {
+      if (await logout()) setLogoutDialogOpen(false);
+    } finally {
+      setLogoutBusy(false);
+    }
   }
 
   async function clearAppData(): Promise<boolean> {
@@ -459,6 +501,7 @@ export function App() {
       setRelatedTracks([]);
       setLikedTracks({});
       setCurrentTrack(null);
+      setPlayerVisible(false);
       setCurrentTrackIndex(-1);
       setShouldPlay(false);
       setPlaybackError('');
@@ -487,17 +530,30 @@ export function App() {
     );
   }
 
-  if (auth === 'guest') return <AuthScreen error={loginError} busy={loginBusy} onLogin={(token) => void login(token)} onSilentLogin={silentLogin} />;
+  if (auth === 'guest') return <AuthScreen error={loginError} busy={loginBusy} clientId={settings.clientId} onLogin={(token, clientId) => void login(token, clientId)} onSilentLogin={silentLogin} />;
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${playerVisible ? 'player-visible' : ''}`}>
       <header className="topbar">
         <div className="window-tools"><button className="icon-button" type="button" onClick={() => setPage('likes')} aria-label="Назад">‹</button><button className="icon-button" type="button" onClick={() => setPage('home')} aria-label="Главная">›</button></div>
         <div className="global-search"><button type="button" className="home-button" onClick={() => setPage('home')} aria-label="Главная">⌂</button><TrackSearch onSelect={selectTrack} /></div>
-        <div className="top-actions"><button className="icon-button" type="button" onClick={() => setPage('settings')} aria-label="Настройки">⚙</button><button className="profile" type="button" onClick={() => void logout()} title="Выйти из SoundCloud">{profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" /> : (profile?.username?.[0] || 'S').toUpperCase()}</button></div>
+        <div className="top-actions">
+          <button className="icon-button header-settings" type="button" onClick={() => setPage('settings')} aria-label="Настройки" title="Настройки">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.25a3.75 3.75 0 1 0 0 7.5 3.75 3.75 0 0 0 0-7.5Z" /><path d="m19.4 13.5 1.1.85-1.1 1.9-1.3-.5a7.7 7.7 0 0 1-1.45.84l-.2 1.4h-2.2l-.3-1.38a7.7 7.7 0 0 1-1.6-.02l-.65 1.23-2.1-.75.2-1.4a7.7 7.7 0 0 1-1.14-1.1l-1.38.3-.9-2.05 1.08-.9a7.7 7.7 0 0 1-.13-1.58l-1.3-.58.65-2.14 1.4.08a7.7 7.7 0 0 1 1.18-1.22l-.22-1.4 2.05-.9.9 1.08a7.7 7.7 0 0 1 1.6-.1l.58-1.3 2.14.65-.08 1.4a7.7 7.7 0 0 1 1.22 1.18l1.4-.22.9 2.05-1.08.9c.14.53.18 1.07.1 1.6Z" /></svg>
+          </button>
+          <div className="header-account" title={profile?.fullName || profile?.username || 'SoundCloud'}>
+            {profile?.avatarUrl
+              ? <img className="header-avatar" src={profile.avatarUrl} alt="" />
+              : <span className="header-avatar header-avatar-fallback" aria-hidden="true">{(profile?.username || 'SC').slice(0, 2).toUpperCase()}</span>}
+            <span className="header-account-copy"><b>{profile?.fullName || profile?.username || 'SoundCloud'}</b><small>@{profile?.username || 'аккаунт'}</small></span>
+          </div>
+          <button className="icon-button header-logout" type="button" onClick={() => { setError(''); setLogoutDialogOpen(true); }} title="Выйти из SoundCloud" aria-label="Выйти из SoundCloud">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4.75H6.5A1.75 1.75 0 0 0 4.75 6.5v11A1.75 1.75 0 0 0 6.5 19.25H10" /><path d="M13.5 8.25 17.25 12l-3.75 3.75M17 12H9" /></svg>
+          </button>
+        </div>
       </header>
       <div className="workspace">
-        <Sidebar profile={profile} page={page} tracks={tracks} backendReady={ready} onNavigate={setPage} onSearch={focusGlobalSearch} onPlayTrack={selectTrack} onLogout={() => void logout()} />
+        <Sidebar profile={profile} page={page} tracks={tracks} onNavigate={setPage} onSearch={focusGlobalSearch} onPlayTrack={selectTrack} />
         <main className="main-view panel" id="mainView"><div className="main-scroll">
         {page === 'home'
           ? <HomePage
@@ -533,9 +589,10 @@ export function App() {
                 onRefresh={refreshLibrary}
                 onPlayTrack={selectTrack}
                 onOpenTrack={(track) => void openTrackDetails(track)}
-                onLoadPlaylist={loadPlaylistTracks}
-                onPlayPlaylist={playPlaylist}
+                onOpenPlaylist={(playlist) => void openPlaylist(playlist)}
               />
+          : page === 'playlist' && activePlaylist
+            ? <PlaylistPage playlist={activePlaylist} tracks={activePlaylistTracks} loading={activePlaylistLoading} error={activePlaylistError} onBack={() => setPage('library')} onPlay={playPlaylist} />
           : page === 'likes'
           ? <LikedTracksSection
               tracks={tracks}
@@ -574,6 +631,19 @@ export function App() {
         {tracksError && page !== 'likes' && <div className="error-message app-track-error" role="alert">{tracksError}</div>}
         </div></main>
       </div>
+      {logoutDialogOpen && <ConfirmDialog
+        eyebrow="АККАУНТ SOUNDCLOUD"
+        title="Выйти из аккаунта?"
+        description="Аккаунт будет отключён только в BetterSoundCloud. Доступ к нему в браузере и других приложениях не изменится."
+        confirmLabel="Выйти"
+        busyLabel="Выходим…"
+        busy={logoutBusy}
+        variant="danger"
+        onClose={() => setLogoutDialogOpen(false)}
+        onConfirm={() => void confirmLogout()}
+      >
+        {error && <div className="error-message" role="alert">{error}</div>}
+      </ConfirmDialog>}
       <PlayerBar
         track={currentTrack}
         loading={playbackLoading}

@@ -161,9 +161,16 @@ type soundcloudPlaylistSource struct {
 	PermalinkURL string `json:"permalink_url"`
 	ArtworkURL   string `json:"artwork_url"`
 	TrackCount   int64  `json:"track_count"`
+	Public       *bool  `json:"public"`
+	IsAlbum      bool   `json:"is_album"`
 	User         struct {
 		Username string `json:"username"`
 	} `json:"user"`
+}
+
+type soundcloudPlaylistCollectionItem struct {
+	soundcloudPlaylistSource
+	Playlist *soundcloudPlaylistSource `json:"playlist"`
 }
 
 type loginParams struct {
@@ -779,8 +786,10 @@ func (s *service) RPCPlaylistsMine(_ emptyParams) ([]soundcloudPlaylistCard, err
 	var lastErr error
 	for _, base := range s.apiBases() {
 		paths := []string{fmt.Sprintf("/users/%d/playlists", userID)}
+		if base == webAPIBase {
+			paths = append([]string{fmt.Sprintf("/users/%d/playlists/liked_and_owned", userID)}, paths...)
+		}
 		if base == officialAPIBase {
-			// The public API defines /me/playlists for OAuth-authorized accounts.
 			paths = append([]string{"/me/playlists"}, paths...)
 		}
 		for _, path := range paths {
@@ -792,7 +801,7 @@ func (s *service) RPCPlaylistsMine(_ emptyParams) ([]soundcloudPlaylistCard, err
 			query := endpoint.Query()
 			query.Set("limit", "200")
 			query.Set("linked_partitioning", "true")
-			query.Set("show_tracks", "false")
+
 			query.Set("client_id", s.settings.ClientID)
 			endpoint.RawQuery = query.Encode()
 			playlists, err := s.fetchPlaylistsFrom(base, endpoint.String())
@@ -817,14 +826,19 @@ func (s *service) RPCPlaylistTracks(params playlistTracksParams) ([]soundcloudTr
 	if playlistURN == "" {
 		return nil, errors.New("у плейлиста отсутствует идентификатор SoundCloud")
 	}
+	playlistID := strings.TrimPrefix(playlistURN, "soundcloud:playlists:")
+	if playlistID == playlistURN {
+		playlistID = playlistURN
+	}
 	var lastErr error
 	for _, base := range s.apiBases() {
-		endpoint, err := url.Parse(strings.TrimRight(base, "/") + "/playlists/" + url.PathEscape(playlistURN) + "/tracks")
+		endpoint, err := url.Parse(strings.TrimRight(base, "/") + "/playlists/" + url.PathEscape(playlistID))
 		if err != nil {
 			lastErr = err
 			continue
 		}
 		query := endpoint.Query()
+		query.Set("representation", "full")
 		query.Set("limit", "200")
 		query.Set("linked_partitioning", "true")
 		query.Set("client_id", s.settings.ClientID)
@@ -867,12 +881,17 @@ func (s *service) fetchPlaylistTracksFrom(base, endpoint string) ([]soundcloudTr
 		endpoint = parsed.String()
 		var payload struct {
 			Collection []soundcloudTrack `json:"collection"`
+			Tracks     []soundcloudTrack `json:"tracks"`
 			NextHref   string            `json:"next_href"`
 		}
 		if err := s.getSoundCloudJSONLimit(endpoint, &payload, 16<<20); err != nil {
 			return nil, err
 		}
-		for _, source := range payload.Collection {
+		pageTracks := payload.Collection
+		if pageTracks == nil {
+			pageTracks = payload.Tracks
+		}
+		for _, source := range pageTracks {
 			if source.ID <= 0 || source.Title == "" {
 				continue
 			}
@@ -917,19 +936,23 @@ func (s *service) fetchPlaylistsFrom(base, endpoint string) ([]soundcloudPlaylis
 		parsed.RawQuery = query.Encode()
 		endpoint = parsed.String()
 		var payload struct {
-			Collection []soundcloudPlaylistSource `json:"collection"`
-			NextHref   string                     `json:"next_href"`
+			Collection []soundcloudPlaylistCollectionItem `json:"collection"`
+			NextHref   string                             `json:"next_href"`
 		}
 		if err := s.getSoundCloudJSONLimit(endpoint, &payload, 16<<20); err != nil {
 			return nil, err
 		}
-		for _, source := range payload.Collection {
+		for _, item := range payload.Collection {
+			source := item.soundcloudPlaylistSource
+			if item.Playlist != nil {
+				source = *item.Playlist
+			}
 			playlistURN := source.URN
 			if playlistURN == "" && source.ID > 0 {
 				playlistURN = fmt.Sprintf("soundcloud:playlists:%d", source.ID)
 			}
 			playlistID := playlistURN
-			if playlistID == "" && source.ID > 0 {
+			if source.ID > 0 {
 				playlistID = strconv.FormatInt(source.ID, 10)
 			}
 			if playlistID == "" || source.Title == "" {

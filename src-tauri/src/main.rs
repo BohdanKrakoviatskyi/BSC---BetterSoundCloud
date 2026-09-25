@@ -3,7 +3,7 @@
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
-/// Label of the background webview used for silent SoundCloud authentication.
+/// Label of the webview used for SoundCloud authentication.
 const AUTH_WINDOW_LABEL: &str = "soundcloud-auth";
 /// Event delivered to the React frontend once credentials are captured.
 const CREDENTIALS_EVENT: &str = "soundcloud:credentials";
@@ -20,24 +20,20 @@ struct SoundCloudCredentials {
     client_id: String,
 }
 
-/// JavaScript injected into every document of the auth webview.
-///
-/// It monkey-patches `fetch` (and `XMLHttpRequest` as a fallback for older
-/// clients), extracts `client_id`/`oauth_token` and forwards them to
-/// [`save_credentials`]. If the user is not signed in, it asks Rust to reveal
-/// the window via [`show_auth_window`] so the login form becomes visible.
+/// Inspect SoundCloud's own API requests inside the sign-in webview. The webview
+/// does not share cookies with an arbitrary external browser.
 const AUTH_INIT_SCRIPT: &str = r#"
 (() => {
   'use strict';
 
   const API_HOST = 'api-v2.soundcloud.com';
   const CLIENT_ID_CACHE_KEY = 'bsc_client_id';
-  const SENT_FLAG = '__bscCredentialsSent';
   const POLL_INTERVAL_MS = 1500;
-
-  const internals = window.__TAURI_INTERNALS__;
+  let lastSent = null;
+  let bridgeRetries = 0;
 
   function invoke(command, args) {
+    const internals = window.__TAURI_INTERNALS__;
     if (!internals || typeof internals.invoke !== 'function') {
       return Promise.reject(new Error('Tauri IPC is not available'));
     }
@@ -87,33 +83,35 @@ const AUTH_INIT_SCRIPT: &str = r#"
     } catch (error) { return null; }
   }
 
-  // Priority requested by the spec: URL query -> localStorage -> cookie -> Authorization header.
+  // Prefer the live request: saved cookies may contain an expired token.
   function findToken(url, request, init) {
     const fromUrl = url && url.searchParams ? url.searchParams.get('oauth_token') : null;
     if (fromUrl) return fromUrl;
-    const fromStorage = storageGet('oauth_token');
-    if (fromStorage) return fromStorage;
-    const fromCookie = cookieValue('oauth_token');
-    if (fromCookie) return fromCookie;
     const headers = (init && init.headers) || (request && request.headers);
-    return tokenFromAuthorization(headerValue(headers, 'authorization'));
+    const fromHeader = tokenFromAuthorization(headerValue(headers, 'authorization'));
+    return fromHeader || storageGet('oauth_token') || cookieValue('oauth_token');
   }
 
   function sendCredentials(token, clientId) {
-    if (!token || !clientId || window[SENT_FLAG]) return;
-    window[SENT_FLAG] = true;
+    if (!token || !clientId || (lastSent && lastSent.token === token && lastSent.clientId === clientId)) return;
+    lastSent = { token, clientId };
     storageSet(CLIENT_ID_CACHE_KEY, clientId);
-    invoke('save_credentials', { token: token, clientId: clientId }).catch((error) => {
-      window[SENT_FLAG] = false;
-      console.warn('[bsc-auth] save_credentials failed', error);
+    invoke('save_credentials', { token, clientId }).then(() => {
+      bridgeRetries = 0;
+    }).catch((error) => {
+      lastSent = null;
+      if (String(error).includes('Tauri IPC is not available') && bridgeRetries++ < 8) {
+        window.setTimeout(() => sendCredentials(token, clientId), 500);
+      } else {
+        console.warn('[bsc-auth] save_credentials failed', error);
+      }
     });
   }
 
   function inspectStoredCredentials() {
     const token = storageGet('oauth_token') || cookieValue('oauth_token');
     const clientId = storageGet(CLIENT_ID_CACHE_KEY);
-    if (token && clientId) sendCredentials(token, clientId);
-    return Boolean(token);
+    if (!lastSent && token && clientId) sendCredentials(token, clientId);
   }
 
   function inspectRequest(input, init) {
@@ -121,7 +119,7 @@ const AUTH_INIT_SCRIPT: &str = r#"
     if (!url || url.hostname !== API_HOST) return;
     const clientId = url.searchParams.get('client_id') || storageGet(CLIENT_ID_CACHE_KEY);
     if (clientId) storageSet(CLIENT_ID_CACHE_KEY, clientId);
-    const token = findToken(url, input instanceof Request ? input : null, init);
+    const token = findToken(url, typeof Request !== 'undefined' && input instanceof Request ? input : null, init);
     if (token && clientId) sendCredentials(token, clientId);
   }
 
@@ -166,34 +164,17 @@ const AUTH_INIT_SCRIPT: &str = r#"
     };
   }
 
-  // 3. If there is no session yet, show the window so the user can sign in.
-  function onReady() {
-    const hasToken = inspectStoredCredentials();
-    if (!hasToken && !window[SENT_FLAG]) {
-      invoke('show_auth_window').catch((error) => {
-        console.warn('[bsc-auth] show_auth_window failed', error);
-      });
-    }
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', onReady, { once: true });
-  } else {
-    onReady();
-  }
-
-  // 4. SoundCloud is a SPA: the token may appear without a full page reload.
-  const poller = window.setInterval(() => {
+  // Give live API requests a chance to reveal the current token first; then
+  // check the saved session too. Keep polling so a later sign-in is detected.
+  window.setTimeout(() => {
     inspectStoredCredentials();
-    if (window[SENT_FLAG]) window.clearInterval(poller);
-  }, POLL_INTERVAL_MS);
+    window.setInterval(inspectStoredCredentials, POLL_INTERVAL_MS);
+  }, 4000);
 })();
 "#;
 
-/// Opens (or reveals) the background webview that performs the silent login.
-///
-/// The window is created hidden on purpose: the injected script decides whether
-/// the user has an existing session or needs to type credentials manually.
+/// Opens the sign-in webview. A visible window avoids a permanently hidden
+/// flow when the SoundCloud page changes or only part of a session is present.
 #[tauri::command]
 fn start_auth_flow(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(AUTH_WINDOW_LABEL) {
@@ -208,8 +189,8 @@ fn start_auth_flow(app: AppHandle) -> Result<(), String> {
         .title("SoundCloud — вход")
         .inner_size(800.0, 700.0)
         .min_inner_size(600.0, 500.0)
-        .visible(false)
-        .incognito(false) // keep cookies/session between launches
+        .visible(true)
+        .incognito(false) // keep the embedded webview's cookies between launches
         .initialization_script(AUTH_INIT_SCRIPT)
         .build()
         .map(|_| ())
@@ -226,28 +207,42 @@ fn show_auth_window(app: AppHandle) -> Result<(), String> {
     show_window(&window)
 }
 
-/// Receives credentials from the injected script, hides the auth window and
-/// forwards the payload to the React frontend through a Tauri event.
+/// Forward captured credentials for validation; do not close the window until
+/// the Go backend confirms that the token actually belongs to a user.
 #[tauri::command]
 fn save_credentials(app: AppHandle, token: String, client_id: String) -> Result<(), String> {
     let token = token.trim().to_owned();
     let client_id = client_id.trim().to_owned();
 
-    if token.is_empty() || client_id.is_empty() {
-        return Err("SoundCloud вернул пустые учётные данные".to_owned());
+    if token.is_empty()
+        || token.len() > 4096
+        || token.chars().any(char::is_control)
+        || client_id.len() < 8
+        || client_id.len() > 128
+        || !client_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err("SoundCloud вернул некорректные учётные данные".to_owned());
     }
 
-    // Keep the webview (and its cookies) alive, just get it out of the way.
-    // Swap `hide` for `close` if you prefer to release the page after capture.
-    if let Some(window) = app.get_webview_window(AUTH_WINDOW_LABEL) {
-        window.hide().map_err(|error| error.to_string())?;
-    }
-
-    app.emit(
+    app.emit_to(
+        "main",
         CREDENTIALS_EVENT,
         SoundCloudCredentials { token, client_id },
     )
     .map_err(|error| format!("не удалось передать учётные данные во фронтенд: {error}"))
+}
+
+/// Called only by the local main window after the Go backend validates the token.
+#[tauri::command]
+fn finish_auth_flow(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(AUTH_WINDOW_LABEL) {
+        window
+            .close()
+            .map_err(|error| format!("не удалось закрыть окно входа: {error}"))?;
+    }
+    Ok(())
 }
 
 fn show_window(window: &WebviewWindow) -> Result<(), String> {
@@ -261,7 +256,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             start_auth_flow,
             show_auth_window,
-            save_credentials
+            save_credentials,
+            finish_auth_flow
         ])
         .run(tauri::generate_context!())
         .expect("error while running BetterSoundCloud");

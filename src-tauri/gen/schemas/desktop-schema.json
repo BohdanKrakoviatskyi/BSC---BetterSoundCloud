@@ -387,6 +387,12 @@
       "description": "Permission identifier",
       "oneOf": [
         {
+          "description": "Allows the main window to close the SoundCloud sign-in webview after validating the token.",
+          "type": "string",
+          "const": "allow-finish-auth-flow",
+          "markdownDescription": "Allows the main window to close the SoundCloud sign-in webview after validating the token."
+        },
+        {
           "description": "Allows the SoundCloud webview to hand the captured OAuth token and client id back to the app.",
           "type": "string",
           "const": "allow-save-credentials",

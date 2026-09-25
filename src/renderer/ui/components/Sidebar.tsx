@@ -5,18 +5,12 @@ type Props = {
   profile: Profile | null;
   page: Page;
   tracks: Track[];
-  backendReady: boolean;
   onNavigate: (page: Page) => void;
   onSearch: () => void;
   onPlayTrack: (track: Track) => void;
-  onLogout: () => void;
 };
 
-function initials(name: string): string {
-  return Array.from(name.trim()).slice(0, 2).join('').toUpperCase() || 'SC';
-}
-
-export function Sidebar({ profile, page, tracks, backendReady, onNavigate, onSearch, onPlayTrack, onLogout }: Props) {
+export function Sidebar({ profile, page, tracks, onNavigate, onSearch, onPlayTrack }: Props) {
   const uniqueTracks = Array.from(new Map(tracks.map((track) => [track.id, track])).values());
   return (
     <aside className="sidebar panel">
@@ -45,12 +39,7 @@ export function Sidebar({ profile, page, tracks, backendReady, onNavigate, onSea
           {tracks.length === 0 && <p className="library-empty">Твои лайки появятся здесь</p>}
         </div>
       </section>
-      <div className="sidebar-account">
-        {profile?.avatarUrl ? <img className="profile-avatar" src={profile.avatarUrl} alt="" /> : <span className="profile-avatar profile-fallback">{initials(profile?.username || 'SC')}</span>}
-        <span className="account-copy"><b>{profile?.fullName || profile?.username || 'SoundCloud'}</b><small>{backendReady ? 'Аккаунт подключён' : 'Подключение…'}</small></span>
-        <button type="button" className="icon-button" onClick={() => onNavigate('settings')} title="Настройки" aria-label="Настройки">⚙</button>
-        <button type="button" className="icon-button logout-mini" onClick={onLogout} title="Выйти" aria-label="Выйти">⏻</button>
-      </div>
+
     </aside>
   );
 }
