@@ -23,10 +23,9 @@ import (
 )
 
 const (
-	appName         = "BetterSoundCloud"
-	appVersion      = "0.1.0"
-	maxLine         = 1 << 20
-	maxRecentTracks = 50
+	appName    = "BetterSoundCloud"
+	appVersion = "0.1.0"
+	maxLine    = 1 << 20
 
 	// officialAPIBase — официальный API SoundCloud (OAuth-приложения).
 	officialAPIBase = "https://api.soundcloud.com"
@@ -142,6 +141,30 @@ type soundcloudTrackCard struct {
 	} `json:"user"`
 }
 
+type soundcloudPlaylistCard struct {
+	ID           string `json:"id"`
+	URN          string `json:"urn"`
+	Title        string `json:"title"`
+	PermalinkURL string `json:"permalinkUrl"`
+	ArtworkURL   string `json:"artworkUrl"`
+	TrackCount   int64  `json:"trackCount"`
+	User         struct {
+		Username string `json:"username"`
+	} `json:"user"`
+}
+
+type soundcloudPlaylistSource struct {
+	ID           int64  `json:"id"`
+	URN          string `json:"urn"`
+	Title        string `json:"title"`
+	PermalinkURL string `json:"permalink_url"`
+	ArtworkURL   string `json:"artwork_url"`
+	TrackCount   int64  `json:"track_count"`
+	User         struct {
+		Username string `json:"username"`
+	} `json:"user"`
+}
+
 type loginParams struct {
 	Token string `json:"token"`
 }
@@ -159,16 +182,16 @@ type trackDetailsParams struct {
 	TrackID int64 `json:"trackId"`
 }
 
+type playlistTracksParams struct {
+	PlaylistURN string `json:"playlistUrn"`
+}
+
 type searchTracksParams struct {
 	Query string `json:"query"`
 }
 
 type relatedTracksParams struct {
 	TrackID int64 `json:"trackId"`
-}
-
-type historyTrackParams struct {
-	Track soundcloudTrackCard `json:"track"`
 }
 
 type mixedSelection struct {
@@ -235,8 +258,6 @@ type service struct {
 	settings     settings
 	authPath     string
 	auth         authState
-	historyPath  string
-	history      []soundcloudTrackCard
 	apiBase      string
 	httpClient   *http.Client
 }
@@ -261,7 +282,6 @@ func run(input io.Reader, output io.Writer) error {
 		settingsPath: filepath.Join(dataDir, "settings.json"),
 		settings:     defaultSettings(),
 		authPath:     filepath.Join(dataDir, "auth.json"),
-		historyPath:  filepath.Join(dataDir, "history.json"),
 		apiBase:      apiBase(),
 		httpClient:   &http.Client{Timeout: 15 * time.Second},
 	}
@@ -272,9 +292,6 @@ func run(input io.Reader, output io.Writer) error {
 	// работаем как неавторизованные, диагностика уходит в stderr.
 	if err := svc.loadAuth(); err != nil {
 		fmt.Fprintln(os.Stderr, "local backend: auth state ignored:", err)
-	}
-	if err := svc.loadHistory(); err != nil {
-		fmt.Fprintln(os.Stderr, "local backend: playback history ignored:", err)
 	}
 	if os.Getenv("BSC_SWAGGER") == "1" {
 		if err := startSwaggerServer(svc); err != nil {
@@ -626,61 +643,6 @@ func (s *service) RPCSettingsUpdate(patch settingsPatch) (settings, error) {
 	return updated, nil
 }
 
-// RPCSettingsClear clears locally persisted account credentials and preferences.
-func (s *service) RPCSettingsClear(_ emptyParams) (settings, error) {
-	if err := s.clearAuth(); err != nil {
-		return settings{}, fmt.Errorf("clear auth: %w", err)
-	}
-	if err := removeFileIfExists(s.settingsPath); err != nil {
-		return settings{}, fmt.Errorf("clear settings: %w", err)
-	}
-	if err := removeFileIfExists(s.historyPath); err != nil {
-		return settings{}, fmt.Errorf("clear history: %w", err)
-	}
-	s.auth = authState{}
-	s.settings = defaultSettings()
-	s.history = nil
-	return s.settings, nil
-}
-
-func (s *service) RPCHistoryList(_ emptyParams) ([]soundcloudTrackCard, error) {
-	return append([]soundcloudTrackCard{}, s.history...), nil
-}
-
-func (s *service) RPCHistoryRecord(params historyTrackParams) ([]soundcloudTrackCard, error) {
-	track := params.Track
-	if track.ID <= 0 || strings.TrimSpace(track.Title) == "" {
-		return nil, errors.New("для записи истории нужны корректные ID и название трека")
-	}
-	if track.TrackURN == "" {
-		track.TrackURN = fmt.Sprintf("soundcloud:tracks:%d", track.ID)
-	}
-	updated := make([]soundcloudTrackCard, 0, maxRecentTracks)
-	updated = append(updated, track)
-	for _, existing := range s.history {
-		if existing.ID == track.ID {
-			continue
-		}
-		updated = append(updated, existing)
-		if len(updated) == maxRecentTracks {
-			break
-		}
-	}
-	if err := s.saveHistory(updated); err != nil {
-		return nil, fmt.Errorf("save playback history: %w", err)
-	}
-	s.history = updated
-	return append([]soundcloudTrackCard{}, updated...), nil
-}
-
-func (s *service) RPCHistoryClear(_ emptyParams) ([]soundcloudTrackCard, error) {
-	if err := removeFileIfExists(s.historyPath); err != nil {
-		return nil, fmt.Errorf("clear playback history: %w", err)
-	}
-	s.history = nil
-	return []soundcloudTrackCard{}, nil
-}
-
 func (s *service) RPCAuthStatus(_ emptyParams) (authStatus, error) {
 	return s.authStatus(), nil
 }
@@ -738,6 +700,186 @@ func (s *service) RPCTracksMine(_ emptyParams) ([]soundcloudTrackCard, error) {
 		return nil, errors.New("сначала подключите аккаунт SoundCloud")
 	}
 	return s.fetchMyTracks(s.auth.Token, s.auth.Profile.ID)
+}
+
+func (s *service) RPCPlaylistsMine(_ emptyParams) ([]soundcloudPlaylistCard, error) {
+	if s.auth.Token == "" {
+		return nil, errors.New("сначала подключите аккаунт SoundCloud")
+	}
+	userID := s.auth.Profile.ID
+	if userID <= 0 {
+		return nil, errors.New("SoundCloud не вернул ID аккаунта для загрузки плейлистов")
+	}
+	var lastErr error
+	for _, base := range s.apiBases() {
+		paths := []string{fmt.Sprintf("/users/%d/playlists", userID)}
+		if base == officialAPIBase {
+			// The public API defines /me/playlists for OAuth-authorized accounts.
+			paths = append([]string{"/me/playlists"}, paths...)
+		}
+		for _, path := range paths {
+			endpoint, err := url.Parse(strings.TrimRight(base, "/") + path)
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			query := endpoint.Query()
+			query.Set("limit", "200")
+			query.Set("linked_partitioning", "true")
+			query.Set("show_tracks", "false")
+			query.Set("client_id", s.settings.ClientID)
+			endpoint.RawQuery = query.Encode()
+			playlists, err := s.fetchPlaylistsFrom(base, endpoint.String())
+			if err == nil {
+				return playlists, nil
+			}
+			lastErr = err
+			log.Printf("playlists.mine stage=fallback host=%s path=%s error=%q", hostForLog(base), path, err.Error())
+		}
+	}
+	if lastErr == nil {
+		lastErr = errors.New("SoundCloud API не вернул список плейлистов")
+	}
+	return nil, fmt.Errorf("не удалось загрузить плейлисты SoundCloud: %w", lastErr)
+}
+
+func (s *service) RPCPlaylistTracks(params playlistTracksParams) ([]soundcloudTrackCard, error) {
+	if s.auth.Token == "" {
+		return nil, errors.New("сначала подключите аккаунт SoundCloud")
+	}
+	playlistURN := strings.TrimSpace(params.PlaylistURN)
+	if playlistURN == "" {
+		return nil, errors.New("у плейлиста отсутствует идентификатор SoundCloud")
+	}
+	var lastErr error
+	for _, base := range s.apiBases() {
+		endpoint, err := url.Parse(strings.TrimRight(base, "/") + "/playlists/" + url.PathEscape(playlistURN) + "/tracks")
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		query := endpoint.Query()
+		query.Set("limit", "200")
+		query.Set("linked_partitioning", "true")
+		query.Set("client_id", s.settings.ClientID)
+		endpoint.RawQuery = query.Encode()
+		tracks, err := s.fetchPlaylistTracksFrom(base, endpoint.String())
+		if err == nil {
+			return tracks, nil
+		}
+		lastErr = err
+		log.Printf("playlist.tracks stage=fallback host=%s error=%q", hostForLog(base), err.Error())
+	}
+	if lastErr == nil {
+		lastErr = errors.New("SoundCloud API не вернул треки плейлиста")
+	}
+	return nil, fmt.Errorf("не удалось загрузить треки плейлиста: %w", lastErr)
+}
+
+func (s *service) fetchPlaylistTracksFrom(base, endpoint string) ([]soundcloudTrackCard, error) {
+	baseURL, err := url.Parse(strings.TrimRight(base, "/"))
+	if err != nil {
+		return nil, err
+	}
+	tracks := make([]soundcloudTrackCard, 0)
+	seenPages := make(map[string]bool)
+	for page := 0; endpoint != ""; page++ {
+		if page >= 100 {
+			return nil, errors.New("SoundCloud вернул слишком много страниц треков плейлиста")
+		}
+		parsed, parseErr := url.Parse(endpoint)
+		if parseErr != nil || parsed.Scheme != "https" || !strings.EqualFold(parsed.Host, baseURL.Host) {
+			return nil, errors.New("SoundCloud вернул некорректную ссылку страницы плейлиста")
+		}
+		if seenPages[endpoint] {
+			return nil, errors.New("SoundCloud вернул повторяющуюся ссылку страницы плейлиста")
+		}
+		seenPages[endpoint] = true
+		query := parsed.Query()
+		query.Set("client_id", s.settings.ClientID)
+		parsed.RawQuery = query.Encode()
+		endpoint = parsed.String()
+		var payload struct {
+			Collection []soundcloudTrack `json:"collection"`
+			NextHref   string            `json:"next_href"`
+		}
+		if err := s.getSoundCloudJSONLimit(endpoint, &payload, 16<<20); err != nil {
+			return nil, err
+		}
+		for _, source := range payload.Collection {
+			if source.ID <= 0 || source.Title == "" {
+				continue
+			}
+			trackURN := source.URN
+			if trackURN == "" {
+				trackURN = fmt.Sprintf("soundcloud:tracks:%d", source.ID)
+			}
+			artwork := source.ArtworkURL
+			if strings.Contains(artwork, "-large.") {
+				artwork = strings.Replace(artwork, "-large.", "-t500x500.", 1)
+			}
+			track := soundcloudTrackCard{ID: source.ID, TrackURN: trackURN, Title: source.Title, PermalinkURL: source.PermalinkURL, ArtworkURL: artwork, Duration: source.Duration, PlaybackCount: source.PlaybackCount, LikesCount: source.LikesCount}
+			track.User.Username = source.User.Username
+			tracks = append(tracks, track)
+		}
+		endpoint = payload.NextHref
+	}
+	return tracks, nil
+}
+
+func (s *service) fetchPlaylistsFrom(base, endpoint string) ([]soundcloudPlaylistCard, error) {
+	baseURL, err := url.Parse(strings.TrimRight(base, "/"))
+	if err != nil {
+		return nil, err
+	}
+	playlists := make([]soundcloudPlaylistCard, 0)
+	seenPages := make(map[string]bool)
+	for page := 0; endpoint != ""; page++ {
+		if page >= 100 {
+			return nil, errors.New("SoundCloud вернул слишком много страниц плейлистов (лимит 100)")
+		}
+		parsed, parseErr := url.Parse(endpoint)
+		if parseErr != nil || parsed.Scheme != "https" || !strings.EqualFold(parsed.Host, baseURL.Host) {
+			return nil, errors.New("SoundCloud вернул некорректную ссылку страницы плейлистов")
+		}
+		if seenPages[endpoint] {
+			return nil, errors.New("SoundCloud вернул повторяющуюся ссылку страницы плейлистов")
+		}
+		seenPages[endpoint] = true
+		query := parsed.Query()
+		query.Set("client_id", s.settings.ClientID)
+		parsed.RawQuery = query.Encode()
+		endpoint = parsed.String()
+		var payload struct {
+			Collection []soundcloudPlaylistSource `json:"collection"`
+			NextHref   string                     `json:"next_href"`
+		}
+		if err := s.getSoundCloudJSONLimit(endpoint, &payload, 16<<20); err != nil {
+			return nil, err
+		}
+		for _, source := range payload.Collection {
+			playlistURN := source.URN
+			if playlistURN == "" && source.ID > 0 {
+				playlistURN = fmt.Sprintf("soundcloud:playlists:%d", source.ID)
+			}
+			playlistID := playlistURN
+			if playlistID == "" && source.ID > 0 {
+				playlistID = strconv.FormatInt(source.ID, 10)
+			}
+			if playlistID == "" || source.Title == "" {
+				continue
+			}
+			artwork := source.ArtworkURL
+			if strings.Contains(artwork, "-large.") {
+				artwork = strings.Replace(artwork, "-large.", "-t500x500.", 1)
+			}
+			playlist := soundcloudPlaylistCard{ID: playlistID, URN: playlistURN, Title: source.Title, PermalinkURL: source.PermalinkURL, ArtworkURL: artwork, TrackCount: source.TrackCount}
+			playlist.User.Username = source.User.Username
+			playlists = append(playlists, playlist)
+		}
+		endpoint = payload.NextHref
+	}
+	return playlists, nil
 }
 
 func (s *service) RPCTrackDetails(params trackDetailsParams) (soundcloudTrackDetails, error) {
@@ -926,7 +1068,6 @@ func (s *service) RPCMixedSelections(_ emptyParams) ([]mixedSelection, error) {
 	for index, item := range response.Collection {
 		itemPayloads := mixedSelectionItemPayloads(item.Items)
 		selection := mixedSelection{ID: item.ID, Title: item.Title, Description: item.Description, Tracks: make([]soundcloudSearchTrack, 0, len(itemPayloads))}
-		seenTrackIDs := make(map[int64]struct{}, len(itemPayloads))
 		if selection.ID == "" {
 			selection.ID = fmt.Sprintf("selection-%d", index)
 		}
@@ -935,10 +1076,6 @@ func (s *service) RPCMixedSelections(_ emptyParams) ([]mixedSelection, error) {
 			if !ok {
 				continue
 			}
-			if _, exists := seenTrackIDs[candidate.ID]; exists {
-				continue
-			}
-			seenTrackIDs[candidate.ID] = struct{}{}
 			selection.Tracks = append(selection.Tracks, normalizeSearchTrack(candidate.ID, candidate.URN, candidate.Title, candidate.PermalinkURL, candidate.ArtworkURL, candidate.User.AvatarURL, candidate.Duration, candidate.User.Username))
 		}
 		if selection.Title != "" && len(selection.Tracks) > 0 {
@@ -1269,16 +1406,11 @@ func (s *service) fetchMyTracks(token string, userID int64) ([]soundcloudTrackCa
 		}
 		log.Printf("tracks.mine stage=parse shape=collection count=%d pages=%d", len(likes), pageCount)
 		result := make([]soundcloudTrackCard, 0, len(likes))
-		seenTrackIDs := make(map[int64]struct{}, len(likes))
 		for _, like := range likes {
 			if like.Track == nil {
 				continue
 			}
 			track := *like.Track
-			if _, exists := seenTrackIDs[track.ID]; exists {
-				continue
-			}
-			seenTrackIDs[track.ID] = struct{}{}
 			artwork := track.ArtworkURL
 			if strings.Contains(artwork, "-large.") {
 				artwork = strings.Replace(artwork, "-large.", "-t500x500.", 1)
@@ -1365,45 +1497,6 @@ func (s *service) saveSettings(value settings) error {
 	return writeSecretFile(s.settingsPath, data)
 }
 
-func (s *service) loadHistory() error {
-	data, err := os.ReadFile(s.historyPath)
-	if errors.Is(err, os.ErrNotExist) {
-		s.history = nil
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("read history: %w", err)
-	}
-	var loaded []soundcloudTrackCard
-	if err := json.Unmarshal(data, &loaded); err != nil {
-		return fmt.Errorf("parse history: %w", err)
-	}
-	seen := make(map[int64]struct{}, len(loaded))
-	s.history = make([]soundcloudTrackCard, 0, min(len(loaded), maxRecentTracks))
-	for _, track := range loaded {
-		if track.ID <= 0 || strings.TrimSpace(track.Title) == "" {
-			continue
-		}
-		if _, exists := seen[track.ID]; exists {
-			continue
-		}
-		seen[track.ID] = struct{}{}
-		s.history = append(s.history, track)
-		if len(s.history) == maxRecentTracks {
-			break
-		}
-	}
-	return nil
-}
-
-func (s *service) saveHistory(value []soundcloudTrackCard) error {
-	data, err := json.MarshalIndent(value, "", "  ")
-	if err != nil {
-		return err
-	}
-	return writeSecretFile(s.historyPath, data)
-}
-
 func (s *service) loadAuth() error {
 	data, err := os.ReadFile(s.authPath)
 	if errors.Is(err, os.ErrNotExist) {
@@ -1432,11 +1525,7 @@ func (s *service) saveAuth(value authState) error {
 }
 
 func (s *service) clearAuth() error {
-	return removeFileIfExists(s.authPath)
-}
-
-func removeFileIfExists(path string) error {
-	err := os.Remove(path)
+	err := os.Remove(s.authPath)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}

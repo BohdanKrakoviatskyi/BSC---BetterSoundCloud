@@ -18,6 +18,12 @@ export function HomePage({ selections, loading, error, artistFallback, currentTr
   return (
     <div className="page-content home-page">
       <div className="category-tabs" aria-label="Разделы главной"><span className="category active">Для тебя</span><span className="category">Музыка</span><span className="category">Подкасты</span></div>
+      <section className="welcome">
+        <div className="welcome-copy"><div className="eyebrow">ТВОЯ МУЗЫКА, ТВОЙ РИТМ</div>
+        <h1>Открой что-то новое</h1>
+        <p>Персональные подборки SoundCloud для тебя.</p></div>
+        <div className="welcome-art" aria-hidden="true"><i />sound<b>cloud</b></div>
+      </section>
       {error && <div className="error-message" role="alert">{error} <button type="button" className="home-retry" onClick={onRetry}>Повторить</button></div>}
       {loading && selections.length === 0
         ? <p className="tracks-empty">Загружаю подборки SoundCloud…</p>

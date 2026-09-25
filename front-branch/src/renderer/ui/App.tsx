@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import type { Track, TrackDetails, TrackCollection } from '../domain/models';
+import { useEffect, useState } from 'react';
+import type { Playlist, Track, TrackDetails, TrackCollection } from '../domain/models';
 import { appGateway } from '../lib/appGateway';
-import type { SoundCloudCredentials } from '../lib/useSoundCloudAuth';
 import { AuthScreen } from './components/AuthScreen';
 import { HomePage } from './components/HomePage';
 import { LikedTracksSection } from './components/LikedTracksSection';
@@ -10,6 +9,7 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { TrackSearch } from './components/TrackSearch';
 import { TrackDetailsPage } from './components/TrackDetailsPage';
 import { Sidebar } from './components/Sidebar';
+import { MyLibraryPage } from './components/MyLibraryPage';
 import type { Page, Profile, Settings } from './types';
 
 const defaultSettings: Settings = { accent: '#ff765d', compact: false, volume: 70, clientId: '' };
@@ -32,13 +32,15 @@ export function App() {
   const [likeBusy, setLikeBusy] = useState<Record<number, boolean>>({});
   const [tracksLoading, setTracksLoading] = useState(false);
   const [tracksError, setTracksError] = useState('');
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [playlistsLoading, setPlaylistsLoading] = useState(false);
+  const [playlistsError, setPlaylistsError] = useState('');
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
-  const currentTrackRef = useRef<Track | null>(null);
-  currentTrackRef.current = currentTrack;
   const [detailsTrack, setDetailsTrack] = useState<TrackDetails | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsError, setDetailsError] = useState('');
   const [currentTrackIndex, setCurrentTrackIndex] = useState(-1);
+  const [queueTracks, setQueueTracks] = useState<Track[]>([]);
   const [playbackLoading, setPlaybackLoading] = useState(false);
   const [shouldPlay, setShouldPlay] = useState(false);
   const [playbackError, setPlaybackError] = useState('');
@@ -49,23 +51,6 @@ export function App() {
   const [relatedTracks, setRelatedTracks] = useState<Track[]>([]);
   const [relatedLoading, setRelatedLoading] = useState(false);
   const [relatedError, setRelatedError] = useState('');
-  const detailsRequestId = useRef(0);
-
-  async function recordPlayedTrack() {
-    const track = currentTrackRef.current;
-    if (!track) return;
-    try {
-      const history = await appGateway.historyRecord(track);
-      console.info('[ui.history] track recorded', { trackId: track.id, count: history.length });
-    } catch (reason) {
-      console.error('[ui.history] record failed', { trackId: track.id, error: reasonText(reason, 'Не удалось сохранить историю') });
-    }
-  }
-
-  function handlePlaybackStateChange(playing: boolean) {
-    setShouldPlay(playing);
-    if (playing) void recordPlayedTrack();
-  }
 
   async function loadMixedSelections() {
     setSelectionsLoading(true);
@@ -100,6 +85,27 @@ export function App() {
     }
   }
 
+  async function loadPlaylists() {
+    setPlaylistsLoading(true);
+    setPlaylistsError('');
+    try {
+      const loaded = await appGateway.myPlaylists();
+      setPlaylists(loaded);
+      console.info('[ui.playlists] loaded', { count: loaded.length });
+    } catch (reason) {
+      const message = reasonText(reason, 'Не удалось загрузить плейлисты SoundCloud');
+      setPlaylistsError(message);
+      console.error('[ui.playlists] load failed', { error: message });
+    } finally {
+      setPlaylistsLoading(false);
+    }
+  }
+
+  function refreshLibrary() {
+    void loadTracks();
+    void loadPlaylists();
+  }
+
   async function toggleTrackLike(track: Track) {
     const wasLiked = likedTracks[track.id] ?? true;
     const operation = wasLiked ? 'unlike' : 'like';
@@ -123,14 +129,15 @@ export function App() {
     }
   }
 
-  function loadTrackAt(index: number) {
-    const track = tracks[index];
+  function loadTrackAt(index: number, queue: Track[] = queueTracks) {
+    const track = queue[index];
     if (!track) {
       setShouldPlay(false);
       return;
     }
     setCurrentTrack(track);
     setCurrentTrackIndex(index);
+    setQueueTracks(queue);
     setPlaybackLoading(true);
     setPlaybackError('');
     setShouldPlay(true);
@@ -145,15 +152,24 @@ export function App() {
     }
     const index = tracks.findIndex((item) => item.id === track.id);
     if (index >= 0) {
-      void loadTrackAt(index);
+      void loadTrackAt(index, tracks);
       return;
     }
     setCurrentTrack(track);
     setCurrentTrackIndex(-1);
+    setQueueTracks([track]);
     setPlaybackLoading(true);
     setPlaybackError('');
     setShouldPlay(true);
     console.info('[ui.player] loading selected search result', { trackId: track.id, permalinkUrl: track.permalink });
+  }
+
+  async function loadPlaylistTracks(playlist: Playlist): Promise<Track[]> {
+    return appGateway.playlistTracks(playlist.urn || playlist.id);
+  }
+
+  function playPlaylist(tracks: Track[], index: number) {
+    if (tracks.length) void loadTrackAt(index, tracks);
   }
 
   function togglePlayback() {
@@ -166,7 +182,6 @@ export function App() {
   }
 
   async function openTrackDetails(track: Track) {
-    const requestId = ++detailsRequestId.current;
     setPage('track');
     setDetailsTrack(null);
     setDetailsLoading(true);
@@ -179,10 +194,6 @@ export function App() {
       appGateway.trackDetails(track.id),
       appGateway.relatedTracks(track.id),
     ]);
-    if (requestId !== detailsRequestId.current) {
-      console.debug('[ui.track.details] ignored stale response', { trackId: track.id, requestId });
-      return;
-    }
     if (detailsResult.status === 'fulfilled') {
       setDetailsTrack(detailsResult.value);
       console.info('[ui.track.details] loaded', { trackId: detailsResult.value.id, title: detailsResult.value.title });
@@ -242,6 +253,7 @@ export function App() {
         setReady(true);
         if (status.authorized) {
           void loadTracks();
+          void loadPlaylists();
           void loadMixedSelections();
           appGateway.authRefresh()
             .then((fresh) => {
@@ -304,6 +316,7 @@ export function App() {
       setProfile(result.profile);
       setAuth('authorized');
       void loadTracks();
+      void loadPlaylists();
     } catch (reason) {
       const message = reasonText(reason, 'Не удалось подключить аккаунт');
       console.error('[ui.auth.login] failed', { error: message });
@@ -311,17 +324,6 @@ export function App() {
     } finally {
       setLoginBusy(false);
     }
-  }
-
-  async function silentLogin(credentials: SoundCloudCredentials) {
-    try {
-      await appGateway.updateSettings({ clientId: credentials.clientId });
-      console.info('[ui.auth.silent] client id captured', { clientIdLength: credentials.clientId.length });
-    } catch (reason) {
-      // Не блокируем вход: токен всё равно можно проверить и сохранить.
-      console.warn('[ui.auth.silent] client id save failed', { error: reasonText(reason, 'unknown error') });
-    }
-    await login(credentials.token);
   }
 
   async function saveAccessToken(token: string): Promise<boolean> {
@@ -333,6 +335,7 @@ export function App() {
       setProfile(result.profile);
       setAuth('authorized');
       void loadTracks();
+      void loadPlaylists();
       void loadMixedSelections();
       return true;
     } catch (reason) {
@@ -357,6 +360,7 @@ export function App() {
     }
     setProfile(null);
     setTracks([]);
+    setPlaylists([]);
     setSelections([]);
     setRelatedTracks([]);
     setLikedTracks({});
@@ -365,32 +369,6 @@ export function App() {
     setShouldPlay(false);
     setPlaybackError('');
     setAuth('guest');
-  }
-
-  async function clearAppData(): Promise<boolean> {
-    setError('');
-    try {
-      const resetSettings = await appGateway.clearAppData();
-      setSettings(resetSettings);
-      setSaved(true);
-      setProfile(null);
-      setTracks([]);
-      setSelections([]);
-      setRelatedTracks([]);
-      setLikedTracks({});
-      setCurrentTrack(null);
-      setCurrentTrackIndex(-1);
-      setShouldPlay(false);
-      setPlaybackError('');
-      setLoginError('');
-      setAuth('guest');
-      return true;
-    } catch (reason) {
-      const message = reasonText(reason, 'Не удалось очистить данные приложения');
-      setError(message);
-      console.error('[ui.settings.clear-data] failed', { error: message });
-      return false;
-    }
   }
 
   if (!ready) {
@@ -407,7 +385,7 @@ export function App() {
     );
   }
 
-  if (auth === 'guest') return <AuthScreen error={loginError} busy={loginBusy} onLogin={(token) => void login(token)} onSilentLogin={silentLogin} />;
+  if (auth === 'guest') return <AuthScreen error={loginError} busy={loginBusy} onLogin={(token) => void login(token)} />;
 
   return (
     <div className="app-shell">
@@ -434,6 +412,24 @@ export function App() {
             />
           : page === 'search'
             ? <section className="page-content search-landing"><span className="eyebrow">ПОИСК SOUNDCLOUD</span><h1>Найди свой следующий трек</h1><p>Введи название песни или имя исполнителя в строку поиска.</p><button type="button" className="primary-button" onClick={focusGlobalSearch}>Начать поиск <span>⌕</span></button></section>
+          : page === 'library'
+            ? <MyLibraryPage
+                tracks={tracks}
+                playlists={playlists}
+                tracksLoading={tracksLoading}
+                playlistsLoading={playlistsLoading}
+                tracksError={tracksError}
+                playlistsError={playlistsError}
+                artistFallback={profile?.username}
+                currentTrackId={currentTrack?.id ?? null}
+                isPlaying={shouldPlay}
+                playbackLoading={playbackLoading}
+                onRefresh={refreshLibrary}
+                onPlayTrack={selectTrack}
+                onOpenTrack={(track) => void openTrackDetails(track)}
+                onLoadPlaylist={loadPlaylistTracks}
+                onPlayPlaylist={playPlaylist}
+              />
           : page === 'likes'
           ? <LikedTracksSection
               tracks={tracks}
@@ -451,7 +447,7 @@ export function App() {
               playbackLoading={playbackLoading}
             />
           : page === 'settings'
-            ? <SettingsPanel settings={settings} saved={saved} error={error} profile={profile} tokenError={loginError} tokenBusy={loginBusy} onSaveToken={saveAccessToken} onClearData={clearAppData} onUpdate={(patch) => void updateSettings(patch)} />
+            ? <SettingsPanel settings={settings} saved={saved} error={error} profile={profile} tokenError={loginError} tokenBusy={loginBusy} onSaveToken={saveAccessToken} onUpdate={(patch) => void updateSettings(patch)} />
           : <TrackDetailsPage
                 track={detailsTrack}
                 loading={detailsLoading}
@@ -485,14 +481,14 @@ export function App() {
         onVolumeCommit={(volume) => void savePlayerVolume(volume)}
         onPrevious={() => void loadTrackAt(Math.max(currentTrackIndex - 1, 0))}
         onNext={() => void loadTrackAt(currentTrackIndex + 1)}
-        hasNext={currentTrackIndex >= 0 && currentTrackIndex + 1 < tracks.length}
+        hasNext={currentTrackIndex >= 0 && currentTrackIndex + 1 < queueTracks.length}
         onEnded={() => {
-          if (currentTrackIndex + 1 < tracks.length) void loadTrackAt(currentTrackIndex + 1);
+          if (currentTrackIndex + 1 < queueTracks.length) void loadTrackAt(currentTrackIndex + 1);
           else setShouldPlay(false);
         }}
         onReady={() => setPlaybackLoading(false)}
         onError={(message) => { setPlaybackError(message); setPlaybackLoading(false); setShouldPlay(false); }}
-        onPlaybackStateChange={handlePlaybackStateChange}
+        onPlaybackStateChange={setShouldPlay}
       />
     </div>
   );
