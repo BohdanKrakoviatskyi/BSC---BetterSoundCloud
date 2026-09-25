@@ -4,7 +4,6 @@ import type { Track } from '../../domain/models';
 type Widget = {
   bind: (event: string, callback: (data?: unknown) => void) => void;
   unbind: (event: string) => void;
-  load: (url: string, options: Record<string, unknown>) => void;
   play: () => void;
   pause: () => void;
   seekTo: (milliseconds: number) => void;
@@ -141,35 +140,6 @@ export function SoundCloudWidget({ track, volume, onControlsReady, onReady, onPl
   useEffect(() => {
     let disposed = false;
     let widget: Widget | null = null;
-
-    const markReady = (generation: number) => {
-      if (disposed || generation !== loadGenerationRef.current || !widget) return;
-      widget.setVolume(volumeRef.current);
-      callbacksRef.current.onControlsReady(widget);
-      callbacksRef.current.onReady();
-      widget.getDuration((duration) => {
-        if (disposed || generation !== loadGenerationRef.current || duration <= 0 || !widget) return;
-        widget.getPosition((position) => {
-          if (!disposed && generation === loadGenerationRef.current) callbacksRef.current.onProgress(position, duration);
-        });
-      });
-    };
-
-    const loadTrack = (nextUrl: string) => {
-      if (!widget) return;
-      initialTrackUrlRef.current = nextUrl;
-      const generation = ++loadGenerationRef.current;
-      widget.load(nextUrl, {
-        auto_play: false,
-        hide_related: true,
-        show_comments: false,
-        show_reposts: false,
-        show_teaser: false,
-        visual: false,
-        color: '#ff765d',
-        callback: () => markReady(generation),
-      });
-    };
 
     void loadWidgetApi().then((api) => {
       const iframe = iframeRef.current;

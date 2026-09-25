@@ -26,7 +26,7 @@ const (
 	appName         = "BetterSoundCloud"
 	appVersion      = "0.1.0"
 	maxLine         = 1 << 20
-	maxRecentTracks = 50
+	maxRecentTracks = 20
 
 	// officialAPIBase — официальный API SoundCloud (OAuth-приложения).
 	officialAPIBase = "https://api.soundcloud.com"
@@ -1623,6 +1623,9 @@ func (s *service) loadHistory() error {
 		if len(s.history) == maxRecentTracks {
 			break
 		}
+	}
+	if len(s.history) != len(loaded) {
+		return s.saveHistory(s.history)
 	}
 	return nil
 }
