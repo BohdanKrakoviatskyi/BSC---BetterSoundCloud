@@ -36,6 +36,9 @@ export function App() {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [playlistsLoading, setPlaylistsLoading] = useState(false);
   const [playlistsError, setPlaylistsError] = useState('');
+  const [history, setHistory] = useState<Track[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const currentTrackRef = useRef<Track | null>(null);
   currentTrackRef.current = currentTrack;
@@ -60,10 +63,13 @@ export function App() {
     const track = currentTrackRef.current;
     if (!track) return;
     try {
-      const history = await appGateway.historyRecord(track);
-      console.info('[ui.history] track recorded', { trackId: track.id, count: history.length });
+      const updated = await appGateway.historyRecord(track);
+      setHistory(updated);
+      console.info('[ui.history] track recorded', { trackId: track.id, count: updated.length });
     } catch (reason) {
-      console.error('[ui.history] record failed', { trackId: track.id, error: reasonText(reason, 'Не удалось сохранить историю') });
+      const message = reasonText(reason, 'Не удалось сохранить историю');
+      setHistoryError(message);
+      console.error('[ui.history] record failed', { trackId: track.id, error: message });
     }
   }
 
@@ -102,6 +108,35 @@ export function App() {
       setTracksError(message);
     } finally {
       setTracksLoading(false);
+    }
+  }
+
+  async function loadHistory() {
+    setHistoryLoading(true);
+    setHistoryError('');
+    try {
+      const loaded = await appGateway.historyList();
+      setHistory(loaded);
+      console.info('[ui.history] loaded', { count: loaded.length });
+    } catch (reason) {
+      const message = reasonText(reason, 'Не удалось загрузить историю прослушиваний');
+      setHistoryError(message);
+      console.error('[ui.history] load failed', { error: message });
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  async function clearHistory() {
+    setHistoryError('');
+    try {
+      const cleared = await appGateway.historyClear();
+      setHistory(cleared);
+      console.info('[ui.history] cleared', { remaining: cleared.length });
+    } catch (reason) {
+      const message = reasonText(reason, 'Не удалось очистить историю прослушиваний');
+      setHistoryError(message);
+      console.error('[ui.history] clear failed', { error: message });
     }
   }
 
@@ -276,6 +311,7 @@ export function App() {
         setProfile(status.profile ?? null);
         setAuth(status.authorized ? 'authorized' : 'guest');
         setReady(true);
+        void loadHistory();
         if (status.authorized) {
           void loadTracks();
           void loadPlaylists();
@@ -418,6 +454,7 @@ export function App() {
       setTracks([]);
       setPlaylists([]);
       setQueueTracks([]);
+      setHistory([]);
       setSelections([]);
       setRelatedTracks([]);
       setLikedTracks({});
@@ -467,12 +504,16 @@ export function App() {
               selections={selections}
               loading={selectionsLoading}
               error={selectionsError}
+              history={history}
+              historyLoading={historyLoading}
+              historyError={historyError}
               artistFallback={profile?.username}
               currentTrackId={currentTrack?.id ?? null}
               isPlaying={shouldPlay}
               playbackLoading={playbackLoading}
               onPlayTrack={selectTrack}
               onOpenTrack={(track) => void openTrackDetails(track)}
+              onClearHistory={() => void clearHistory()}
               onRetry={() => void loadMixedSelections()}
             />
           : page === 'search'
