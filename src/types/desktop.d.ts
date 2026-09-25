@@ -1,4 +1,4 @@
-import type { AuthStatus, SoundCloudMixedSelection, SoundCloudPlaylist, SoundCloudSearchTrack, SoundCloudTrack, SoundCloudTrackDetails, TrackLikeResult, TrackStream } from '../renderer/lib/desktop';
+import type { AuthStatus, SoundCloudMixedSelection, SoundCloudPlaylist, SoundCloudSearchTrack, SoundCloudTrack, SoundCloudTrackDetails, TrackLikeResult, TrackStream } from '../renderer/platform/desktop';
 
 export {};
 

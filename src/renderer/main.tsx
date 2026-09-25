@@ -1,9 +1,9 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { App } from './ui/App';
-import { desktop } from './lib/desktop';
-import './ui/styles.css';
-import './ui/new-ui.css';
+import { App } from './app/App';
+import { desktop } from './platform/desktop';
+import './styles/global.css';
+import './styles/new-ui.css';
 
 window.desktop = desktop as typeof window.desktop;
 

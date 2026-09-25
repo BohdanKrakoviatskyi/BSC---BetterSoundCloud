@@ -15,18 +15,28 @@ Tauri webview не получает Node.js доступ. Frontend запуск�
 
 ## Компоненты
 
-- `src/renderer` — интерфейс React, стили и точка входа Vite.
-- `src/renderer/domain/models.ts` — интерфейсные модели, не зависящие от RPC или SoundCloud DTO.
-- `src/renderer/lib/appGateway.ts` — адаптер UI/backend; преобразует DTO в доменные модели и предоставляет приложению операции.
-- `src/renderer/lib/desktop.ts` — транспорт JSON-RPC: запускает sidecar и связывает ID запросов с ответами.
+- `src/renderer/app` — корневой компонент и orchestration state/actions приложения (`App.tsx`, `useAppController.ts`), навигация и типы страниц.
+- `src/renderer/features` — UI по возможностям: авторизация, главная, библиотека, плеер, поиск, настройки и треки.
+- `src/renderer/shared` — переиспользуемые UI-компоненты, не принадлежащие отдельной feature.
+- `src/renderer/domain/models.ts` — UI-доменные модели, не зависящие от RPC или SoundCloud DTO.
+- `src/renderer/application/appGateway.ts` — операции приложения и граница между renderer и desktop API.
+- `src/renderer/application/mappers.ts` и `backendDtos.ts` — преобразование wire DTO ↔ domain и типы backend-протокола.
+- `src/renderer/platform/desktop.ts` — запуск Tauri sidecar и JSON-RPC транспорт; `useSoundCloudAuth.ts` — события и команды авторизации Tauri.
+- `src/renderer/styles` — глобальные стили приложения.
 - `src-tauri/src/main.rs` — запускает Tauri и подключает shell plugin.
 - `src-tauri/tauri.conf.json` — окно, CSP, frontend и sidecar bundle.
 - `src-tauri/capabilities/default.json` — разрешает запуск только Go sidecar без аргументов и запись в его stdin.
-- `backend/cmd/local-api` — локальные команды приложения, сохранение настроек и авторизация SoundCloud.
-- `backend/cmd/local-api/main_test.go` — тесты авторизации на подставном SoundCloud-сервере.
+- `backend/cmd/local-api/main.go` — тонкая точка входа; сохраняет команду `go build ./cmd/local-api` для сборочных скриптов.
+- `backend/internal/localapi` — приложение, service и обработчики. Файлы `settings.go`, `auth.go`, `tracks.go`, `playlists.go`, `search.go`, `likes.go`, `history.go`, `playback.go` сгруппированы по доменным областям; `rpc_dispatch.go` и `rpc_discovery.go` обслуживают вызов и автоматическое обнаружение методов `RPC...`.
+- `backend/internal/rpc/rpc.go` — JSON-lines transport: request/response и цикл stdin/stdout.
+- `backend/internal/storage/storage.go` — общие атомарная запись и удаление локальных файлов; загрузка/сохранение состояний вызывается из `localapi`.
+- `backend/internal/localapi/soundcloud_http.go` и `soundcloud_stream.go` — SoundCloud HTTP/URL операции и выбор transcoding.
+- `backend/internal/localapi/dev_swagger.go` и `openapi.go` — dev-only loopback HTTP-мост и генерация OpenAPI схем.
+- `backend/internal/localapi/*_test.go` — тесты по областям, с общими fixtures в `test_helpers_test.go`.
+
+Обработчики пока остаются в одном Go-пакете `internal/localapi`: автоматический RPC discovery использует reflection по методам общего `service`, а в Go receiver-методы нельзя объявлять из другого пакета. Транспорт и файловые операции вынесены в отдельные пакеты без изменения RPC-контракта.
 - `scripts/build-go.mjs` — кросс-компилирует Go sidecar и именует бинарник по Tauri target triple.
 - `scripts/backend-console.mjs` — интерактивная JSON-RPC консоль sidecar для ручной проверки методов без Tauri.
-- `backend/cmd/local-api/main.go` — при `BSC_SWAGGER=1` дополнительно поднимает Swagger UI и loopback HTTP bridge для ручной отладки JSON-RPC.
 - `scripts/test-backend-live.mjs` — запускает живой тест SoundCloud с токеном из `.env`.
 
 ## Локальный API
@@ -38,28 +48,33 @@ Tauri webview не получает Node.js доступ. Frontend запуск�
 | `app.info` | Имя, версия и тип локального backend |
 | `settings.get` | Чтение настроек |
 | `settings.update` | Проверка и запись части настроек |
+| `settings.clear` | Удаление локальной сессии, настроек и истории |
 | `auth.login` | Проверка access token в SoundCloud и сохранение сессии |
 | `auth.status` | Признак входа и кэшированный профиль (без токена) |
 | `auth.refresh` | Перепроверка сохранённого токена; отклонённый токен удаляется |
 | `auth.logout` | Локальное удаление токена |
 | `tracks.mine` | Лайкнутые треки аккаунта |
+| `playlists.mine` | Плейлисты аккаунта |
+| `playlist.tracks` | Треки выбранного плейлиста |
+| `history.list` / `history.record` / `history.clear` | Локальная история воспроизведения |
 | `search.tracks` | Поиск треков SoundCloud |
 | `track.details` | Детали трека по ID |
 | `track.related` | Похожие треки по ID |
 | `mixed.selections` | Подборки SoundCloud для главной |
 | `track.like` / `track.unlike` | Изменение лайка |
+| `track.stream` | Получение доступных аудиопотоков трека |
 
 Настройки: цвет акцента, компактный режим, начальная громкость и публичный SoundCloud Client ID. Go валидирует значения, пишет JSON во временный файл и атомарно заменяет `settings.json` в системном каталоге конфигурации пользователя. Access token задаётся отдельно через `auth.login`: backend проверяет его запросом профиля и хранит в отдельном локальном файле с ограниченными правами; токен не включается в `settings.get`.
 
-Новые функции добавляются как узкие RPC-методы Go и операции в `desktop.ts`. Их вызовы и преобразование данных подключаются в `appGateway.ts`. UI использует только доменные модели и gateway: React-компоненты не импортируют backend DTO, не вызывают `window.desktop`, не формируют SoundCloud URL и не знают имена RPC. Не предоставлять renderer произвольный запуск процессов или системный доступ.
+Новые функции добавляются как узкие RPC-методы Go и операции в `src/renderer/platform/desktop.ts`. Их вызовы и преобразование данных подключаются в `src/renderer/application/appGateway.ts` и `mappers.ts`. UI использует только доменные модели и gateway: React-компоненты не импортируют backend DTO, не вызывают `window.desktop`, не формируют SoundCloud URL и не знают имена RPC. Не предоставлять renderer произвольный запуск процессов или системный доступ.
 
 ### Граница UI и backend
 
 ```mermaid
 flowchart LR
-  C[React components] --> A[App state]
-  A --> G[appGateway: application operations]
-  G -->|map DTO ↔ domain models| B[desktop.ts: JSON-RPC transport]
+  C[Feature components] --> A[app/useAppController]
+  A --> G[application/appGateway]
+  G -->|map DTO ↔ domain models| B[platform/desktop: JSON-RPC transport]
   B -->|stdin/stdout| GO[Go sidecar]
   G -.-> D[domain/models.ts]
   C -.-> D
@@ -68,8 +83,8 @@ flowchart LR
 Правила переноса или полной замены интерфейса:
 
 1. Компоненты получают данные и действия через props, используют только типы из `domain/models.ts` и не обращаются к `window.desktop`.
-2. `appGateway.ts` — единственное место renderer, которое знает wire-типы и имена backend-операций. Backend-поля преобразуются здесь в стабильную модель UI.
-3. `desktop.ts` отвечает только за запуск sidecar и JSON-RPC. Он не содержит UI-логику и не импортирует React.
+2. `application/appGateway.ts` — единственное место UI, которое знает операции backend; `application/mappers.ts` преобразует wire DTO в стабильные domain-модели.
+3. `platform/desktop.ts` отвечает за запуск sidecar и JSON-RPC. Он не содержит UI-логику и не импортирует React.
 4. Go не знает о компонентах, страницах или дизайне. Изменения интерфейса не требуют изменений Go, пока имеющегося контракта достаточно.
 5. Для новых backend-данных добавляется отдельный RPC и DTO, затем mapping в gateway. Существующий контракт не меняется несовместимо без необходимости.
 6. Renderer передаёт только узкие параметры, например ID трека или поисковый запрос. Токен, произвольные URL и команды остаются на стороне sidecar.
@@ -108,4 +123,4 @@ Go sidecar кладётся в `src-tauri/binaries/local-api-<TARGET_TRIPLE>` и
 
 ## Текущие границы
 
-Реализованы desktop-окно, локальный backend, настройки и ручная авторизация по access token. Полный OAuth-вход, методы SoundCloud API (медиатека, поиск, лайки), воспроизведение и системный credential store для токенов не входят в текущую реализацию.
+Реализованы desktop-окно, настройки, ручная авторизация по access token, SoundCloud-библиотека и плейлисты, поиск, лайки, история прослушивания и воспроизведение через доступные потоки/виджет. Полный OAuth-вход и системный credential store для токенов пока не подключены.
