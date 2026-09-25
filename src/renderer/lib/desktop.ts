@@ -16,7 +16,7 @@ export type SoundCloudProfile = {
   likesCount?: number;
 };
 export type AuthStatus = { authorized: boolean; profile?: SoundCloudProfile };
-export type TrackLikeResult = { liked: boolean };
+export type TrackLikeResult = { liked: boolean; captchaUrl?: string };
 export type TrackStreamOption = { url: string; preview: boolean; hls: boolean; quality: string };
 export type TrackStream = TrackStreamOption & { alternatives?: TrackStreamOption[] };
 export type SoundCloudTrack = {
@@ -186,12 +186,12 @@ class LocalBackend {
     return this.request<SoundCloudMixedSelection[]>('mixed.selections', {}, 30_000);
   }
 
-  async likeTrack(trackId: number, trackUrn: string): Promise<TrackLikeResult> {
-    return this.request<TrackLikeResult>('track.like', { trackId, trackUrn }, 30_000);
+  async likeTrack(trackId: number, trackUrn: string, datadomeCookie?: string): Promise<TrackLikeResult> {
+    return this.request<TrackLikeResult>('track.like', { trackId, trackUrn, datadomeCookie }, 30_000);
   }
 
-  async unlikeTrack(trackId: number, trackUrn: string): Promise<TrackLikeResult> {
-    return this.request<TrackLikeResult>('track.unlike', { trackId, trackUrn }, 30_000);
+  async unlikeTrack(trackId: number, trackUrn: string, datadomeCookie?: string): Promise<TrackLikeResult> {
+    return this.request<TrackLikeResult>('track.unlike', { trackId, trackUrn, datadomeCookie }, 30_000);
   }
 
   private async request<T>(method: string, params: object = {}, timeoutMs = 5000): Promise<T> {
@@ -290,6 +290,6 @@ export const desktop = {
   searchTracks: (query: string) => backend.searchTracks(query),
   relatedTracks: (trackId: number) => backend.relatedTracks(trackId),
   mixedSelections: () => backend.mixedSelections(),
-  likeTrack: (trackId: number, trackUrn: string) => backend.likeTrack(trackId, trackUrn),
-  unlikeTrack: (trackId: number, trackUrn: string) => backend.unlikeTrack(trackId, trackUrn),
+  likeTrack: (trackId: number, trackUrn: string, datadomeCookie?: string) => backend.likeTrack(trackId, trackUrn, datadomeCookie),
+  unlikeTrack: (trackId: number, trackUrn: string, datadomeCookie?: string) => backend.unlikeTrack(trackId, trackUrn, datadomeCookie),
 };

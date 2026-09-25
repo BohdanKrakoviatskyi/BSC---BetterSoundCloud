@@ -393,6 +393,18 @@
           "markdownDescription": "Allows the main window to close the SoundCloud sign-in webview after validating the token."
         },
         {
+          "description": "Allows the captcha webview to report a successful challenge check.",
+          "type": "string",
+          "const": "allow-mark-captcha-completed",
+          "markdownDescription": "Allows the captcha webview to report a successful challenge check."
+        },
+        {
+          "description": "Allows the main window to poll for completion of the SoundCloud captcha challenge.",
+          "type": "string",
+          "const": "allow-poll-captcha-challenge",
+          "markdownDescription": "Allows the main window to poll for completion of the SoundCloud captcha challenge."
+        },
+        {
           "description": "Allows the SoundCloud webview to hand the captured OAuth token and client id back to the app.",
           "type": "string",
           "const": "allow-save-credentials",
@@ -403,6 +415,12 @@
           "type": "string",
           "const": "allow-show-auth-window",
           "markdownDescription": "Allows the SoundCloud webview to reveal itself when manual sign-in is required."
+        },
+        {
+          "description": "Allows the main window to open the SoundCloud captcha challenge in an in-app webview.",
+          "type": "string",
+          "const": "allow-show-captcha-window",
+          "markdownDescription": "Allows the main window to open the SoundCloud captcha challenge in an in-app webview."
         },
         {
           "description": "Allows the main window to open the background SoundCloud authentication webview.",

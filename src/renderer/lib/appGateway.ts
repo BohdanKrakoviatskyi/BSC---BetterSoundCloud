@@ -109,6 +109,6 @@ export const appGateway = {
   searchTracks: async (query: string) => (await window.desktop.searchTracks(query)).map(mapTrack),
   relatedTracks: async (trackId: number) => (await window.desktop.relatedTracks(trackId)).map(mapTrack),
   mixedSelections: async () => (await window.desktop.mixedSelections()).map(mapCollection),
-  likeTrack: (trackId: number, trackUrn: string) => window.desktop.likeTrack(trackId, trackUrn),
-  unlikeTrack: (trackId: number, trackUrn: string) => window.desktop.unlikeTrack(trackId, trackUrn),
+  likeTrack: (trackId: number, trackUrn: string, datadomeCookie?: string) => window.desktop.likeTrack(trackId, trackUrn, datadomeCookie),
+  unlikeTrack: (trackId: number, trackUrn: string, datadomeCookie?: string) => window.desktop.unlikeTrack(trackId, trackUrn, datadomeCookie),
 };

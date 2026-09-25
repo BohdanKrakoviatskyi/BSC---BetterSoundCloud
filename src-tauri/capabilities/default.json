@@ -7,6 +7,8 @@
     "core:default",
     "allow-start-auth-flow",
     "allow-finish-auth-flow",
+    "allow-show-captcha-window",
+    "allow-poll-captcha-challenge",
     {
       "identifier": "shell:allow-spawn",
       "allow": [
