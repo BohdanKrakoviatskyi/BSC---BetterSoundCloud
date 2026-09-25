@@ -41,6 +41,9 @@ export function PlayerBar({ track, loading, shouldPlay, volume, error, hasNext, 
   const [volumeValue, setVolumeValue] = useState(volume);
   const [scrubPosition, setScrubPosition] = useState<number | null>(null);
   const scrubPositionRef = useRef<number | null>(null);
+  const pendingSeekRef = useRef<number | null>(null);
+  const seekReleaseTimerRef = useRef<number | null>(null);
+  const isScrubbingRef = useRef(false);
   const playbackObservedRef = useRef(false);
 
   useEffect(() => setVolumeValue(volume), [volume]);
@@ -58,8 +61,18 @@ export function PlayerBar({ track, loading, shouldPlay, volume, error, hasNext, 
     setCurrentTime(0);
     setDuration(track ? track.durationMs / 1000 : 0);
     scrubPositionRef.current = null;
+    pendingSeekRef.current = null;
+    isScrubbingRef.current = false;
+    if (seekReleaseTimerRef.current !== null) {
+      window.clearTimeout(seekReleaseTimerRef.current);
+      seekReleaseTimerRef.current = null;
+    }
     setScrubPosition(null);
   }, [track?.id]);
+
+  useEffect(() => () => {
+    if (seekReleaseTimerRef.current !== null) window.clearTimeout(seekReleaseTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (!track || playbackMode !== 'widget' || !shouldPlay) return;
@@ -87,10 +100,37 @@ export function PlayerBar({ track, loading, shouldPlay, volume, error, hasNext, 
     const requestedSeconds = scrubPositionRef.current;
     if (requestedSeconds === null || !widgetControls) return;
     scrubPositionRef.current = null;
-    setScrubPosition(null);
+    isScrubbingRef.current = false;
+    pendingSeekRef.current = requestedSeconds;
     const targetMs = Math.max(0, Math.min(duration * 1000, Math.round(requestedSeconds * 1000)));
+    if (seekReleaseTimerRef.current !== null) window.clearTimeout(seekReleaseTimerRef.current);
+    seekReleaseTimerRef.current = window.setTimeout(() => {
+      if (pendingSeekRef.current === requestedSeconds) {
+        pendingSeekRef.current = null;
+        setCurrentTime(requestedSeconds);
+        setScrubPosition(null);
+      }
+      seekReleaseTimerRef.current = null;
+    }, 1500);
     // SoundCloud Widget API seekTo expects milliseconds, not seconds.
     widgetControls.seekTo(targetMs);
+  }
+
+  function handleProgress(positionMs: number, durationMs?: number) {
+    if (positionMs > 1500) playbackObservedRef.current = true;
+    const positionSeconds = positionMs / 1000;
+    const pendingSeek = pendingSeekRef.current;
+    if (!isScrubbingRef.current && pendingSeek === null) setCurrentTime(positionSeconds);
+    if (pendingSeek !== null && Math.abs(positionSeconds - pendingSeek) <= 1.25) {
+      pendingSeekRef.current = null;
+      setCurrentTime(positionSeconds);
+      setScrubPosition(null);
+      if (seekReleaseTimerRef.current !== null) {
+        window.clearTimeout(seekReleaseTimerRef.current);
+        seekReleaseTimerRef.current = null;
+      }
+    }
+    if (durationMs !== undefined && durationMs > 0) setDuration(durationMs / 1000);
   }
 
   function handleTrackEnded() {
@@ -115,11 +155,7 @@ export function PlayerBar({ track, loading, shouldPlay, volume, error, hasNext, 
           onPlaybackStateChange={(playing) => {
             onPlaybackStateChange(playing);
           }}
-          onProgress={(positionMs, durationMs) => {
-            if (positionMs > 1500) playbackObservedRef.current = true;
-            setCurrentTime(positionMs / 1000);
-            if (durationMs !== undefined && durationMs > 0) setDuration(durationMs / 1000);
-          }}
+          onProgress={handleProgress}
           onEnded={handleTrackEnded}
           onError={(message) => {
             console.warn('[ui.player] SoundCloud widget failed; switching to the direct stream', { trackId: track.id, error: message });
@@ -139,11 +175,7 @@ export function PlayerBar({ track, loading, shouldPlay, volume, error, hasNext, 
           onPlaybackStateChange={(playing) => {
             onPlaybackStateChange(playing);
           }}
-          onProgress={(positionMs, durationMs) => {
-            if (positionMs > 1500) playbackObservedRef.current = true;
-            setCurrentTime(positionMs / 1000);
-            if (durationMs !== undefined && durationMs > 0) setDuration(durationMs / 1000);
-          }}
+          onProgress={handleProgress}
           onEnded={handleTrackEnded}
           onError={(message) => {
             onPlaybackStateChange(false);
@@ -151,18 +183,6 @@ export function PlayerBar({ track, loading, shouldPlay, volume, error, hasNext, 
           }}
         />
       )}
-
-      <div className={`now-playing ${track ? '' : 'empty'}`}>
-        <button className="now-playing-cover" type="button" disabled={!track} onClick={onOpenTrack} aria-label="Открыть страницу трека">
-          {track?.artwork && <img src={track.artwork} alt="" />}
-        </button>
-        <div className="track-copy">
-          <button type="button" className="track-title-button" onClick={onOpenTrack} title={track?.title}><b>{track?.title ?? 'Выбери музыку'}</b></button>
-          {track?.permalink ? <a href={track.permalink} target="_blank" rel="noreferrer">{track.artist.name || 'SoundCloud'}</a> : <span>{track?.artist.name || 'Здесь начнётся твоё звучание'}</span>}
-          {error && <small className="player-error" title={error}>{error}</small>}
-        </div>
-        <button className={`like-button ${liked ? 'liked' : ''}`} type="button" onClick={onLike} disabled={!track} aria-label={liked ? 'Убрать из любимых' : 'Добавить в любимые'} title={liked ? 'В любимых' : 'Добавить в любимые'}>♥</button>
-      </div>
 
       <div className="player-center">
         <div className="transport">
@@ -176,48 +196,70 @@ export function PlayerBar({ track, loading, shouldPlay, volume, error, hasNext, 
             <span>1</span>
           </button>
         </div>
-        <div className="timeline">
-          <span>{formatTime(currentTime)}</span>
-          <input
-            aria-label="Позиция воспроизведения"
-            type="range"
-            min={0}
-            max={duration || 1}
-            step={1}
-            value={Math.min(scrubPosition ?? currentTime, duration || 1)}
-            disabled={!widgetControls || !duration}
-            style={{ background: `linear-gradient(to right,var(--accent) 0%,var(--accent) ${Math.min(100, ((scrubPosition ?? currentTime) / (duration || 1)) * 100)}%,#39393e ${Math.min(100, ((scrubPosition ?? currentTime) / (duration || 1)) * 100)}%,#39393e 100%)` }}
-            onChange={(event) => {
-              const requestedSeconds = Number(event.currentTarget.value);
-              scrubPositionRef.current = requestedSeconds;
-              setScrubPosition(requestedSeconds);
-            }}
-            onPointerUp={commitSeek}
-            onBlur={commitSeek}
-            onKeyUp={commitSeek}
-          />
-          <span>{formatTime(duration)}</span>
-        </div>
       </div>
 
-      <label className="player-right" title={`Громкость ${volumeValue}%`}>
-        <span className="volume-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5Z" />{volumeValue === 0 ? <path d="m16 9 5 6m0-6-5 6" /> : <><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M18.5 5.5a9 9 0 0 1 0 13" /></>}</svg>
-        </span>
+      <div className="timeline">
+        <span>{formatTime(scrubPosition ?? currentTime)}</span>
         <input
-          className="volume"
-          aria-label="Громкость"
+          aria-label="Позиция воспроизведения"
           type="range"
           min={0}
-          max={100}
-          value={volumeValue}
-          style={{ background: `linear-gradient(to right,var(--accent) 0%,var(--accent) ${volumeValue}%,#39393e ${volumeValue}%,#39393e 100%)` }}
-          onChange={(event) => setVolumeValue(Number(event.currentTarget.value))}
-          onPointerUp={() => onVolumeCommit(volumeValue)}
-          onBlur={() => onVolumeCommit(volumeValue)}
-          onKeyUp={() => onVolumeCommit(volumeValue)}
+          max={duration || 1}
+          step="any"
+          value={Math.min(scrubPosition ?? currentTime, duration || 1)}
+          disabled={!widgetControls || !duration}
+          style={{ background: `linear-gradient(to right,var(--player-progress,#ff5a1f) 0%,var(--player-progress,#ff5a1f) ${Math.min(100, ((scrubPosition ?? currentTime) / (duration || 1)) * 100)}%,#555555 ${Math.min(100, ((scrubPosition ?? currentTime) / (duration || 1)) * 100)}%,#555555 100%)` }}
+          onChange={(event) => {
+            if (seekReleaseTimerRef.current !== null) {
+              window.clearTimeout(seekReleaseTimerRef.current);
+              seekReleaseTimerRef.current = null;
+            }
+            pendingSeekRef.current = null;
+            isScrubbingRef.current = true;
+            const requestedSeconds = Number(event.currentTarget.value);
+            scrubPositionRef.current = requestedSeconds;
+            setScrubPosition(requestedSeconds);
+          }}
+          onPointerUp={commitSeek}
+          onPointerCancel={commitSeek}
+          onBlur={commitSeek}
+          onKeyUp={commitSeek}
         />
-      </label>
+        <span>{formatTime(duration)}</span>
+      </div>
+
+      <div className="player-details">
+        <label className="player-right" title={`Громкость ${volumeValue}%`}>
+          <span className="volume-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5Z" />{volumeValue === 0 ? <path d="m16 9 5 6m0-6-5 6" /> : <><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M18.5 5.5a9 9 0 0 1 0 13" /></>}</svg>
+          </span>
+          <input
+            className="volume"
+            aria-label="Громкость"
+            type="range"
+            min={0}
+            max={100}
+            value={volumeValue}
+            style={{ background: `linear-gradient(to right,#eeeeee 0%,#eeeeee ${volumeValue}%,#555555 ${volumeValue}%,#555555 100%)` }}
+            onChange={(event) => setVolumeValue(Number(event.currentTarget.value))}
+            onPointerUp={() => onVolumeCommit(volumeValue)}
+            onBlur={() => onVolumeCommit(volumeValue)}
+            onKeyUp={() => onVolumeCommit(volumeValue)}
+          />
+        </label>
+
+        <div className={`now-playing ${track ? '' : 'empty'}`}>
+          <button className="now-playing-cover" type="button" disabled={!track} onClick={onOpenTrack} aria-label="Открыть страницу трека">
+            {track?.artwork && <img src={track.artwork} alt="" />}
+          </button>
+          <div className="track-copy">
+            <button type="button" className="track-title-button" onClick={onOpenTrack} title={track?.title}><b>{track?.title ?? 'Выбери музыку'}</b></button>
+            {track?.permalink ? <a href={track.permalink} target="_blank" rel="noreferrer">{track.artist.name || 'SoundCloud'}</a> : <span>{track?.artist.name || 'Здесь начнётся твоё звучание'}</span>}
+            {error && <small className="player-error" title={error}>{error}</small>}
+          </div>
+          <button className={`like-button ${liked ? 'liked' : ''}`} type="button" onClick={onLike} disabled={!track} aria-label={liked ? 'Убрать из любимых' : 'Добавить в любимые'} title={liked ? 'В любимых' : 'Добавить в любимые'}>♥</button>
+        </div>
+      </div>
     </footer>
   );
 }

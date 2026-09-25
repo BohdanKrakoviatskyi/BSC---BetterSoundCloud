@@ -50,6 +50,7 @@ export function App() {
   const [playerVisible, setPlayerVisible] = useState(false);
   const currentTrackRef = useRef<Track | null>(null);
   currentTrackRef.current = currentTrack;
+  const historyWriteRef = useRef<Promise<void>>(Promise.resolve());
   const [detailsTrack, setDetailsTrack] = useState<TrackDetails | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsError, setDetailsError] = useState('');
@@ -69,18 +70,20 @@ export function App() {
   const [relatedError, setRelatedError] = useState('');
   const detailsRequestId = useRef(0);
 
-  async function recordPlayedTrack() {
+  function recordPlayedTrack() {
     const track = currentTrackRef.current;
     if (!track) return;
-    try {
-      const updated = await appGateway.historyRecord(track);
-      setHistory(updated);
-      console.info('[ui.history] track recorded', { trackId: track.id, count: updated.length });
-    } catch (reason) {
-      const message = reasonText(reason, 'Не удалось сохранить историю');
-      setHistoryError(message);
-      console.error('[ui.history] record failed', { trackId: track.id, error: message });
-    }
+    historyWriteRef.current = historyWriteRef.current.then(async () => {
+      try {
+        const updated = await appGateway.historyRecord(track);
+        setHistory(updated);
+        console.info('[ui.history] track recorded', { trackId: track.id, count: updated.length });
+      } catch (reason) {
+        const message = reasonText(reason, 'Не удалось сохранить историю');
+        setHistoryError(message);
+        console.error('[ui.history] record failed', { trackId: track.id, error: message });
+      }
+    });
   }
 
   function handlePlaybackStateChange(playing: boolean) {
@@ -361,9 +364,12 @@ export function App() {
       });
     return () => {
       active = false;
-      void appGateway.stop().catch((reason: unknown) => {
-        console.warn('[local-backend] stop failed during app cleanup', { error: reasonText(reason, String(reason)) });
-      });
+      const stopBackend = () => {
+        void appGateway.stop().catch((reason: unknown) => {
+          console.warn('[local-backend] stop failed during app cleanup', { error: reasonText(reason, String(reason)) });
+        });
+      };
+      void historyWriteRef.current.then(stopBackend, stopBackend);
     };
   }, []);
 
