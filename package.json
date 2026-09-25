@@ -4,7 +4,7 @@
   "private": true,
   "description": "Локальный улучшенный клиент SoundCloud",
   "scripts": {
-    "dev": "tauri dev",
+    "dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
     "backend": "node scripts/backend-console.mjs",
     "test:go": "cd backend && go test ./...",
     "test:go:live": "node scripts/test-backend-live.mjs",

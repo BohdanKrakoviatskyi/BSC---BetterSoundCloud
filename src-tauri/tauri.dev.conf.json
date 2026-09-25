@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "BetterSoundCloud Dev",
+  "identifier": "com.bettersoundcloud.app.dev",
+  "app": {
+    "windows": [
+      {
+        "title": "BetterSoundCloud (Dev)",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1000,
+        "minHeight": 650,
+        "backgroundColor": "#0b0d12"
+      }
+    ]
+  }
+}

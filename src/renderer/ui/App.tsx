@@ -415,6 +415,7 @@ export function App() {
       setAuth('authorized');
       void loadTracks();
       void loadPlaylists();
+      void loadMixedSelections();
     } catch (reason) {
       const message = reasonText(reason, 'Не удалось подключить аккаунт');
       console.error('[ui.auth.login] failed', { error: message });
@@ -535,11 +536,11 @@ export function App() {
   return (
     <div className={`app-shell ${playerVisible ? 'player-visible' : ''}`}>
       <header className="topbar">
-        <div className="window-tools"><button className="icon-button" type="button" onClick={() => setPage('likes')} aria-label="Назад">‹</button><button className="icon-button" type="button" onClick={() => setPage('home')} aria-label="Главная">›</button></div>
-        <div className="global-search"><button type="button" className="home-button" onClick={() => setPage('home')} aria-label="Главная">⌂</button><TrackSearch onSelect={selectTrack} /></div>
+        <div className="window-tools"><button className="icon-button" type="button" onClick={() => setPage('likes')} aria-label="Назад">‹</button></div>
+        <div className="global-search"><TrackSearch onSelect={selectTrack} /></div>
         <div className="top-actions">
           <button className="icon-button header-settings" type="button" onClick={() => setPage('settings')} aria-label="Настройки" title="Настройки">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.25a3.75 3.75 0 1 0 0 7.5 3.75 3.75 0 0 0 0-7.5Z" /><path d="m19.4 13.5 1.1.85-1.1 1.9-1.3-.5a7.7 7.7 0 0 1-1.45.84l-.2 1.4h-2.2l-.3-1.38a7.7 7.7 0 0 1-1.6-.02l-.65 1.23-2.1-.75.2-1.4a7.7 7.7 0 0 1-1.14-1.1l-1.38.3-.9-2.05 1.08-.9a7.7 7.7 0 0 1-.13-1.58l-1.3-.58.65-2.14 1.4.08a7.7 7.7 0 0 1 1.18-1.22l-.22-1.4 2.05-.9.9 1.08a7.7 7.7 0 0 1 1.6-.1l.58-1.3 2.14.65-.08 1.4a7.7 7.7 0 0 1 1.22 1.18l1.4-.22.9 2.05-1.08.9c.14.53.18 1.07.1 1.6Z" /></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33h-.08a1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51h-.08a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82v-.08a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1v-.08a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.08a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.08a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.08a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
           </button>
           <div className="header-account" title={profile?.fullName || profile?.username || 'SoundCloud'}>
             {profile?.avatarUrl
@@ -553,7 +554,7 @@ export function App() {
         </div>
       </header>
       <div className="workspace">
-        <Sidebar profile={profile} page={page} tracks={tracks} onNavigate={setPage} onSearch={focusGlobalSearch} onPlayTrack={selectTrack} />
+        <Sidebar profile={profile} page={page} tracks={tracks} onNavigate={setPage} onPlayTrack={selectTrack} />
         <main className="main-view panel" id="mainView"><div className="main-scroll">
         {page === 'home'
           ? <HomePage

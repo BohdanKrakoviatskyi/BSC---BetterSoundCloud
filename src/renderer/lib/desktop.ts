@@ -1,3 +1,4 @@
+import { appConfigDir } from '@tauri-apps/api/path';
 import { Command, type Child } from '@tauri-apps/plugin-shell';
 
 export type Settings = { accent: string; compact: boolean; volume: number; clientId: string };
@@ -68,7 +69,10 @@ class LocalBackend {
     if (this.starting) return this.starting;
 
     this.starting = (async () => {
-      const command = Command.sidecar('binaries/local-api');
+      const commandOptions = import.meta.env.DEV
+        ? { env: { BSC_DATA_DIR: await appConfigDir() } }
+        : undefined;
+      const command = Command.sidecar('binaries/local-api', [], commandOptions);
       command.stdout.on('data', (chunk) => this.consume(String(chunk)));
       command.stderr.on('data', (chunk) => console.info('[local-backend]', String(chunk).trim()));
       command.on('error', (error) => {

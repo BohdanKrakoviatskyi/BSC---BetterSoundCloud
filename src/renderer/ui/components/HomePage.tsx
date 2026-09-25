@@ -18,10 +18,35 @@ type Props = {
   onRetry: () => void;
 };
 
+function HomeSkeleton() {
+  return (
+    <div className="home-skeleton" role="status" aria-label="Загружаем главную страницу">
+      {[0, 1].map((section) => (
+        <section className="home-skeleton-section" key={section}>
+          <div className="home-skeleton-heading">
+            <span className="home-skeleton-kicker" />
+            <span className="home-skeleton-title" />
+          </div>
+          <div className="home-skeleton-row" aria-hidden="true">
+            {Array.from({ length: 5 }, (_, card) => (
+              <div className="home-skeleton-card" key={card}>
+                <span className="home-skeleton-art" />
+                <span className="home-skeleton-line" />
+                <span className="home-skeleton-line short" />
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
 export function HomePage({ selections, loading, error, history, historyLoading, historyError, artistFallback, currentTrackId, isPlaying, playbackLoading, onPlayTrack, onOpenTrack, onClearHistory, onRetry }: Props) {
+  const visibleSelections = selections.filter((selection) => selection.title.trim().toLowerCase() !== 'recently played');
+
   return (
     <div className="page-content home-page">
-      <div className="category-tabs" aria-label="Разделы главной"><span className="category active">Для тебя</span><span className="category">Музыка</span><span className="category">Подкасты</span></div>
       {error && <div className="error-message" role="alert">{error} <button type="button" className="home-retry" onClick={onRetry}>Повторить</button></div>}
       <TrackCarouselSection
         title="Недавние"
@@ -38,11 +63,11 @@ export function HomePage({ selections, loading, error, history, historyLoading, 
         onPlayTrack={onPlayTrack}
         onOpenTrack={onOpenTrack}
       />
-      {loading && selections.length === 0
-        ? <p className="tracks-empty">Загружаю подборки SoundCloud…</p>
-        : selections.length === 0
+      {loading && visibleSelections.length === 0
+        ? <HomeSkeleton />
+        : visibleSelections.length === 0
           ? !error && <p className="tracks-empty">Персональные подборки пока недоступны.</p>
-          : selections.map((selection) => (
+          : visibleSelections.map((selection) => (
               <TrackCarouselSection
                 key={selection.id}
                 title={selection.title}

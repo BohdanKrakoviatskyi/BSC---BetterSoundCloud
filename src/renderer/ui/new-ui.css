@@ -111,7 +111,7 @@
 /* Keep header controls fixed while allowing only the search field to shrink. */
 .topbar{grid-template-columns:auto minmax(0,1fr) auto;gap:clamp(12px,2vw,24px)}
 .window-tools,.top-actions{min-width:max-content;flex:none}
-.global-search{width:min(100%,448px);min-width:0;justify-self:center}
+.global-search{position:absolute;left:50%;width:min(448px,40vw);min-width:0;justify-self:center;transform:translateX(-50%)}
 .global-search .track-search{min-width:0}
 .top-actions{gap:8px}
 .top-actions>.icon-button{flex:none}
@@ -203,3 +203,25 @@
 @media (prefers-reduced-motion: reduce) {
   .player-bar, .workspace { transition: none; }
 }
+
+.home-skeleton { display: grid; gap: clamp(22px, 4vw, 34px); }
+.home-skeleton-section { min-width: 0; }
+.home-skeleton-heading { display: grid; justify-items: start; gap: 10px; margin-bottom: 13px; }
+.home-skeleton-kicker, .home-skeleton-title, .home-skeleton-art, .home-skeleton-line {
+  display: block;
+  background: linear-gradient(100deg, #242428 20%, #303034 40%, #242428 60%);
+  background-size: 200% 100%;
+  animation: home-skeleton-shimmer 1.5s ease-in-out infinite;
+}
+.home-skeleton-kicker { width: 86px; height: 8px; border-radius: 99px; }
+.home-skeleton-title { width: min(210px, 55%); height: 18px; border-radius: 6px; }
+.home-skeleton-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: clamp(10px, 1.5vw, 17px); }
+.home-skeleton-card { display: grid; min-width: 0; gap: 9px; }
+.home-skeleton-art { width: 100%; aspect-ratio: 1; border-radius: 12px; }
+.home-skeleton-line { width: 84%; height: 9px; border-radius: 99px; }
+.home-skeleton-line.short { width: 56%; height: 7px; opacity: .7; }
+@keyframes home-skeleton-shimmer { to { background-position: -200% 0; } }
+@media (max-width: 900px) { .home-skeleton-row { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 620px) { .home-skeleton-row { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; } }
+@media (max-width: 420px) { .home-skeleton-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (prefers-reduced-motion: reduce) { .home-skeleton-kicker, .home-skeleton-title, .home-skeleton-art, .home-skeleton-line { animation: none; } }
