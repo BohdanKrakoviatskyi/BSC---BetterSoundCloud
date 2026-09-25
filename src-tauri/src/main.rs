@@ -9,8 +9,10 @@ const AUTH_WINDOW_LABEL: &str = "soundcloud-auth";
 const CAPTCHA_WINDOW_LABEL: &str = "soundcloud-captcha";
 /// Event delivered to the React frontend once credentials are captured.
 const CREDENTIALS_EVENT: &str = "soundcloud:credentials";
-/// SoundCloud entry point. The whole login/session flow happens inside this webview.
-const SOUNDCLOUD_URL: &str = "https://soundcloud.com";
+/// Open the dedicated sign-in route in the embedded webview so its requests
+/// remain observable by AUTH_INIT_SCRIPT for automatic credential capture.
+const SOUNDCLOUD_URL: &str = "https://soundcloud.com/signin";
+
 const CAPTCHA_INIT_SCRIPT: &str = r#"
 (() => {
   const bridge = window.__TAURI_INTERNALS__;
@@ -49,6 +51,7 @@ const CAPTCHA_INIT_SCRIPT: &str = r#"
   }
 })();
 "#;
+
 
 /// Credentials captured from the SoundCloud web session.
 ///
@@ -230,7 +233,7 @@ const AUTH_INIT_SCRIPT: &str = r#"
 /// Opens the sign-in webview. A visible window avoids a permanently hidden
 /// flow when the SoundCloud page changes or only part of a session is present.
 #[tauri::command]
-fn start_auth_flow(app: AppHandle) -> Result<(), String> {
+async fn start_auth_flow(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(AUTH_WINDOW_LABEL) {
         return show_window(&window);
     }

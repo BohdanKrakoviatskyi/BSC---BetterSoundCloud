@@ -1,6 +1,6 @@
 import type { Track } from '../../domain/models';
 import { TrackCard } from './TrackCard';
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type Props = {
   title: string;
