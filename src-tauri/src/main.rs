@@ -1,15 +1,57 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use std::sync::Mutex;
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 /// Label of the webview used for SoundCloud authentication.
 const AUTH_WINDOW_LABEL: &str = "soundcloud-auth";
+const CAPTCHA_WINDOW_LABEL: &str = "soundcloud-captcha";
 /// Event delivered to the React frontend once credentials are captured.
 const CREDENTIALS_EVENT: &str = "soundcloud:credentials";
 /// Open the dedicated sign-in route in the embedded webview so its requests
 /// remain observable by AUTH_INIT_SCRIPT for automatic credential capture.
 const SOUNDCLOUD_URL: &str = "https://soundcloud.com/signin";
+
+const CAPTCHA_INIT_SCRIPT: &str = r#"
+(() => {
+  const bridge = window.__TAURI_INTERNALS__;
+  if (!bridge || typeof bridge.invoke !== 'function') return;
+  let reported = false;
+  function reportCheck(url, status) {
+    const path = String(url).split(/[?#]/, 1)[0].toLowerCase();
+    if (reported || status < 200 || status >= 300 || !(path.endsWith('/check') || path.includes('/check/'))) return;
+    reported = true;
+    bridge.invoke('mark_captcha_challenge_completed').catch(() => {});
+  }
+
+  const nativeFetch = window.fetch;
+  if (typeof nativeFetch === 'function') {
+    window.fetch = function (input) {
+      const url = typeof input === 'string' ? input : input && input.url;
+      return nativeFetch.apply(this, arguments).then((response) => {
+        reportCheck(url, response.status);
+        return response;
+      });
+    };
+  }
+
+  const XHR = window.XMLHttpRequest;
+  if (XHR && XHR.prototype) {
+    const open = XHR.prototype.open;
+    const send = XHR.prototype.send;
+    XHR.prototype.open = function (method, url) {
+      this.__bscCaptchaUrl = url;
+      return open.apply(this, arguments);
+    };
+    XHR.prototype.send = function () {
+      this.addEventListener('loadend', () => reportCheck(this.__bscCaptchaUrl, this.status), { once: true });
+      return send.apply(this, arguments);
+    };
+  }
+})();
+"#;
+
 
 /// Credentials captured from the SoundCloud web session.
 ///
@@ -19,6 +61,20 @@ const SOUNDCLOUD_URL: &str = "https://soundcloud.com/signin";
 struct SoundCloudCredentials {
     token: String,
     client_id: String,
+}
+
+#[derive(Default)]
+struct CaptchaState {
+    baseline_datadome_cookie: Mutex<Option<String>>,
+    challenge_passed: Mutex<bool>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CaptchaChallengeStatus {
+    completed: bool,
+    closed: bool,
+    datadome_cookie: Option<String>,
 }
 
 /// Inspect SoundCloud's own API requests inside the sign-in webview. The webview
@@ -198,6 +254,129 @@ async fn start_auth_flow(app: AppHandle) -> Result<(), String> {
         .map_err(|error| format!("не удалось открыть окно входа SoundCloud: {error}"))
 }
 
+/// Opens the SoundCloud anti-bot challenge in an interactive in-app webview.
+#[tauri::command]
+async fn show_captcha_window(app: AppHandle, url: String) -> Result<(), String> {
+    let url = url
+        .parse::<tauri::Url>()
+        .map_err(|error| format!("некорректная ссылка проверки SoundCloud: {error}"))?;
+    let host = url.host_str().unwrap_or_default().to_ascii_lowercase();
+    let allowed_host = host == "captcha-delivery.com"
+        || host.ends_with(".captcha-delivery.com")
+        || host == "soundcloud.com"
+        || host.ends_with(".soundcloud.com");
+    if url.scheme() != "https"
+        || !allowed_host
+        || !url.username().is_empty()
+        || url.password().is_some()
+    {
+        return Err("SoundCloud вернул небезопасную ссылку проверки".to_owned());
+    }
+
+    let baseline_cookie = match app.get_webview_window("main") {
+        Some(window) => datadome_cookie_for(&window)?,
+        None => None,
+    };
+    let state = app.state::<CaptchaState>();
+    *state
+        .baseline_datadome_cookie
+        .lock()
+        .map_err(|_| "не удалось проверить состояние капчи".to_owned())? = baseline_cookie;
+    *state
+        .challenge_passed
+        .lock()
+        .map_err(|_| "не удалось проверить состояние капчи".to_owned())? = false;
+
+    if let Some(window) = app.get_webview_window(CAPTCHA_WINDOW_LABEL) {
+        window
+            .navigate(url)
+            .map_err(|error| format!("не удалось загрузить проверку SoundCloud: {error}"))?;
+        return show_window(&window);
+    }
+
+    WebviewWindowBuilder::new(&app, CAPTCHA_WINDOW_LABEL, WebviewUrl::External(url))
+        .title("Проверка SoundCloud")
+        .inner_size(520.0, 720.0)
+        .min_inner_size(400.0, 540.0)
+        .visible(true)
+        .incognito(false)
+        .initialization_script(CAPTCHA_INIT_SCRIPT)
+        .build()
+        .map(|_| ())
+        .map_err(|error| format!("не удалось открыть проверку SoundCloud: {error}"))
+}
+
+/// Returns the updated DataDome cookie after the challenge is completed.
+#[tauri::command]
+async fn poll_captcha_challenge(app: AppHandle) -> Result<CaptchaChallengeStatus, String> {
+    let Some(window) = app.get_webview_window(CAPTCHA_WINDOW_LABEL) else {
+        return Ok(CaptchaChallengeStatus {
+            completed: false,
+            closed: true,
+            datadome_cookie: None,
+        });
+    };
+
+    let current_cookie = datadome_cookie_for(&window)?;
+    let state = app.state::<CaptchaState>();
+    let baseline_cookie = state
+        .baseline_datadome_cookie
+        .lock()
+        .map_err(|_| "не удалось проверить состояние капчи".to_owned())?
+        .clone();
+    let challenge_passed = *state
+        .challenge_passed
+        .lock()
+        .map_err(|_| "не удалось проверить состояние капчи".to_owned())?;
+    let cookie_changed = current_cookie
+        .as_deref()
+        .is_some_and(|cookie| baseline_cookie.as_deref() != Some(cookie));
+    if challenge_passed || cookie_changed {
+        window
+            .close()
+            .map_err(|error| format!("не удалось закрыть проверку SoundCloud: {error}"))?;
+        return Ok(CaptchaChallengeStatus {
+            completed: true,
+            closed: false,
+            datadome_cookie: current_cookie.or(baseline_cookie),
+        });
+    }
+
+    Ok(CaptchaChallengeStatus {
+        completed: false,
+        closed: false,
+        datadome_cookie: None,
+    })
+}
+
+#[tauri::command]
+fn mark_captcha_challenge_completed(
+    window: WebviewWindow,
+    state: State<'_, CaptchaState>,
+) -> Result<(), String> {
+    if window.label() != CAPTCHA_WINDOW_LABEL {
+        return Err("сигнал проверки получен не из окна капчи".to_owned());
+    }
+    *state
+        .challenge_passed
+        .lock()
+        .map_err(|_| "не удалось сохранить результат проверки".to_owned())? = true;
+    Ok(())
+}
+
+fn datadome_cookie_for(window: &WebviewWindow) -> Result<Option<String>, String> {
+    let url = "https://soundcloud.com"
+        .parse::<tauri::Url>()
+        .map_err(|error| format!("некорректный адрес SoundCloud: {error}"))?;
+    let cookies = window
+        .cookies_for_url(url)
+        .map_err(|error| format!("не удалось прочитать cookie проверки SoundCloud: {error}"))?;
+    Ok(cookies
+        .into_iter()
+        .find(|cookie| cookie.name() == "datadome")
+        .map(|cookie| cookie.value().to_owned()))
+}
+
 /// Makes the auth window visible when manual sign-in is required.
 #[tauri::command]
 fn show_auth_window(app: AppHandle) -> Result<(), String> {
@@ -254,9 +433,13 @@ fn show_window(window: &WebviewWindow) -> Result<(), String> {
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .manage(CaptchaState::default())
         .invoke_handler(tauri::generate_handler![
             start_auth_flow,
             show_auth_window,
+            show_captcha_window,
+            poll_captcha_challenge,
+            mark_captcha_challenge_completed,
             save_credentials,
             finish_auth_flow
         ])

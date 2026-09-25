@@ -155,14 +155,15 @@ type soundcloudPlaylistCard struct {
 }
 
 type soundcloudPlaylistSource struct {
-	ID           int64  `json:"id"`
-	URN          string `json:"urn"`
-	Title        string `json:"title"`
-	PermalinkURL string `json:"permalink_url"`
-	ArtworkURL   string `json:"artwork_url"`
-	TrackCount   int64  `json:"track_count"`
-	Public       *bool  `json:"public"`
-	IsAlbum      bool   `json:"is_album"`
+	ID           int64             `json:"id"`
+	URN          string            `json:"urn"`
+	Title        string            `json:"title"`
+	PermalinkURL string            `json:"permalink_url"`
+	ArtworkURL   string            `json:"artwork_url"`
+	TrackCount   int64             `json:"track_count"`
+	Tracks       []soundcloudTrack `json:"tracks,omitempty"`
+	Public       *bool             `json:"public"`
+	IsAlbum      bool              `json:"is_album"`
 	User         struct {
 		Username string `json:"username"`
 	} `json:"user"`
@@ -178,12 +179,22 @@ type loginParams struct {
 }
 
 type trackLikeParams struct {
-	TrackID  int64  `json:"trackId"`
-	TrackURN string `json:"trackUrn"`
+	TrackID        int64  `json:"trackId"`
+	TrackURN       string `json:"trackUrn"`
+	DataDomeCookie string `json:"datadomeCookie,omitempty"`
 }
 
 type trackLikeResult struct {
-	Liked bool `json:"liked"`
+	Liked      bool   `json:"liked"`
+	CaptchaURL string `json:"captchaUrl,omitempty"`
+}
+
+type captchaChallengeError struct {
+	URL string
+}
+
+func (e *captchaChallengeError) Error() string {
+	return "SoundCloud требует пройти проверку перед изменением лайка"
 }
 
 type trackDetailsParams struct {
@@ -839,8 +850,7 @@ func (s *service) RPCPlaylistTracks(params playlistTracksParams) ([]soundcloudTr
 		}
 		query := endpoint.Query()
 		query.Set("representation", "full")
-		query.Set("limit", "200")
-		query.Set("linked_partitioning", "true")
+		query.Set("limit", "500")
 		query.Set("client_id", s.settings.ClientID)
 		endpoint.RawQuery = query.Encode()
 		tracks, err := s.fetchPlaylistTracksFrom(base, endpoint.String())
@@ -861,53 +871,131 @@ func (s *service) fetchPlaylistTracksFrom(base, endpoint string) ([]soundcloudTr
 	if err != nil {
 		return nil, err
 	}
-	tracks := make([]soundcloudTrackCard, 0)
-	seenPages := make(map[string]bool)
-	for page := 0; endpoint != ""; page++ {
-		if page >= 100 {
-			return nil, errors.New("SoundCloud вернул слишком много страниц треков плейлиста")
+	playlistURL, err := url.Parse(endpoint)
+	if err != nil || playlistURL.Scheme != baseURL.Scheme || !strings.EqualFold(playlistURL.Host, baseURL.Host) {
+		return nil, errors.New("SoundCloud вернул некорректный URL плейлиста")
+	}
+	query := playlistURL.Query()
+	query.Set("client_id", s.settings.ClientID)
+	playlistURL.RawQuery = query.Encode()
+
+	var payload struct {
+		Collection []soundcloudTrack `json:"collection"`
+		Tracks     []soundcloudTrack `json:"tracks"`
+	}
+	if err := s.getSoundCloudJSONLimit(playlistURL.String(), &payload, 16<<20); err != nil {
+		return nil, err
+	}
+	playlistTracks := payload.Tracks
+	if playlistTracks == nil {
+		playlistTracks = payload.Collection
+	}
+	return s.hydratePlaylistTracks(base, playlistTracks)
+}
+
+func (s *service) hydratePlaylistTracks(base string, playlistTracks []soundcloudTrack) ([]soundcloudTrackCard, error) {
+	trackIDs := make([]int64, 0, len(playlistTracks))
+	seenIDs := make(map[int64]struct{}, len(playlistTracks))
+	for _, track := range playlistTracks {
+		if track.ID <= 0 {
+			continue
 		}
-		parsed, parseErr := url.Parse(endpoint)
-		if parseErr != nil || parsed.Scheme != "https" || !strings.EqualFold(parsed.Host, baseURL.Host) {
-			return nil, errors.New("SoundCloud вернул некорректную ссылку страницы плейлиста")
+		if _, seen := seenIDs[track.ID]; seen {
+			continue
 		}
-		if seenPages[endpoint] {
-			return nil, errors.New("SoundCloud вернул повторяющуюся ссылку страницы плейлиста")
+		seenIDs[track.ID] = struct{}{}
+		trackIDs = append(trackIDs, track.ID)
+	}
+
+	tracksByID := make(map[int64]soundcloudTrack, len(trackIDs))
+	for start := 0; start < len(trackIDs); start += 50 {
+		end := min(start+50, len(trackIDs))
+		fullTracks, err := s.fetchTracksByIDs(base, trackIDs[start:end])
+		if err != nil {
+			return nil, fmt.Errorf("не удалось дозагрузить треки плейлиста (пакет %d): %w", start/50+1, err)
 		}
-		seenPages[endpoint] = true
-		query := parsed.Query()
-		query.Set("client_id", s.settings.ClientID)
-		parsed.RawQuery = query.Encode()
-		endpoint = parsed.String()
+		for _, track := range fullTracks {
+			if track.ID > 0 && track.Title != "" {
+				tracksByID[track.ID] = track
+			}
+		}
+	}
+
+	ordered := make([]soundcloudTrackCard, 0, len(playlistTracks))
+	for _, original := range playlistTracks {
+		if original.ID <= 0 {
+			continue
+		}
+		track, found := tracksByID[original.ID]
+		if !found {
+			if strings.TrimSpace(original.Title) == "" {
+				continue
+			}
+			track = original
+		}
+		if track.Title == "" {
+			continue
+		}
+		trackURN := track.URN
+		if trackURN == "" {
+			trackURN = fmt.Sprintf("soundcloud:tracks:%d", track.ID)
+		}
+		artwork := normalizeArtworkURL(track.ArtworkURL)
+		card := soundcloudTrackCard{ID: track.ID, TrackURN: trackURN, Title: track.Title, PermalinkURL: track.PermalinkURL, ArtworkURL: artwork, Duration: track.Duration, PlaybackCount: track.PlaybackCount, LikesCount: track.LikesCount}
+		card.User.Username = track.User.Username
+		ordered = append(ordered, card)
+	}
+	return ordered, nil
+}
+
+func (s *service) fetchTracksByIDs(base string, trackIDs []int64) ([]soundcloudTrack, error) {
+	if len(trackIDs) == 0 {
+		return []soundcloudTrack{}, nil
+	}
+	baseURL, err := url.Parse(strings.TrimRight(base, "/"))
+	if err != nil || baseURL.Host == "" {
+		return nil, errors.New("некорректный адрес SoundCloud API")
+	}
+
+	endpoint := &url.URL{
+		Scheme: baseURL.Scheme,
+		Host:   baseURL.Host,
+		Path:   strings.TrimRight(baseURL.Path, "/") + "/tracks",
+	}
+	query := endpoint.Query()
+	ids := make([]string, len(trackIDs))
+	for index, id := range trackIDs {
+		ids[index] = strconv.FormatInt(id, 10)
+	}
+	query.Set("ids", strings.Join(ids, ","))
+	query.Set("client_id", s.settings.ClientID)
+	endpoint.RawQuery = query.Encode()
+
+	var response json.RawMessage
+	if err := s.getSoundCloudJSONLimit(endpoint.String(), &response, 16<<20); err != nil {
+		return nil, err
+	}
+	trimmed := bytes.TrimSpace(response)
+	var tracks []soundcloudTrack
+	switch {
+	case len(trimmed) > 0 && trimmed[0] == '[':
+		if err := json.Unmarshal(trimmed, &tracks); err != nil {
+			return nil, fmt.Errorf("не удалось разобрать список треков SoundCloud: %w", err)
+		}
+	case len(trimmed) > 0 && trimmed[0] == '{':
 		var payload struct {
 			Collection []soundcloudTrack `json:"collection"`
 			Tracks     []soundcloudTrack `json:"tracks"`
-			NextHref   string            `json:"next_href"`
 		}
-		if err := s.getSoundCloudJSONLimit(endpoint, &payload, 16<<20); err != nil {
-			return nil, err
+		if err := json.Unmarshal(trimmed, &payload); err != nil {
+			return nil, fmt.Errorf("не удалось разобрать список треков SoundCloud: %w", err)
 		}
-		pageTracks := payload.Collection
-		if pageTracks == nil {
-			pageTracks = payload.Tracks
+		tracks = payload.Collection
+		if tracks == nil {
+			tracks = payload.Tracks
 		}
-		for _, source := range pageTracks {
-			if source.ID <= 0 || source.Title == "" {
-				continue
-			}
-			trackURN := source.URN
-			if trackURN == "" {
-				trackURN = fmt.Sprintf("soundcloud:tracks:%d", source.ID)
-			}
-			artwork := source.ArtworkURL
-			if strings.Contains(artwork, "-large.") {
-				artwork = strings.Replace(artwork, "-large.", "-t500x500.", 1)
-			}
-			track := soundcloudTrackCard{ID: source.ID, TrackURN: trackURN, Title: source.Title, PermalinkURL: source.PermalinkURL, ArtworkURL: artwork, Duration: source.Duration, PlaybackCount: source.PlaybackCount, LikesCount: source.LikesCount}
-			track.User.Username = source.User.Username
-			tracks = append(tracks, track)
-		}
-		endpoint = payload.NextHref
+	default:
+		return nil, errors.New("SoundCloud вернул пустой или некорректный список треков")
 	}
 	return tracks, nil
 }
@@ -924,7 +1012,7 @@ func (s *service) fetchPlaylistsFrom(base, endpoint string) ([]soundcloudPlaylis
 			return nil, errors.New("SoundCloud вернул слишком много страниц плейлистов (лимит 100)")
 		}
 		parsed, parseErr := url.Parse(endpoint)
-		if parseErr != nil || parsed.Scheme != "https" || !strings.EqualFold(parsed.Host, baseURL.Host) {
+		if parseErr != nil || parsed.Scheme != baseURL.Scheme || !strings.EqualFold(parsed.Host, baseURL.Host) {
 			return nil, errors.New("SoundCloud вернул некорректную ссылку страницы плейлистов")
 		}
 		if seenPages[endpoint] {
@@ -958,9 +1046,17 @@ func (s *service) fetchPlaylistsFrom(base, endpoint string) ([]soundcloudPlaylis
 			if playlistID == "" || source.Title == "" {
 				continue
 			}
-			artwork := source.ArtworkURL
-			if strings.Contains(artwork, "-large.") {
-				artwork = strings.Replace(artwork, "-large.", "-t500x500.", 1)
+			artwork := normalizeArtworkURL(source.ArtworkURL)
+			if artwork == "" && len(source.Tracks) > 0 {
+				artwork = normalizeArtworkURL(source.Tracks[0].ArtworkURL)
+			}
+			if artwork == "" && source.ID > 0 {
+				fallback, fallbackErr := s.fetchFirstPlaylistTrackArtwork(base, source.ID)
+				if fallbackErr != nil {
+					log.Printf("playlists.mine stage=cover_fallback playlist_id=%d error=%q", source.ID, fallbackErr.Error())
+				} else {
+					artwork = fallback
+				}
 			}
 			playlist := soundcloudPlaylistCard{ID: playlistID, URN: playlistURN, Title: source.Title, PermalinkURL: source.PermalinkURL, ArtworkURL: artwork, TrackCount: source.TrackCount}
 			playlist.User.Username = source.User.Username
@@ -969,6 +1065,63 @@ func (s *service) fetchPlaylistsFrom(base, endpoint string) ([]soundcloudPlaylis
 		endpoint = payload.NextHref
 	}
 	return playlists, nil
+}
+
+func normalizeArtworkURL(artwork string) string {
+	artwork = strings.Replace(artwork, "-large.", "-t500x500.", 1)
+	return strings.Replace(artwork, "/large/", "/t500x500/", 1)
+}
+
+func (s *service) fetchFirstPlaylistTrackArtwork(base string, playlistID int64) (string, error) {
+	baseURL, err := url.Parse(strings.TrimRight(base, "/"))
+	if err != nil || baseURL.Host == "" || playlistID <= 0 {
+		return "", errors.New("некорректный адрес или ID плейлиста")
+	}
+
+	endpoint := &url.URL{
+		Scheme: baseURL.Scheme,
+		Host:   baseURL.Host,
+		Path:   strings.TrimRight(baseURL.Path, "/") + "/playlists/" + strconv.FormatInt(playlistID, 10),
+	}
+	query := endpoint.Query()
+	query.Set("representation", "full")
+	query.Set("limit", "5")
+	query.Set("client_id", s.settings.ClientID)
+	endpoint.RawQuery = query.Encode()
+
+	var payload struct {
+		Tracks     []soundcloudTrack `json:"tracks"`
+		Collection []soundcloudTrack `json:"collection"`
+	}
+	if err := s.getSoundCloudJSONLimit(endpoint.String(), &payload, 16<<20); err != nil {
+		return "", err
+	}
+	playlistTracks := payload.Tracks
+	if playlistTracks == nil {
+		playlistTracks = payload.Collection
+	}
+	if len(playlistTracks) == 0 {
+		return "", nil
+	}
+
+	first := playlistTracks[0]
+	if artwork := normalizeArtworkURL(first.ArtworkURL); artwork != "" {
+		return artwork, nil
+	}
+	if first.ID <= 0 {
+		return "", nil
+	}
+
+	tracks, err := s.fetchTracksByIDs(base, []int64{first.ID})
+	if err != nil {
+		return "", err
+	}
+	for _, track := range tracks {
+		if track.ID == first.ID {
+			return normalizeArtworkURL(track.ArtworkURL), nil
+		}
+	}
+	return "", nil
 }
 
 func (s *service) RPCTrackDetails(params trackDetailsParams) (soundcloudTrackDetails, error) {
@@ -1244,20 +1397,25 @@ func normalizeSearchTrack(id int64, urn, title, permalinkURL, artworkURL, avatar
 }
 
 func (s *service) RPCTrackLike(params trackLikeParams) (trackLikeResult, error) {
-	if err := s.setTrackLiked(params.TrackID, params.TrackURN, true); err != nil {
-		return trackLikeResult{}, err
-	}
-	return trackLikeResult{Liked: true}, nil
+	return trackLikeResponse(s.setTrackLiked(params.TrackID, params.TrackURN, true, params.DataDomeCookie), true)
 }
 
 func (s *service) RPCTrackUnlike(params trackLikeParams) (trackLikeResult, error) {
-	if err := s.setTrackLiked(params.TrackID, params.TrackURN, false); err != nil {
-		return trackLikeResult{}, err
-	}
-	return trackLikeResult{Liked: false}, nil
+	return trackLikeResponse(s.setTrackLiked(params.TrackID, params.TrackURN, false, params.DataDomeCookie), false)
 }
 
-func (s *service) setTrackLiked(trackID int64, trackURN string, liked bool) error {
+func trackLikeResponse(err error, requestedLiked bool) (trackLikeResult, error) {
+	if err == nil {
+		return trackLikeResult{Liked: requestedLiked}, nil
+	}
+	var challenge *captchaChallengeError
+	if errors.As(err, &challenge) {
+		return trackLikeResult{Liked: !requestedLiked, CaptchaURL: challenge.URL}, nil
+	}
+	return trackLikeResult{}, err
+}
+
+func (s *service) setTrackLiked(trackID int64, trackURN string, liked bool, dataDomeCookie string) error {
 	action := "unlike"
 	if liked {
 		action = "like"
@@ -1274,16 +1432,44 @@ func (s *service) setTrackLiked(trackID int64, trackURN string, liked bool) erro
 	if strings.TrimSpace(trackURN) == "" {
 		trackURN = fmt.Sprintf("soundcloud:tracks:%d", trackID)
 	}
+	if len(dataDomeCookie) > 4096 || strings.IndexFunc(dataDomeCookie, func(character rune) bool {
+		return character < 0x21 || character > 0x7e || strings.ContainsRune(";,\\\"", character)
+	}) >= 0 {
+		return errors.New("некорректная cookie проверки SoundCloud")
+	}
 	method := http.MethodDelete
 	if liked {
 		method = http.MethodPost
 	}
 	var lastErr error
 	var attempts []string
-	for _, base := range s.apiBases() {
+	bases := s.apiBases()
+	if len(bases) > 1 {
+		bases = bases[:1]
+	}
+	for _, base := range bases {
+		requestMethod := method
+		isWebAPI := base == webAPIBase || (s.apiBase != "" && s.apiBase != officialAPIBase && base == s.apiBase)
 		endpoint := fmt.Sprintf("%s/likes/tracks/%s", strings.TrimRight(base, "/"), url.PathEscape(trackURN))
-		log.Printf("track.%s stage=request host=%s track_id=%d method=%s", action, hostForLog(base), trackID, method)
-		req, err := http.NewRequest(method, endpoint, nil)
+		if isWebAPI {
+			if s.auth.Profile.ID <= 0 {
+				return errors.New("не удалось определить ID аккаунта SoundCloud для изменения лайка")
+			}
+			endpoint = fmt.Sprintf("%s/users/%d/track_likes/%d", strings.TrimRight(base, "/"), s.auth.Profile.ID, trackID)
+			parsed, err := url.Parse(endpoint)
+			if err != nil {
+				return err
+			}
+			query := parsed.Query()
+			query.Set("client_id", s.settings.ClientID)
+			parsed.RawQuery = query.Encode()
+			endpoint = parsed.String()
+			if liked {
+				requestMethod = http.MethodPut
+			}
+		}
+		log.Printf("track.%s stage=request host=%s track_id=%d method=%s", action, hostForLog(base), trackID, requestMethod)
+		req, err := http.NewRequest(requestMethod, endpoint, nil)
 		if err != nil {
 			log.Printf("track.%s stage=request_build_error track_id=%d error=%q", action, trackID, err.Error())
 			return err
@@ -1291,6 +1477,10 @@ func (s *service) setTrackLiked(trackID int64, trackURN string, liked bool) erro
 		req.Header.Set("Authorization", "OAuth "+s.auth.Token)
 		req.Header.Set("Accept", "application/json")
 		req.Header.Set("User-Agent", userAgent)
+		if dataDomeCookie != "" {
+			req.Header.Set("Cookie", "datadome="+dataDomeCookie)
+			req.Header.Set("X-Datadome-ClientId", dataDomeCookie)
+		}
 		if base == webAPIBase {
 			req.Header.Set("Origin", "https://soundcloud.com")
 			req.Header.Set("Referer", "https://soundcloud.com/")
@@ -1308,10 +1498,21 @@ func (s *service) setTrackLiked(trackID int64, trackURN string, liked bool) erro
 			bodyText = strings.ReplaceAll(bodyText, s.auth.Token, "[redacted]")
 		}
 		bodyText = strings.Join(strings.Fields(bodyText), " ")
+		challengeURL := ""
+		if resp.StatusCode == http.StatusForbidden {
+			challengeURL = extractCaptchaURL(resp.Header, body)
+			if challengeURL != "" {
+				bodyText = "[captcha challenge response; URL omitted]"
+			}
+		}
 		if len(bodyText) > 600 {
 			bodyText = bodyText[:600] + "…"
 		}
 		log.Printf("track.%s stage=response host=%s track_id=%d status=%d content_type=%q body=%q read_error=%v", action, hostForLog(base), trackID, resp.StatusCode, resp.Header.Get("Content-Type"), bodyText, readErr)
+		if challengeURL != "" {
+			log.Printf("track.%s stage=captcha_challenge track_id=%d", action, trackID)
+			return &captchaChallengeError{URL: challengeURL}
+		}
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			log.Printf("track.%s stage=complete track_id=%d elapsed_ms=%d", action, trackID, time.Since(startedAt).Milliseconds())
 			return nil
@@ -1344,6 +1545,72 @@ func (s *service) setTrackLiked(trackID int64, trackURN string, liked bool) erro
 	}
 	log.Printf("track.%s stage=failed track_id=%d elapsed_ms=%d error=%q", action, trackID, time.Since(startedAt).Milliseconds(), lastErr.Error())
 	return lastErr
+}
+
+func extractCaptchaURL(headers http.Header, body []byte) string {
+	if candidate := safeChallengeURL(headers.Get("Location")); candidate != "" {
+		return candidate
+	}
+	var payload any
+	if json.Unmarshal(body, &payload) == nil {
+		if candidate := findChallengeURL(payload); candidate != "" {
+			return candidate
+		}
+	}
+
+	remaining := string(body)
+	for {
+		start := strings.Index(remaining, "https://")
+		if start < 0 {
+			return ""
+		}
+		remaining = remaining[start:]
+		end := strings.IndexAny(remaining, " \t\r\n\"'<>]")
+		candidate := remaining
+		if end >= 0 {
+			candidate = remaining[:end]
+		}
+		candidate = strings.TrimRight(candidate, ",.;:)")
+		if safe := safeChallengeURL(candidate); safe != "" {
+			return safe
+		}
+		if end < 0 {
+			return ""
+		}
+		remaining = remaining[end:]
+	}
+}
+
+func findChallengeURL(value any) string {
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, nested := range typed {
+			name := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(key, "_", ""), "-", ""))
+			if candidate, ok := nested.(string); ok && (name == "url" || name == "location" || name == "redirect" || strings.Contains(name, "captcha") || strings.Contains(name, "challenge")) {
+				if safe := safeChallengeURL(candidate); safe != "" {
+					return safe
+				}
+			}
+			if safe := findChallengeURL(nested); safe != "" {
+				return safe
+			}
+		}
+	case []any:
+		for _, nested := range typed {
+			if safe := findChallengeURL(nested); safe != "" {
+				return safe
+			}
+		}
+	}
+	return ""
+}
+
+func safeChallengeURL(candidate string) string {
+	parsed, err := url.Parse(strings.TrimSpace(candidate))
+	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil {
+		return ""
+	}
+	return parsed.String()
 }
 
 // authStatus отдаёт renderer-у только признак входа и профиль.

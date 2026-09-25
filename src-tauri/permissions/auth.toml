@@ -12,6 +12,21 @@ description = "Allows the main window to close the SoundCloud sign-in webview af
 commands.allow = ["finish_auth_flow"]
 
 [[permission]]
+identifier = "allow-show-captcha-window"
+description = "Allows the main window to open the SoundCloud captcha challenge in an in-app webview."
+commands.allow = ["show_captcha_window"]
+
+[[permission]]
+identifier = "allow-poll-captcha-challenge"
+description = "Allows the main window to poll for completion of the SoundCloud captcha challenge."
+commands.allow = ["poll_captcha_challenge"]
+
+[[permission]]
+identifier = "allow-mark-captcha-completed"
+description = "Allows the captcha webview to report a successful challenge check."
+commands.allow = ["mark_captcha_challenge_completed"]
+
+[[permission]]
 identifier = "allow-show-auth-window"
 description = "Allows the SoundCloud webview to reveal itself when manual sign-in is required."
 commands.allow = ["show_auth_window"]

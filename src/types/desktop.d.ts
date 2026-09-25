@@ -31,8 +31,8 @@ declare global {
       searchTracks(query: string): Promise<SoundCloudSearchTrack[]>;
       relatedTracks(trackId: number): Promise<SoundCloudSearchTrack[]>;
       mixedSelections(): Promise<SoundCloudMixedSelection[]>;
-      likeTrack(trackId: number, trackUrn: string): Promise<TrackLikeResult>;
-      unlikeTrack(trackId: number, trackUrn: string): Promise<TrackLikeResult>;
+      likeTrack(trackId: number, trackUrn: string, datadomeCookie?: string): Promise<TrackLikeResult>;
+      unlikeTrack(trackId: number, trackUrn: string, datadomeCookie?: string): Promise<TrackLikeResult>;
     };
   }
 }

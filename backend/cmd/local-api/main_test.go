@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -225,5 +226,255 @@ func TestAuthStateSurvivesRestart(t *testing.T) {
 	status := restarted.authStatus()
 	if !status.Authorized || status.Profile == nil || status.Profile.Username != "Max" {
 		t.Fatalf("session should survive restart: %#v", status)
+	}
+}
+
+func TestPlaylistTracksHydrateStubsInOriginalOrder(t *testing.T) {
+	var chunkSizes []int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "OAuth playlist-token" {
+			http.Error(w, "missing auth", http.StatusUnauthorized)
+			return
+		}
+
+		switch r.URL.Path {
+		case "/playlists/42":
+			if r.URL.Query().Get("limit") != "500" {
+				t.Errorf("playlist limit = %q, want 500", r.URL.Query().Get("limit"))
+			}
+			stubs := make([]map[string]any, 55)
+			for index := range stubs {
+				stub := map[string]any{"id": index + 1}
+				if index < 5 {
+					stub["title"] = "Partial track " + strconv.Itoa(index+1)
+				}
+				stubs[index] = stub
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"tracks": stubs})
+		case "/tracks":
+			ids := strings.Split(r.URL.Query().Get("ids"), ",")
+			chunkSizes = append(chunkSizes, len(ids))
+			tracks := make([]map[string]any, 0, len(ids))
+			for index := len(ids) - 1; index >= 0; index-- {
+				id, err := strconv.Atoi(ids[index])
+				if err != nil {
+					t.Errorf("invalid track ID %q: %v", ids[index], err)
+					continue
+				}
+				if id == 17 {
+					continue
+				}
+				tracks = append(tracks, map[string]any{
+					"id": id, "title": "Hydrated track " + strconv.Itoa(id),
+					"duration": id * 1000, "artwork_url": "https://sndcdn.com/large/cover.jpg",
+				})
+			}
+			_ = json.NewEncoder(w).Encode(tracks)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	svc := newTestService(t, server.URL)
+	svc.auth.Token = "playlist-token"
+	tracks, err := svc.RPCPlaylistTracks(playlistTracksParams{PlaylistURN: "soundcloud:playlists:42"})
+	if err != nil {
+		t.Fatalf("playlist.tracks: %v", err)
+	}
+	if len(chunkSizes) != 2 || chunkSizes[0] != 50 || chunkSizes[1] != 5 {
+		t.Fatalf("chunk sizes = %v, want [50 5]", chunkSizes)
+	}
+	if len(tracks) != 54 {
+		t.Fatalf("loaded %d tracks, want 54 (missing track 17 should be skipped)", len(tracks))
+	}
+
+	wantID := 1
+	for _, track := range tracks {
+		if wantID == 17 {
+			wantID++
+		}
+		if track.ID != int64(wantID) {
+			t.Fatalf("track order has ID %d, want %d", track.ID, wantID)
+		}
+		if track.Title != "Hydrated track "+strconv.Itoa(wantID) {
+			t.Fatalf("track %d was not hydrated: title = %q", wantID, track.Title)
+		}
+		if track.Duration != int64(wantID*1000) {
+			t.Fatalf("track %d duration = %d, want %d", wantID, track.Duration, wantID*1000)
+		}
+		wantID++
+	}
+}
+
+func TestPlaylistsFallbackToFirstTrackArtwork(t *testing.T) {
+	playlistDetailRequests := 0
+	trackHydrationRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "OAuth playlist-token" {
+			http.Error(w, "missing auth", http.StatusUnauthorized)
+			return
+		}
+
+		switch r.URL.Path {
+		case "/users/7/playlists":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"collection": []any{
+					map[string]any{"id": 42, "title": "Fallback from API", "track_count": 1},
+					map[string]any{
+						"id": 43, "title": "Fallback from embedded track", "track_count": 1,
+						"tracks": []any{map[string]any{"id": 123, "artwork_url": "https://sndcdn.com/embedded-large.jpg"}},
+					},
+				},
+			})
+		case "/playlists/42":
+			playlistDetailRequests++
+			if r.URL.Query().Get("limit") != "5" {
+				t.Errorf("first-track limit = %q, want 5", r.URL.Query().Get("limit"))
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"tracks": []any{map[string]any{"id": 99}}})
+		case "/tracks":
+			trackHydrationRequests++
+			if r.URL.Query().Get("ids") != "99" {
+				t.Errorf("track IDs = %q, want 99", r.URL.Query().Get("ids"))
+			}
+			_ = json.NewEncoder(w).Encode([]any{map[string]any{
+				"id": 99, "title": "First track", "artwork_url": "https://sndcdn.com/first-large.jpg",
+			}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	svc := newTestService(t, server.URL)
+	svc.auth.Token = "playlist-token"
+	playlists, err := svc.fetchPlaylistsFrom(server.URL, server.URL+"/users/7/playlists?limit=200")
+	if err != nil {
+		t.Fatalf("fetch playlists: %v", err)
+	}
+	if len(playlists) != 2 {
+		t.Fatalf("loaded %d playlists, want 2", len(playlists))
+	}
+	if playlists[0].ArtworkURL != "https://sndcdn.com/first-t500x500.jpg" {
+		t.Fatalf("first playlist artwork = %q", playlists[0].ArtworkURL)
+	}
+	if playlists[1].ArtworkURL != "https://sndcdn.com/embedded-t500x500.jpg" {
+		t.Fatalf("embedded fallback artwork = %q", playlists[1].ArtworkURL)
+	}
+	if playlistDetailRequests != 1 || trackHydrationRequests != 1 {
+		t.Fatalf("fallback requests = playlist:%d tracks:%d, want 1 each", playlistDetailRequests, trackHydrationRequests)
+	}
+}
+
+func TestPlaybackHistorySurvivesRestart(t *testing.T) {
+	historyPath := filepath.Join(t.TempDir(), "history.json")
+	svc := newTestService(t, officialAPIBase)
+	svc.historyPath = historyPath
+
+	track := soundcloudTrackCard{ID: 42, TrackURN: "soundcloud:tracks:42", Title: "Recently played", Duration: 125_000}
+	payload, err := json.Marshal(historyTrackParams{Track: track})
+	if err != nil {
+		t.Fatalf("marshal track: %v", err)
+	}
+	if _, err := svc.call("history.record", payload); err != nil {
+		t.Fatalf("history.record: %v", err)
+	}
+
+	restarted := newTestService(t, officialAPIBase)
+	restarted.historyPath = historyPath
+	if err := restarted.loadHistory(); err != nil {
+		t.Fatalf("loadHistory after restart: %v", err)
+	}
+	loaded, err := restarted.RPCHistoryList(emptyParams{})
+	if err != nil {
+		t.Fatalf("history.list after restart: %v", err)
+	}
+	if len(loaded) != 1 || loaded[0].ID != track.ID || loaded[0].Title != track.Title {
+		t.Fatalf("restored history = %#v, want the recently played track", loaded)
+	}
+}
+
+func TestTrackLikeUsesSoundCloudV2Endpoints(t *testing.T) {
+	for _, test := range []struct {
+		name                 string
+		liked                bool
+		wantMethod           string
+		dataDomeCookie       string
+		wantCookieHeader     string
+		wantDataDomeClientID string
+	}{
+		{name: "like", liked: true, wantMethod: http.MethodPut},
+		{name: "unlike", liked: false, wantMethod: http.MethodDelete},
+		{name: "like after captcha", liked: true, wantMethod: http.MethodPut, dataDomeCookie: "verified-cookie", wantCookieHeader: "datadome=verified-cookie", wantDataDomeClientID: "verified-cookie"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/users/1323227109/track_likes/2391534675" {
+					t.Errorf("request path = %q", r.URL.Path)
+				}
+				if r.Method != test.wantMethod {
+					t.Errorf("request method = %q, want %q", r.Method, test.wantMethod)
+				}
+				if r.URL.Query().Get("client_id") != "test-client-id" {
+					t.Errorf("client_id = %q", r.URL.Query().Get("client_id"))
+				}
+				if r.Header.Get("Authorization") != "OAuth test-token" {
+					t.Errorf("unexpected authorization header")
+				}
+				if r.Header.Get("Cookie") != test.wantCookieHeader {
+					t.Errorf("Cookie header = %q, want %q", r.Header.Get("Cookie"), test.wantCookieHeader)
+				}
+				if r.Header.Get("X-Datadome-ClientId") != test.wantDataDomeClientID {
+					t.Errorf("X-Datadome-ClientId header = %q, want %q", r.Header.Get("X-Datadome-ClientId"), test.wantDataDomeClientID)
+				}
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
+
+			svc := newTestService(t, server.URL)
+			svc.auth.Token = "test-token"
+			svc.auth.Profile.ID = 1323227109
+			svc.settings.ClientID = "test-client-id"
+			params := trackLikeParams{TrackID: 2391534675, TrackURN: "soundcloud:tracks:2391534675", DataDomeCookie: test.dataDomeCookie}
+			var result trackLikeResult
+			var err error
+			if test.liked {
+				result, err = svc.RPCTrackLike(params)
+			} else {
+				result, err = svc.RPCTrackUnlike(params)
+			}
+			if err != nil {
+				t.Fatalf("track-like request failed: %v", err)
+			}
+			if result.Liked != test.liked || result.CaptchaURL != "" {
+				t.Fatalf("result = %#v", result)
+			}
+		})
+	}
+}
+
+func TestTrackLikeReturnsCaptchaURLFromForbiddenResponse(t *testing.T) {
+	const captchaURL = "https://geo.captcha-delivery.com/captcha/?challenge=test"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			t.Errorf("request method = %q, want PUT", r.Method)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"url":"` + captchaURL + `"}`))
+	}))
+	defer server.Close()
+
+	svc := newTestService(t, server.URL)
+	svc.auth.Token = "test-token"
+	svc.auth.Profile.ID = 1323227109
+	svc.settings.ClientID = "test-client-id"
+	result, err := svc.RPCTrackLike(trackLikeParams{TrackID: 2391534675})
+	if err != nil {
+		t.Fatalf("captcha response should be returned to the UI: %v", err)
+	}
+	if result.Liked || result.CaptchaURL != captchaURL {
+		t.Fatalf("result = %#v, want captcha URL and no like", result)
 	}
 }

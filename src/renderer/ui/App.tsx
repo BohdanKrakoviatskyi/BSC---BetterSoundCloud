@@ -22,6 +22,19 @@ function reasonText(reason: unknown, fallback: string): string {
   return reason instanceof Error ? reason.message : fallback;
 }
 
+type CaptchaChallengeStatus = { completed: boolean; closed: boolean; datadomeCookie?: string | null };
+
+async function waitForCaptchaChallenge(): Promise<CaptchaChallengeStatus | null> {
+  const deadline = Date.now() + 3 * 60_000;
+  while (Date.now() < deadline) {
+    const status = await invoke<CaptchaChallengeStatus>('poll_captcha_challenge');
+    if (status.completed) return status;
+    if (status.closed) return null;
+    await new Promise((resolve) => window.setTimeout(resolve, 1000));
+  }
+  return null;
+}
+
 export function App() {
   const [settings, setSettings] = useState(defaultSettings);
   const [ready, setReady] = useState(false);
@@ -50,6 +63,7 @@ export function App() {
   const [playerVisible, setPlayerVisible] = useState(false);
   const currentTrackRef = useRef<Track | null>(null);
   currentTrackRef.current = currentTrack;
+  const historyWriteRef = useRef<Promise<void>>(Promise.resolve());
   const [detailsTrack, setDetailsTrack] = useState<TrackDetails | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsError, setDetailsError] = useState('');
@@ -69,18 +83,20 @@ export function App() {
   const [relatedError, setRelatedError] = useState('');
   const detailsRequestId = useRef(0);
 
-  async function recordPlayedTrack() {
+  function recordPlayedTrack() {
     const track = currentTrackRef.current;
     if (!track) return;
-    try {
-      const updated = await appGateway.historyRecord(track);
-      setHistory(updated);
-      console.info('[ui.history] track recorded', { trackId: track.id, count: updated.length });
-    } catch (reason) {
-      const message = reasonText(reason, 'Не удалось сохранить историю');
-      setHistoryError(message);
-      console.error('[ui.history] record failed', { trackId: track.id, error: message });
-    }
+    historyWriteRef.current = historyWriteRef.current.then(async () => {
+      try {
+        const updated = await appGateway.historyRecord(track);
+        setHistory(updated);
+        console.info('[ui.history] track recorded', { trackId: track.id, count: updated.length });
+      } catch (reason) {
+        const message = reasonText(reason, 'Не удалось сохранить историю');
+        setHistoryError(message);
+        console.error('[ui.history] record failed', { trackId: track.id, error: message });
+      }
+    });
   }
 
   function handlePlaybackStateChange(playing: boolean) {
@@ -172,7 +188,7 @@ export function App() {
   }
 
   async function toggleTrackLike(track: Track) {
-    const wasLiked = likedTracks[track.id] ?? true;
+    const wasLiked = likedTracks[track.id] ?? false;
     const operation = wasLiked ? 'unlike' : 'like';
     setLikedTracks((current) => ({ ...current, [track.id]: !wasLiked }));
     setLikeBusy((current) => ({ ...current, [track.id]: true }));
@@ -182,6 +198,33 @@ export function App() {
       const result = wasLiked
         ? await appGateway.unlikeTrack(track.id, track.urn)
         : await appGateway.likeTrack(track.id, track.urn);
+      if (result.captchaUrl) {
+        setLikedTracks((current) => ({ ...current, [track.id]: wasLiked }));
+        console.warn(`[ui.track.${operation}] SoundCloud requested a captcha`, { trackId: track.id });
+        let challengeUrl = result.captchaUrl;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          await invoke('show_captcha_window', { url: challengeUrl });
+          const challenge = await waitForCaptchaChallenge();
+          if (!challenge) {
+            setTracksError('Проверка SoundCloud не завершена. Пройди её в открытом окне и попробуй снова.');
+            return;
+          }
+          const datadomeCookie = challenge.datadomeCookie ?? undefined;
+          const retry = wasLiked
+            ? await appGateway.unlikeTrack(track.id, track.urn, datadomeCookie)
+            : await appGateway.likeTrack(track.id, track.urn, datadomeCookie);
+          if (!retry.captchaUrl) {
+            setLikedTracks((current) => ({ ...current, [track.id]: retry.liked }));
+            console.info(`[ui.track.${operation}] completed after captcha`, { trackId: track.id, liked: retry.liked });
+            return;
+          }
+          if (attempt === 1) {
+            setTracksError('SoundCloud не принял результат проверки. Попробуй повторить действие позже.');
+            return;
+          }
+          challengeUrl = retry.captchaUrl;
+        }
+      }
       setLikedTracks((current) => ({ ...current, [track.id]: result.liked }));
       console.info(`[ui.track.${operation}] completed`, { trackId: track.id, liked: result.liked });
     } catch (reason) {
@@ -361,9 +404,12 @@ export function App() {
       });
     return () => {
       active = false;
-      void appGateway.stop().catch((reason: unknown) => {
-        console.warn('[local-backend] stop failed during app cleanup', { error: reasonText(reason, String(reason)) });
-      });
+      const stopBackend = () => {
+        void appGateway.stop().catch((reason: unknown) => {
+          console.warn('[local-backend] stop failed during app cleanup', { error: reasonText(reason, String(reason)) });
+        });
+      };
+      void historyWriteRef.current.then(stopBackend, stopBackend);
     };
   }, []);
 
