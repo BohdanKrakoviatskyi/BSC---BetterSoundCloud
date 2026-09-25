@@ -197,7 +197,6 @@ export function SoundCloudWidget({ track, volume, onControlsReady, onReady, onPl
       });
       widget.bind(api.Widget.Events.FINISH, () => {
         awaitingPlaybackRef.current = false;
-        callbacksRef.current.onPlaybackStateChange(false);
         callbacksRef.current.onEnded();
       });
       widget.bind(api.Widget.Events.ERROR, () => {

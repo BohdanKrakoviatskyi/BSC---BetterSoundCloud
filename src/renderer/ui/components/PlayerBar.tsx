@@ -98,6 +98,7 @@ export function PlayerBar({ track, loading, shouldPlay, volume, error, hasNext, 
       onEnded();
       return;
     }
+    onPlaybackStateChange(true);
     setCurrentTime(0);
     widgetControls.seekTo(0);
     window.setTimeout(() => widgetControls.play(), 80);
@@ -200,14 +201,16 @@ export function PlayerBar({ track, loading, shouldPlay, volume, error, hasNext, 
       </div>
 
       <label className="player-right" title={`Громкость ${volumeValue}%`}>
-        <span className="player-icon" aria-hidden="true">{volumeValue === 0 ? '◖' : '◖))'}</span>
+        <span className="volume-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5Z" />{volumeValue === 0 ? <path d="m16 9 5 6m0-6-5 6" /> : <><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M18.5 5.5a9 9 0 0 1 0 13" /></>}</svg>
+        </span>
         <input
           aria-label="Громкость"
           type="range"
           min={0}
           max={100}
           value={volumeValue}
-          style={{ background: `linear-gradient(to right,#e9e9eb 0%,#e9e9eb ${volumeValue}%,#515155 ${volumeValue}%,#515155 100%)` }}
+          style={{ background: `linear-gradient(to right,var(--accent) 0%,var(--accent) ${volumeValue}%,#39393e ${volumeValue}%,#39393e 100%)` }}
           onChange={(event) => setVolumeValue(Number(event.currentTarget.value))}
           onPointerUp={() => onVolumeCommit(volumeValue)}
           onBlur={() => onVolumeCommit(volumeValue)}

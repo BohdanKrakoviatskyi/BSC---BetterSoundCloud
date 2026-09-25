@@ -46,7 +46,7 @@ export function HomePage({ selections, loading, error, history, historyLoading, 
               <TrackCarouselSection
                 key={selection.id}
                 title={selection.title}
-                kicker={selection.description || 'ПОДБОРКА ДЛЯ ВАС'}
+                kicker={selection.description || 'SOUNDCLOUD'}
                 tracks={selection.tracks}
                 artistFallback={artistFallback}
                 currentTrackId={currentTrackId}
