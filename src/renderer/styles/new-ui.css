@@ -315,3 +315,49 @@
   .player-bar .track-copy > span { font-size: 9px; }
   .player-bar .like-button { width: 26px; flex-basis: 26px; }
 }
+
+.player-bar .player-right {
+  width: 32px;
+  flex: 0 0 32px;
+  gap: 0;
+  transition: width .18s ease, gap .18s ease;
+}
+.player-bar .player-right:hover,
+.player-bar .player-right:focus-within {
+  width: clamp(92px, 10vw, 132px);
+  gap: 8px;
+}
+.player-bar .player-right .volume {
+  display: block;
+  width: 0;
+  min-width: 0;
+  flex: 0 0 0;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: width .18s ease, opacity .15s ease;
+}
+.player-bar .player-right:hover .volume,
+.player-bar .player-right:focus-within .volume {
+  width: min(90px, 7vw);
+  min-width: 45px;
+  flex: 0 1 auto;
+  opacity: 1;
+  pointer-events: auto;
+}
+.player-bar .player-right .volume::-moz-range-progress { background: #eee; }
+.player-bar .player-right .volume::-moz-range-thumb { background: #eee; }
+@media (max-width: 1000px) {
+  .player-bar .player-right { width: 32px; flex-basis: 32px; display: flex; }
+  .player-bar .player-right:hover,
+  .player-bar .player-right:focus-within { width: 112px; }
+  .player-bar .player-right:hover .volume,
+  .player-bar .player-right:focus-within .volume { width: 72px; }
+}
+@media (max-width: 760px) {
+  .player-bar .player-right { width: 28px; flex-basis: 28px; display: flex; }
+  .player-bar .player-right:hover,
+  .player-bar .player-right:focus-within { width: 88px; }
+  .player-bar .player-right:hover .volume,
+  .player-bar .player-right:focus-within .volume { width: 55px; min-width: 45px; }
+}
