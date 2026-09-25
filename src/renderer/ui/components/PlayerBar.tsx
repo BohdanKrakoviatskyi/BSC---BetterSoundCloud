@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Track } from '../../domain/models';
 import { SoundCloudWidget, type SoundCloudWidgetControls } from './SoundCloudWidget';
+import { DirectStreamPlayer } from './DirectStreamPlayer';
 
 type Props = {
   track: Track | null;
@@ -32,32 +33,45 @@ const soundCloudLogo = 'https://developers.soundcloud.com/assets/logo_big_white-
 
 export function PlayerBar({ track, loading, shouldPlay, volume, error, hasNext, liked, onLike, onOpenTrack, onTogglePlayback, onVolumeCommit, onNext, onPrevious, onEnded, onReady, onError, onPlaybackStateChange }: Props) {
   const [widgetControls, setWidgetControls] = useState<SoundCloudWidgetControls | null>(null);
+  const [playbackMode, setPlaybackMode] = useState<'widget' | 'direct'>('widget');
+  const [repeatOne, setRepeatOne] = useState(false);
+  const [directRetryKey, setDirectRetryKey] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const [duration, setDuration] = useState(track ? track.durationMs / 1000 : 0);
   const [volumeValue, setVolumeValue] = useState(volume);
   const [scrubPosition, setScrubPosition] = useState<number | null>(null);
   const scrubPositionRef = useRef<number | null>(null);
-  const onErrorRef = useRef(onError);
-  onErrorRef.current = onError;
+  const playbackObservedRef = useRef(false);
 
   useEffect(() => setVolumeValue(volume), [volume]);
 
   useEffect(() => {
+    if (playbackMode === 'direct' && widgetControls && shouldPlay) widgetControls.play();
+    else if (playbackMode === 'direct' && widgetControls) widgetControls.pause();
+  }, [playbackMode, widgetControls, shouldPlay]);
+
+  useEffect(() => {
+    setPlaybackMode('widget');
+    setDirectRetryKey(0);
     setWidgetControls(null);
+    playbackObservedRef.current = false;
     setCurrentTime(0);
-    setDuration(0);
+    setDuration(track ? track.durationMs / 1000 : 0);
     scrubPositionRef.current = null;
     setScrubPosition(null);
   }, [track?.id]);
 
   useEffect(() => {
-    if (!track || !loading) return;
+    if (!track || playbackMode !== 'widget' || !shouldPlay) return;
+    playbackObservedRef.current = false;
     const timeout = window.setTimeout(() => {
-      console.error('[ui.player.widget] ready timeout', { trackId: track.id, timeoutMs: 25_000 });
-      onErrorRef.current('SoundCloud не завершил загрузку трека. Проверьте соединение и попробуйте ещё раз.');
-    }, 25_000);
+      if (playbackObservedRef.current) return;
+      console.warn('[ui.player] SoundCloud widget did not start; switching to the direct stream', { trackId: track.id });
+      setPlaybackMode('direct');
+      setWidgetControls(null);
+    }, 12_000);
     return () => window.clearTimeout(timeout);
-  }, [track?.id, loading]);
+  }, [track?.id, playbackMode, widgetControls, shouldPlay]);
 
   useEffect(() => {
     widgetControls?.setVolume(Math.max(0, Math.min(100, volumeValue)));
@@ -79,21 +93,61 @@ export function PlayerBar({ track, loading, shouldPlay, volume, error, hasNext, 
     widgetControls.seekTo(targetMs);
   }
 
+  function handleTrackEnded() {
+    if (!repeatOne || !widgetControls) {
+      onEnded();
+      return;
+    }
+    setCurrentTime(0);
+    widgetControls.seekTo(0);
+    window.setTimeout(() => widgetControls.play(), 80);
+  }
+
   return (
     <footer className="player-bar" aria-label="Аудиоплеер">
-      {track && (
+      {track && playbackMode === 'widget' && (
         <SoundCloudWidget
           track={track}
           volume={volumeValue}
           onControlsReady={setWidgetControls}
           onReady={onReady}
-          onPlaybackStateChange={onPlaybackStateChange}
-          onProgress={(positionMs, durationMs) => {
-            setCurrentTime(positionMs / 1000);
-            if (durationMs !== undefined) setDuration(durationMs / 1000);
+          onPlaybackStateChange={(playing) => {
+            onPlaybackStateChange(playing);
           }}
-          onEnded={onEnded}
-          onError={onError}
+          onProgress={(positionMs, durationMs) => {
+            if (positionMs > 1500) playbackObservedRef.current = true;
+            setCurrentTime(positionMs / 1000);
+            if (durationMs !== undefined && durationMs > 0) setDuration(durationMs / 1000);
+          }}
+          onEnded={handleTrackEnded}
+          onError={(message) => {
+            console.warn('[ui.player] SoundCloud widget failed; switching to the direct stream', { trackId: track.id, error: message });
+            setPlaybackMode('direct');
+            setWidgetControls(null);
+          }}
+        />
+      )}
+      {track && playbackMode === 'direct' && (
+        <DirectStreamPlayer
+          key={`${track.id}:${directRetryKey}`}
+          track={track}
+          volume={volumeValue}
+          shouldPlay={shouldPlay}
+          onControlsReady={setWidgetControls}
+          onReady={onReady}
+          onPlaybackStateChange={(playing) => {
+            onPlaybackStateChange(playing);
+          }}
+          onProgress={(positionMs, durationMs) => {
+            if (positionMs > 1500) playbackObservedRef.current = true;
+            setCurrentTime(positionMs / 1000);
+            if (durationMs !== undefined && durationMs > 0) setDuration(durationMs / 1000);
+          }}
+          onEnded={handleTrackEnded}
+          onError={(message) => {
+            onPlaybackStateChange(false);
+            onError(message);
+          }}
         />
       )}
 
@@ -112,10 +166,14 @@ export function PlayerBar({ track, loading, shouldPlay, volume, error, hasNext, 
       <div className="player-center">
         <div className="transport">
           <button className="player-icon" type="button" aria-label="Предыдущий трек" onClick={onPrevious} disabled={!track}>⏮</button>
-          <button className="play-button" type="button" aria-label={shouldPlay ? 'Пауза' : 'Воспроизвести'} onClick={onTogglePlayback} disabled={!track || loading || !widgetControls}>
+          <button className="play-button" type="button" aria-label={shouldPlay ? 'Пауза' : 'Воспроизвести'} onClick={onTogglePlayback} disabled={!track || loading}>
             {loading || (track && !widgetControls) ? <span className="player-spinner" /> : shouldPlay ? 'Ⅱ' : '▶'}
           </button>
           <button className="player-icon" type="button" aria-label="Следующий трек" onClick={onNext} disabled={!hasNext}>⏭</button>
+          <button className={`player-icon repeat-one-button ${repeatOne ? 'selected' : ''}`} type="button" aria-label={repeatOne ? 'Выключить повтор песни' : 'Повторять текущую песню'} title={repeatOne ? 'Повтор песни включён' : 'Повторять песню'} aria-pressed={repeatOne} disabled={!track} onClick={() => setRepeatOne((enabled) => !enabled)}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 2l4 4-4 4" /><path d="M3 11V9a3 3 0 0 1 3-3h15" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v2a3 3 0 0 1-3 3H3" /></svg>
+            <span>1</span>
+          </button>
         </div>
         <div className="timeline">
           <span>{formatTime(currentTime)}</span>

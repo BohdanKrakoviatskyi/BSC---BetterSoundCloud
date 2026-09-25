@@ -1,5 +1,5 @@
-import type { SoundCloudMixedSelection, SoundCloudSearchTrack, SoundCloudTrack, SoundCloudTrackDetails } from './desktop';
-import type { Profile, Settings, Track, TrackCollection, TrackDetails } from '../domain/models';
+import type { SoundCloudMixedSelection, SoundCloudSearchTrack, SoundCloudTrack, SoundCloudTrackDetails, TrackStream } from './desktop';
+import type { Playlist, Profile, Settings, Track, TrackCollection, TrackDetails } from '../domain/models';
 import type { AuthStatus } from './desktop';
 
 function mapTrack(source: SoundCloudTrack | SoundCloudSearchTrack): Track {
@@ -39,6 +39,18 @@ function mapTrackDetails(source: SoundCloudTrackDetails): TrackDetails {
 
 function mapCollection(source: SoundCloudMixedSelection): TrackCollection {
   return { id: source.id, title: source.title, description: source.description, tracks: source.tracks.map(mapTrack) };
+}
+
+function mapPlaylist(source: { id: string; urn?: string; title: string; permalinkUrl?: string; artworkUrl?: string; trackCount: number; user: { username: string } }): Playlist {
+  return {
+    id: source.id,
+    urn: source.urn,
+    title: source.title,
+    permalink: source.permalinkUrl,
+    artwork: source.artworkUrl,
+    trackCount: source.trackCount,
+    artist: source.user?.username || '',
+  };
 }
 
 function mapProfile(profile: AuthStatus['profile']): Profile | null {
@@ -90,7 +102,10 @@ export const appGateway = {
   },
   authLogout: () => window.desktop.authLogout(),
   myTracks: async () => (await window.desktop.myTracks()).map(mapTrack),
+  myPlaylists: async (): Promise<Playlist[]> => (await window.desktop.myPlaylists()).map(mapPlaylist),
+  playlistTracks: async (playlistUrn: string) => (await window.desktop.playlistTracks(playlistUrn)).map(mapTrack),
   trackDetails: async (trackId: number) => mapTrackDetails(await window.desktop.trackDetails(trackId)),
+  trackStream: (trackUrn: string): Promise<TrackStream> => window.desktop.trackStream(trackUrn),
   searchTracks: async (query: string) => (await window.desktop.searchTracks(query)).map(mapTrack),
   relatedTracks: async (trackId: number) => (await window.desktop.relatedTracks(trackId)).map(mapTrack),
   mixedSelections: async () => (await window.desktop.mixedSelections()).map(mapCollection),

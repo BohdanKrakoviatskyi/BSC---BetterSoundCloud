@@ -46,3 +46,13 @@ export type TrackCollection = {
   description?: string;
   tracks: Track[];
 };
+
+export type Playlist = {
+  id: string;
+  urn?: string;
+  title: string;
+  permalink?: string;
+  artwork?: string;
+  trackCount: number;
+  artist: string;
+};

@@ -16,6 +16,8 @@ export type SoundCloudProfile = {
 };
 export type AuthStatus = { authorized: boolean; profile?: SoundCloudProfile };
 export type TrackLikeResult = { liked: boolean };
+export type TrackStreamOption = { url: string; preview: boolean; hls: boolean; quality: string };
+export type TrackStream = TrackStreamOption & { alternatives?: TrackStreamOption[] };
 export type SoundCloudTrack = {
   id: number;
   trackUrn: string;
@@ -44,6 +46,7 @@ export type SoundCloudTrackDetails = SoundCloudTrack & {
 };
 export type SoundCloudSearchTrack = SoundCloudTrack;
 export type SoundCloudMixedSelection = { id: string; title: string; description?: string; tracks: SoundCloudSearchTrack[] };
+export type SoundCloudPlaylist = { id: string; urn?: string; title: string; permalinkUrl?: string; artworkUrl?: string; trackCount: number; user: { username: string } };
 type BackendResponse<T> = { id: number; result?: T; error?: string };
 type PendingRequest = {
   method: string;
@@ -151,8 +154,20 @@ class LocalBackend {
     return this.request<SoundCloudTrack[]>('tracks.mine', {}, 30_000);
   }
 
+  async myPlaylists(): Promise<SoundCloudPlaylist[]> {
+    return this.request<SoundCloudPlaylist[]>('playlists.mine', {}, 30_000);
+  }
+
+  async playlistTracks(playlistUrn: string): Promise<SoundCloudTrack[]> {
+    return this.request<SoundCloudTrack[]>('playlist.tracks', { playlistUrn }, 30_000);
+  }
+
   async trackDetails(trackId: number): Promise<SoundCloudTrackDetails> {
     return this.request<SoundCloudTrackDetails>('track.details', { trackId }, 30_000);
+  }
+
+  async trackStream(trackUrn: string): Promise<TrackStream> {
+    return this.request<TrackStream>('track.stream', { trackUrn }, 30_000);
   }
 
   async searchTracks(query: string): Promise<SoundCloudSearchTrack[]> {
@@ -264,7 +279,10 @@ export const desktop = {
   authRefresh: () => backend.authRefresh(),
   authLogout: () => backend.authLogout(),
   myTracks: () => backend.myTracks(),
+  myPlaylists: () => backend.myPlaylists(),
+  playlistTracks: (playlistUrn: string) => backend.playlistTracks(playlistUrn),
   trackDetails: (trackId: number) => backend.trackDetails(trackId),
+  trackStream: (trackUrn: string) => backend.trackStream(trackUrn),
   searchTracks: (query: string) => backend.searchTracks(query),
   relatedTracks: (trackId: number) => backend.relatedTracks(trackId),
   mixedSelections: () => backend.mixedSelections(),
