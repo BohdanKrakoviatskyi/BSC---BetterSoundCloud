@@ -1,5 +1,6 @@
 import type { Track } from '../../domain/models';
 import type { Profile, Page } from '../types';
+import { ResizeHandle } from './ResizeHandle';
 
 type Props = {
   profile: Profile | null;
@@ -8,12 +9,14 @@ type Props = {
   onNavigate: (page: Page) => void;
   onPlayTrack: (track: Track) => void;
   onOpenArtist?: (track: Track) => void;
+  onResize: (delta: number) => void;
 };
 
-export function Sidebar({ profile, page, tracks, onNavigate, onPlayTrack, onOpenArtist }: Props) {
+export function Sidebar({ profile, page, tracks, onNavigate, onPlayTrack, onOpenArtist, onResize }: Props) {
   const uniqueTracks = Array.from(new Map(tracks.map((track) => [track.id, track])).values());
   return (
     <aside className="sidebar panel">
+      <ResizeHandle side="left" label="Изменить ширину левой панели" onResize={onResize} />
       <nav className="primary-nav" aria-label="Главная навигация">
         <button type="button" className={`nav-link ${page === 'home' ? 'active' : ''}`} onClick={() => onNavigate('home')}><span className="nav-glyph">⌂</span>Главная</button>
       </nav>

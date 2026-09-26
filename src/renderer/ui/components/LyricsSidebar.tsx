@@ -4,6 +4,7 @@ import type { Track, TrackLyrics } from '../../domain/models';
 import type { LyricsPanelPhase } from '../types';
 import { measureElementRect, playArtworkFlight, type ElementRect } from '../lib/artworkFlight';
 import './LyricsSidebar.css';
+import { ResizeHandle } from './ResizeHandle';
 
 type Props = {
   phase: LyricsPanelPhase;
@@ -22,6 +23,7 @@ type Props = {
   onClose: () => void;
   /** The flight finished, so the owner may move to the next phase. */
   onSettled: () => void;
+  onResize: (delta: number) => void;
 };
 
 /** How long a manual scroll suppresses the automatic "follow the active line" behaviour. */
@@ -36,7 +38,7 @@ function findActiveLineIndex(lines: TrackLyrics['lines'], positionMs: number): n
   return active;
 }
 
-export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentTrack, playbackPositionMs, originRect, onClose, onSettled }: Props) {
+export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentTrack, playbackPositionMs, originRect, onClose, onSettled, onResize }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const [slotRect, setSlotRect] = useState<ElementRect | null>(null);
@@ -174,6 +176,7 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
         className={`lyrics-sidebar${isFlying ? ' is-flying' : ''}${focusMode ? ' is-focus' : ''}`}
         aria-label="Текст песни"
       >
+        <ResizeHandle side="right" label="Изменить ширину панели текста" onResize={onResize} />
         <header className="lyrics-sidebar-head">
           {/* Reserves the artwork slot. The travelling artwork is painted on top of it, and because
               the two are pixel-identical the hand-off is invisible. */}

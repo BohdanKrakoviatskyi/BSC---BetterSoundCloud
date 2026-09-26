@@ -22,6 +22,19 @@ import { ErrorMessage } from './components/ErrorMessage';
 import { MyProfilePage } from './components/MyProfilePage';
 
 const defaultSettings: Settings = { accent: '#ff765d', compact: false, volume: 70, clientId: '', backgroundImage: '', backgroundBlur: 0 };
+const sidebarWidthsKey = 'better-soundcloud.sidebar-widths';
+
+function savedSidebarWidths(): { left: number; lyrics: number } {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(sidebarWidthsKey) || '{}') as { left?: number; lyrics?: number };
+    return {
+      left: typeof parsed.left === 'number' && Number.isFinite(parsed.left) ? Math.max(220, Math.min(380, parsed.left)) : 320,
+      lyrics: typeof parsed.lyrics === 'number' && Number.isFinite(parsed.lyrics) ? Math.max(260, Math.min(380, parsed.lyrics)) : 380,
+    };
+  } catch {
+    return { left: 320, lyrics: 380 };
+  }
+}
 
 function reasonText(reason: unknown, fallback: string): string {
   return reason instanceof Error ? reason.message : fallback;
@@ -85,6 +98,16 @@ export function App() {
   const [shouldPlay, setShouldPlay] = useState(false);
   const [playbackError, setPlaybackError] = useState('');
   const [page, setPage] = useState<Page>('home');
+  const [initialSidebarWidths] = useState(savedSidebarWidths);
+  const [sidebarWidth, setSidebarWidth] = useState(initialSidebarWidths.left);
+  const [lyricsPanelWidth, setLyricsPanelWidth] = useState(initialSidebarWidths.lyrics);
+  useEffect(() => {
+    try {
+      localStorage.setItem(sidebarWidthsKey, JSON.stringify({ left: sidebarWidth, lyrics: lyricsPanelWidth }));
+    } catch {
+      // Resizing remains available if browser storage is disabled or full.
+    }
+  }, [sidebarWidth, lyricsPanelWidth]);
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const [logoutBusy, setLogoutBusy] = useState(false);
   const [selections, setSelections] = useState<TrackCollection[]>([]);
@@ -859,6 +882,8 @@ export function App() {
         '--custom-background-image': settings.backgroundImage ? `url("${settings.backgroundImage}")` : 'none',
         '--custom-background-blur': `${settings.backgroundBlur}px`,
         '--content-panel-opacity': String(0.4 + Math.min(settings.backgroundBlur, 6) * (0.2 / 6)),
+        '--sidebar-width': `${sidebarWidth}px`,
+        '--lyrics-panel-width': `${lyricsPanelWidth}px`,
       } as CSSProperties}
     >
       <header className="topbar">
@@ -881,7 +906,7 @@ export function App() {
         </div>
       </header>
       <div className="workspace">
-        <Sidebar profile={profile} page={page} tracks={tracks} onNavigate={setPage} onPlayTrack={selectTrack} onOpenArtist={(track) => void openArtistFromTrack(track)} />
+        <Sidebar profile={profile} page={page} tracks={tracks} onNavigate={setPage} onPlayTrack={selectTrack} onOpenArtist={(track) => void openArtistFromTrack(track)} onResize={(delta) => setSidebarWidth((width) => Math.max(220, Math.min(380, width + delta)))} />
         <main className="main-view panel" id="mainView"><div className="main-scroll">
         {page === 'home'
           ? <HomePage
@@ -1024,6 +1049,7 @@ export function App() {
         originRect={lyricsOrigin}
         onClose={requestCloseLyrics}
         onSettled={handleLyricsSettled}
+        onResize={(delta) => setLyricsPanelWidth((width) => Math.max(260, Math.min(380, width + delta)))}
       />
       {logoutDialogOpen && <ConfirmDialog
         eyebrow="АККАУНТ SOUNDCLOUD"
