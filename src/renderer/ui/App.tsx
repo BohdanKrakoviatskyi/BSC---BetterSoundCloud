@@ -1057,6 +1057,17 @@ export function App() {
         loading={lyricsLoading}
         error={lyricsError}
         isCurrentTrack={currentTrack !== null && detailsTrack !== null && currentTrack.id === detailsTrack.id}
+        isPlaying={shouldPlay}
+        onTogglePlayback={togglePlayback}
+        onSeek={(positionMs) => {
+          if (!detailsTrack) return;
+          if (currentTrack?.id !== detailsTrack.id) playDetailsTrack();
+          setSeekRequest({ requestId: ++seekRequestIdRef.current, trackId: detailsTrack.id, positionMs });
+        }}
+        repeatOne={repeatOne}
+        onToggleRepeat={() => setRepeatOne((enabled) => !enabled)}
+        volume={settings.volume}
+        onVolumeChange={(volume) => void updateSettings({ volume })}
         playbackPositionMs={currentTrack?.id === detailsTrack?.id ? playbackPositionMs : 0}
         originRect={lyricsOrigin}
         onClose={requestCloseLyrics}

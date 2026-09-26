@@ -41,7 +41,7 @@ function formatTime(seconds: number): string {
 
 const soundCloudLogo = 'https://developers.soundcloud.com/assets/logo_big_white-a38cb93cd8fa05a93183280f295e13aff1a4ae0945ca2fb0efbe85b82588431e.png';
 
-export function PlayerBar({ track, seekRequest, onSeekRequestHandled, repeatOne, onToggleRepeat, shuffleLiked, onToggleShuffle, onPlayRandomLikedTrack, loading, shouldPlay, volume, onVolumeChange, error, hasNext, liked, onLike, onOpenTrack, onOpenArtist, onTogglePlayback, onNext, onPrevious, onEnded, onReady, onProgress, onError, onPlaybackStateChange }: Props) {
+export function PlayerBar({ track, seekRequest, onSeekRequestHandled, repeatOne, onToggleRepeat, shuffleLiked, onToggleShuffle, loading, shouldPlay, volume, onVolumeChange, error, hasNext, liked, onLike, onOpenTrack, onOpenArtist, onTogglePlayback, onNext, onPrevious, onEnded, onReady, onProgress, onError, onPlaybackStateChange }: Props) {
   const [widgetControls, setWidgetControls] = useState<SoundCloudWidgetControls | null>(null);
   const [playbackMode, setPlaybackMode] = useState<'widget' | 'direct'>('widget');
 

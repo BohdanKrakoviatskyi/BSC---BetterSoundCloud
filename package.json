@@ -22,12 +22,14 @@
     "@tauri-apps/plugin-shell": "^2.3.3",
     "hls.js": "^1.7.3",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "three": "^0.186.1"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.8.4",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
+    "@types/three": "^0.186.0",
     "typescript": "^7.0.2",
     "vite": "^7.1.12"
   }
