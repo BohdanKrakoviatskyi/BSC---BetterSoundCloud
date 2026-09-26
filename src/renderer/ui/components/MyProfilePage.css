@@ -16,10 +16,7 @@
   padding: 30px 34px;
   overflow: hidden;
   isolation: isolate;
-  background: linear-gradient(125deg,
-    color-mix(in srgb, var(--accent) 34%, #282333),
-    color-mix(in srgb, var(--accent) 24%, #55516b) 52%,
-    color-mix(in srgb, var(--accent) 16%, #8c8ca7));
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
 }
 
 .my-profile-banner,
@@ -37,12 +34,7 @@
 }
 
 .my-profile-hero-shade {
-  background:
-    linear-gradient(90deg,
-      color-mix(in srgb, var(--accent) 18%, #0b0b0eb8) 0%,
-      color-mix(in srgb, var(--accent) 13%, #0b0b0e80) 50%,
-      color-mix(in srgb, var(--accent) 8%, #0b0b0e28) 100%),
-    linear-gradient(0deg, #0b0b0ea6, transparent 76%);
+  background: color-mix(in srgb, var(--accent) 8%, rgba(8, 8, 10, .16));
   -webkit-backdrop-filter: blur(var(--custom-background-blur, 0px));
   backdrop-filter: blur(var(--custom-background-blur, 0px));
   transition: backdrop-filter .2s ease;

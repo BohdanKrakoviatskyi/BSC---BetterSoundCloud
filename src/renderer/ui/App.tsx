@@ -649,13 +649,19 @@ export function App() {
     document.documentElement.dataset.compact = String(settings.compact);
   }, [settings.accent, settings.compact]);
 
-  // Lyrics follow the open track, so switching tracks inside the panel reloads the words and the
-  // active-line highlight keeps matching what is playing.
+  // Load lyrics on the track page first so its lyrics button only appears when text is available.
   const lyricsPanelActive = lyricsPhase !== 'closed';
   useEffect(() => {
-    if (!lyricsPanelActive || !detailsTrack) return;
+    if (!detailsTrack) {
+      lyricsRequestId.current += 1;
+      setLyrics(null);
+      setLyricsLoading(false);
+      setLyricsError('');
+      return;
+    }
     const trackId = detailsTrack.id;
     const requestId = ++lyricsRequestId.current;
+    setLyrics(null);
     setLyricsLoading(true);
     setLyricsError('');
     console.info('[ui.lyrics] loading', { trackId });
@@ -674,7 +680,7 @@ export function App() {
         if (requestId === lyricsRequestId.current) setLyricsLoading(false);
       });
     // Keyed by id on purpose: re-running for the same track would only duplicate the request.
-  }, [detailsTrack?.id, lyricsPanelActive]);
+  }, [detailsTrack?.id]);
 
   async function updateSettings(patch: Partial<Settings>) {
     const next = { ...settings, ...patch };
@@ -864,7 +870,7 @@ export function App() {
             {profile?.avatarUrl
               ? <img className="header-avatar" src={profile.avatarUrl} alt="" />
               : <span className="header-avatar header-avatar-fallback" aria-hidden="true">{(profile?.username || 'SC').slice(0, 2).toUpperCase()}</span>}
-            <span className="header-account-copy"><b>{profile?.fullName || profile?.username || 'SoundCloud'}</b><small>@{profile?.username || 'аккаунт'}</small></span>
+            <span className="header-account-copy"><b>@{profile?.username || 'аккаунт'}</b></span>
           </button>
           <button className="icon-button header-settings" type="button" onClick={() => setPage('settings')} aria-label="Настройки" title="Настройки">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33h-.08a1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51h-.08a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82v-.08a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1v-.08a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.08a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.08a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.08a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
@@ -1001,6 +1007,7 @@ export function App() {
                 volume={settings.volume}
                 onVolumeChange={(volume) => void updateSettings({ volume })}
                 lyricsOpen={lyricsPanelActive}
+                lyricsAvailable={Boolean(detailsTrack && lyrics?.trackId === detailsTrack.id && lyrics.lines.length > 0)}
                 onToggleLyrics={toggleLyrics}
               />}
         {tracksError && page !== 'likes' && <ErrorMessage message={tracksError} className="app-track-error" />}

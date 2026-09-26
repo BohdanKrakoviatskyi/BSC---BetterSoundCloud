@@ -811,3 +811,57 @@
 .player-bar .like-button.liked svg { fill: currentColor; }
 .player-bar .like-button:hover:not(:disabled) { color: var(--accent); }
 .player-bar .like-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.header-account {
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.header-account:hover,
+.header-account.is-current {
+  border-color: transparent;
+  background: transparent;
+}
+.header-account-copy { display: flex; }
+.header-account-copy b { max-width: 110px; }
+.header-account-copy small { display: none; }
+@media (max-width: 760px) {
+  .header-account-copy { display: flex; }
+  .header-account-copy b { max-width: 78px; }
+}
+
+.track-detail-skeleton .track-detail-artwork-wrap {
+  border-color: #ffffff0d;
+  background: #1c1c20;
+  box-shadow: none;
+  transform: none;
+}
+.track-skeleton-art,
+.track-skeleton-toolbar > i,
+.track-skeleton-title,
+.track-skeleton-artist,
+.track-skeleton-waveform,
+.track-skeleton-stats > i {
+  display: block;
+  background: #ffffff12;
+  animation: track-detail-skeleton-pulse 1.2s ease-in-out infinite alternate;
+}
+.track-skeleton-art { width: 100%; height: 100%; }
+.track-skeleton-toolbar > i { width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%; }
+.track-skeleton-toolbar > i:first-child { width: 38px; height: 38px; flex-basis: 38px; }
+.track-skeleton-toolbar > i:last-child { width: 34px; height: 34px; flex-basis: 34px; }
+.track-skeleton-copy { display: flex; flex-direction: column; gap: 9px; }
+.track-skeleton-title { width: min(72%, 390px); height: clamp(23px, 3vw, 38px); border-radius: 7px; }
+.track-skeleton-artist { width: min(45%, 220px); height: 30px; border-radius: 99px; }
+.track-skeleton-waveform { width: 100%; height: 84px; border-radius: 8px; }
+.track-skeleton-stats { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.track-skeleton-stats > i { width: 90px; height: 14px; border-radius: 5px; }
+@keyframes track-detail-skeleton-pulse {
+  from { opacity: .45; }
+  to { opacity: 1; }
+}
+.app-shell .track-detail-lyrics { width: 38px; min-width: 38px; justify-content: center; padding: 0; }
+@media (max-width: 900px) {
+  .track-skeleton-waveform { height: 68px; }
+  .app-shell .track-detail-lyrics { width: 34px; min-width: 34px; padding: 0; }
+}
