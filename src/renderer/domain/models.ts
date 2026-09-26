@@ -1,4 +1,4 @@
-export type Settings = { accent: string; compact: boolean; volume: number; clientId: string };
+export type Settings = { accent: string; compact: boolean; volume: number; clientId: string; backgroundImage: string; backgroundBlur: number };
 export type Profile = {
   id: number;
   username: string;
@@ -34,10 +34,27 @@ export type TrackDetails = Track & {
   commentCount?: number;
   waveform?: string;
   artist: Track['artist'] & {
+    id?: number;
     avatar?: string;
     permalink?: string;
     followerCount?: number;
   };
+};
+
+export type ArtistProfile = {
+  id: number;
+  username: string;
+  fullName?: string;
+  permalink?: string;
+  avatar?: string;
+  banner?: string;
+  description?: string;
+  city?: string;
+  country?: string;
+  followersCount?: number;
+  followingsCount?: number;
+  trackCount?: number;
+  verified?: boolean;
 };
 
 export type TrackCollection = {
@@ -45,6 +62,8 @@ export type TrackCollection = {
   title: string;
   description?: string;
   tracks: Track[];
+  playlists?: Playlist[];
+  madeForYou?: boolean;
 };
 
 export type Playlist = {

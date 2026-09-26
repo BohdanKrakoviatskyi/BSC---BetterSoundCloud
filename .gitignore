@@ -6,6 +6,7 @@ src-tauri/target/
 src-tauri/binaries/local-api-*
 .env
 *.log
+soundcloudapi.com.har
 .DS_Store
 __pycache__/
 /backend/local-api

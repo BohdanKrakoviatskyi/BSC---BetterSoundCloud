@@ -1,4 +1,4 @@
-import type { AuthStatus, SoundCloudMixedSelection, SoundCloudPlaylist, SoundCloudSearchTrack, SoundCloudTrack, SoundCloudTrackDetails, TrackLikeResult, TrackStream } from '../renderer/platform/desktop';
+import type { AuthStatus, SoundCloudMixedSelection, SoundCloudPlaylist, SoundCloudSearchTrack, SoundCloudTrack, SoundCloudTrackDetails, SoundCloudUserProfile, TrackLikeResult, TrackStream } from '../renderer/lib/desktop';
 
 export {};
 
@@ -8,14 +8,16 @@ declare global {
       start(): Promise<void>;
       stop(): Promise<void>;
       getInfo(): Promise<{ name: string; version: string; backend: string }>;
-      getSettings(): Promise<{ accent: string; compact: boolean; volume: number; clientId: string }>;
-      updateSettings(patch: Partial<{ accent: string; compact: boolean; volume: number; clientId: string }>): Promise<{
+      getSettings(): Promise<{ accent: string; compact: boolean; volume: number; clientId: string; backgroundImage: string; backgroundBlur: number }>;
+      updateSettings(patch: Partial<{ accent: string; compact: boolean; volume: number; clientId: string; backgroundImage: string; backgroundBlur: number }>): Promise<{
         accent: string;
         compact: boolean;
         volume: number;
         clientId: string;
+        backgroundImage: string;
+        backgroundBlur: number;
       }>;
-      clearAppData(): Promise<{ accent: string; compact: boolean; volume: number; clientId: string }>;
+      clearAppData(): Promise<{ accent: string; compact: boolean; volume: number; clientId: string; backgroundImage: string; backgroundBlur: number }>;
       historyList(): Promise<SoundCloudTrack[]>;
       historyRecord(track: SoundCloudTrack): Promise<SoundCloudTrack[]>;
       historyClear(): Promise<SoundCloudTrack[]>;
@@ -31,6 +33,8 @@ declare global {
       searchTracks(query: string): Promise<SoundCloudSearchTrack[]>;
       relatedTracks(trackId: number): Promise<SoundCloudSearchTrack[]>;
       mixedSelections(): Promise<SoundCloudMixedSelection[]>;
+      userProfile(userId: number): Promise<SoundCloudUserProfile>;
+      userTracks(userId: number): Promise<SoundCloudTrack[]>;
       likeTrack(trackId: number, trackUrn: string, datadomeCookie?: string): Promise<TrackLikeResult>;
       unlikeTrack(trackId: number, trackUrn: string, datadomeCookie?: string): Promise<TrackLikeResult>;
     };
