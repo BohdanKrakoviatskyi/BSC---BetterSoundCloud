@@ -11,6 +11,8 @@ type Props = {
   onSeekRequestHandled: (requestId: number) => void;
   repeatOne: boolean;
   onToggleRepeat: () => void;
+  shuffleLiked: boolean;
+  onToggleShuffle: () => void;
   loading: boolean;
   shouldPlay: boolean;
   volume: number;
@@ -39,7 +41,7 @@ function formatTime(seconds: number): string {
 
 const soundCloudLogo = 'https://developers.soundcloud.com/assets/logo_big_white-a38cb93cd8fa05a93183280f295e13aff1a4ae0945ca2fb0efbe85b82588431e.png';
 
-export function PlayerBar({ track, seekRequest, onSeekRequestHandled, repeatOne, onToggleRepeat, loading, shouldPlay, volume, onVolumeChange, error, hasNext, liked, onLike, onOpenTrack, onOpenArtist, onTogglePlayback, onNext, onPrevious, onEnded, onReady, onProgress, onError, onPlaybackStateChange }: Props) {
+export function PlayerBar({ track, seekRequest, onSeekRequestHandled, repeatOne, onToggleRepeat, shuffleLiked, onToggleShuffle, onPlayRandomLikedTrack, loading, shouldPlay, volume, onVolumeChange, error, hasNext, liked, onLike, onOpenTrack, onOpenArtist, onTogglePlayback, onNext, onPrevious, onEnded, onReady, onProgress, onError, onPlaybackStateChange }: Props) {
   const [widgetControls, setWidgetControls] = useState<SoundCloudWidgetControls | null>(null);
   const [playbackMode, setPlaybackMode] = useState<'widget' | 'direct'>('widget');
 
@@ -212,7 +214,7 @@ export function PlayerBar({ track, seekRequest, onSeekRequestHandled, repeatOne,
             {loading || (track && !widgetControls) ? <span className="player-spinner" /> : shouldPlay ? 'Ⅱ' : '▶'}
           </button>
           <button className="player-icon" type="button" aria-label="Следующий трек" onClick={onNext} disabled={!hasNext}>⏭</button>
-          <button className="player-icon shuffle-button" type="button" aria-label="Случайное воспроизведение — скоро" title="Случайное воспроизведение — скоро" disabled>
+          <button className={`player-icon shuffle-button${shuffleLiked ? ' selected' : ''}`} type="button" aria-label={shuffleLiked ? 'Выключить случайное воспроизведение лайкнутых треков' : 'Случайное воспроизведение лайкнутых треков'} title={shuffleLiked ? 'Случайный выбор из лайкнутых включён' : 'Случайный выбор из лайкнутых'} aria-pressed={shuffleLiked} disabled={!track} onClick={onToggleShuffle}>
             <svg className="shuffleControl" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M13.0303 7.03033L15.5607 4.5L13.0303 1.96967L11.9697 3.03033L12.6894 3.75H12.2443C10.9235 3.75 9.66227 4.29996 8.76351 5.26786L7.25 6.89779L5.73649 5.26786C4.83773 4.29996 3.57655 3.75 2.25572 3.75H1V5.25H2.25572C3.15945 5.25 4.02236 5.62629 4.6373 6.28853L6.22652 8L4.6373 9.71147C4.02236 10.3737 3.15945 10.75 2.25572 10.75H1V12.25H2.25572C3.57655 12.25 4.83773 11.7 5.73649 10.7321L7.25 9.10221L8.76351 10.7321C9.66227 11.7 10.9235 12.25 12.2443 12.25H12.6893L11.9697 12.9697L13.0303 14.0303L15.5607 11.5L13.0303 8.96967L11.9697 10.0303L12.6894 10.75H12.2443C11.3406 10.75 10.4776 10.3737 9.8627 9.71147L8.27348 8L9.8627 6.28853C10.4776 5.62629 11.3406 5.25 12.2443 5.25H12.6893L11.9697 5.96967L13.0303 7.03033Z" fill="currentColor" /></svg>
           </button>
           <button className={`player-icon repeat-one-button ${repeatOne ? 'selected' : ''}`} type="button" aria-label={repeatOne ? 'Выключить повтор песни' : 'Повторять текущую песню'} title={repeatOne ? 'Повтор песни включён' : 'Повторять песню'} aria-pressed={repeatOne} disabled={!track} onClick={onToggleRepeat}>

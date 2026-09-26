@@ -26,6 +26,8 @@ type Props = {
   onPlay: () => void;
   onToggleRepeat: () => void;
   repeatOne: boolean;
+  shuffleLiked: boolean;
+  onToggleShuffle: () => void;
   liked: boolean;
   likeBusy: boolean;
   onToggleLike: (track: Track) => void;
@@ -233,7 +235,7 @@ function TrackCoverflow({ contextTracks, activeTrackId, playingTrackId, isPlayin
   );
 }
 
-export function TrackDetailsPage({ track, loading, error, isCurrent, isPlaying, playbackLoading, playbackPositionMs, contextTracks, relatedTracks, relatedLoading, relatedError, currentTrackId, isPlayingNow, onPlayRelated, onOpenRelated, onOpenContextTrack, onOpenArtist, onBack, onPlay, onToggleRepeat, repeatOne, liked, likeBusy, onToggleLike, onSeek, volume, onVolumeChange, lyricsOpen, lyricsAvailable, onToggleLyrics }: Props) {
+export function TrackDetailsPage({ track, loading, error, isCurrent, isPlaying, playbackLoading, playbackPositionMs, contextTracks, relatedTracks, relatedLoading, relatedError, currentTrackId, isPlayingNow, onPlayRelated, onOpenRelated, onOpenContextTrack, onOpenArtist, onBack, onPlay, onToggleRepeat, repeatOne, shuffleLiked, onToggleShuffle, liked, likeBusy, onToggleLike, onSeek, volume, onVolumeChange, lyricsOpen, lyricsAvailable, onToggleLyrics }: Props) {
   const [expandedDescriptionTrackId, setExpandedDescriptionTrackId] = useState<number | null>(null);
   const artworkRef = useRef<HTMLDivElement>(null);
 
@@ -321,6 +323,9 @@ export function TrackDetailsPage({ track, loading, error, isCurrent, isPlaying, 
               <button className={`track-detail-repeat${repeatOne ? ' is-active' : ''}`} type="button" onClick={onToggleRepeat} aria-pressed={repeatOne} aria-label={repeatOne ? 'Выключить повтор трека' : 'Повторять трек'} title={repeatOne ? 'Повтор трека включён' : 'Повторять трек'}>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 2l4 4-4 4" /><path d="M3 11V9a3 3 0 0 1 3-3h15" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v2a3 3 0 0 1-3 3H3" /></svg>
 
+              </button>
+              <button className={`track-detail-shuffle${shuffleLiked ? ' is-active' : ''}`} type="button" onClick={onToggleShuffle} aria-pressed={shuffleLiked} aria-label={shuffleLiked ? 'Выключить случайное воспроизведение лайкнутых треков' : 'Случайное воспроизведение лайкнутых треков'} title={shuffleLiked ? 'Случайный выбор из лайкнутых включён' : 'Случайный выбор из лайкнутых'}>
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.03 7.03 15.56 4.5l-2.53-2.53-1.06 1.06.72.72h-.45c-1.32 0-2.58.55-3.48 1.52L7.25 6.9 5.74 5.27a4.5 4.5 0 0 0-3.48-1.52H1v1.5h1.26c.9 0 1.76.38 2.38 1.04L6.23 8l-1.59 1.71a3.2 3.2 0 0 1-2.38 1.04H1v1.5h1.26a4.5 4.5 0 0 0 3.48-1.52L7.25 9.1l1.51 1.63a4.5 4.5 0 0 0 3.48 1.52h.45l-.72.72 1.06 1.06 2.53-2.53-2.53-2.53-1.06 1.06.72.72h-.45c-.9 0-1.76-.38-2.38-1.04L8.27 8l1.59-1.71a3.2 3.2 0 0 1 2.38-1.04h.45l-.72.72z" /></svg>
               </button>
               <button
                 className={`track-detail-like${liked ? ' is-liked' : ''}`}

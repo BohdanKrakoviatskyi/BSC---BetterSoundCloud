@@ -82,6 +82,7 @@ export function App() {
   const [playerVisible, setPlayerVisible] = useState(false);
   const [playbackPositionMs, setPlaybackPositionMs] = useState(0);
   const [repeatOne, setRepeatOne] = useState(false);
+  const [shuffleLiked, setShuffleLiked] = useState(false);
   const [seekRequest, setSeekRequest] = useState<PlayerSeekRequest | null>(null);
   const seekRequestIdRef = useRef(0);
   const currentTrackRef = useRef<Track | null>(null);
@@ -325,6 +326,15 @@ export function App() {
     setPlaybackError('');
     setShouldPlay(true);
     console.info('[ui.player] loading official SoundCloud widget', { trackId: track.id, permalinkUrl: track.permalink });
+  }
+
+  function playRandomLikedTrack() {
+    const liked = tracks.filter((item) => likedTracks[item.id] !== false);
+    if (!liked.length) return;
+    const candidates = liked.filter((item) => item.id !== currentTrack?.id);
+    const pool = candidates.length ? candidates : liked;
+    const selected = pool[Math.floor(Math.random() * pool.length)];
+    loadTrackAt(liked.findIndex((item) => item.id === selected.id), liked);
   }
 
   function selectTrack(track: Track) {
@@ -1020,6 +1030,8 @@ export function App() {
                 onPlay={playDetailsTrack}
                 repeatOne={repeatOne}
                 onToggleRepeat={() => setRepeatOne((enabled) => !enabled)}
+                shuffleLiked={shuffleLiked}
+                onToggleShuffle={() => setShuffleLiked((enabled) => !enabled)}
                 liked={detailsTrack ? Boolean(likedTracks[detailsTrack.id] || tracks.some((item) => item.id === detailsTrack.id)) : false}
                 likeBusy={detailsTrack ? (likeBusy[detailsTrack.id] ?? false) : false}
                 onToggleLike={(track) => void toggleTrackLike(track)}
@@ -1070,6 +1082,8 @@ export function App() {
         onSeekRequestHandled={(requestId) => setSeekRequest((current) => current?.requestId === requestId ? null : current)}
         repeatOne={repeatOne}
         onToggleRepeat={() => setRepeatOne((enabled) => !enabled)}
+        shuffleLiked={shuffleLiked}
+        onToggleShuffle={() => setShuffleLiked((enabled) => !enabled)}
         loading={playbackLoading}
         shouldPlay={shouldPlay}
         volume={settings.volume}
@@ -1084,7 +1098,8 @@ export function App() {
         onNext={() => void loadTrackAt(currentTrackIndex + 1)}
         hasNext={currentTrackIndex >= 0 && currentTrackIndex + 1 < queueTracks.length}
         onEnded={() => {
-          if (currentTrackIndex + 1 < queueTracks.length) void loadTrackAt(currentTrackIndex + 1);
+          if (shuffleLiked) playRandomLikedTrack();
+          else if (currentTrackIndex + 1 < queueTracks.length) void loadTrackAt(currentTrackIndex + 1);
           else setShouldPlay(false);
         }}
         onReady={() => setPlaybackLoading(false)}

@@ -273,6 +273,10 @@
 .track-detail-repeat:hover { transform: translateY(-1px); }
 .track-detail-repeat.is-active { color: var(--accent); }
 .track-detail-repeat svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.track-detail-shuffle { position: relative; display: grid; width: 34px; height: 34px; place-items: center; border: 0; border-radius: 50%; background: transparent; color: #99999f; transition: color .18s, transform .18s; }
+.track-detail-shuffle:hover { transform: translateY(-1px); }
+.track-detail-shuffle.is-active { color: var(--accent); }
+.track-detail-shuffle svg { width: 17px; height: 17px; fill: currentColor; }
 .track-detail-like {
   display: grid;
   width: 22px;
@@ -502,6 +506,7 @@
 .player-bar .transport { width: 100%; justify-content: flex-start; gap: clamp(8px, 1vw, 16px); }
 .player-bar .shuffle-button svg { width: 16px; height: 16px; fill: currentColor; stroke: none; }
 .player-bar .shuffle-button:disabled { opacity: .55; cursor: not-allowed; }
+.player-bar .shuffle-button.selected { color: var(--accent); background: #ff765d18; }
 .player-bar > .timeline { order: 2; }
 .player-bar > .player-details { order: 3; }
 .player-bar .player-icon { width: 30px; height: 30px; color: #d2d2d4; font-size: 17px; }
