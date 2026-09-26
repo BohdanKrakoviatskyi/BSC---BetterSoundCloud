@@ -52,7 +52,6 @@ const CAPTCHA_INIT_SCRIPT: &str = r#"
 })();
 "#;
 
-
 /// Credentials captured from the SoundCloud web session.
 ///
 /// Serialized as `{ "token": "...", "clientId": "..." }` for the frontend.
