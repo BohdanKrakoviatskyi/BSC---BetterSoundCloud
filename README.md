@@ -84,4 +84,10 @@ npm run package:win # Windows: .exe (NSIS) и .msi
 
 Tauri собирает нативный пакет для ОС, на которой запущена команда: macOS-пакет нужно собирать на macOS, Windows-пакет — на Windows. Установщики и приложение находятся в `src-tauri/target/release/bundle/`. Для сборки под другую архитектуру нужны соответствующие Go target и Tauri target triple.
 
+## Публикация обновлений
+
+Подписанные обновления для Windows, macOS и Linux публикуются GitHub Actions при push тега версии, например `v0.1.0`. Перед первым релизом добавьте в Settings → Secrets and variables → Actions секрет `TAURI_PRIVATE_KEY` со всем содержимым локального файла `~/.tauri/bettersoundcloud-updater.key`. Ключ не добавляйте в репозиторий. Пароль не задан, поэтому `TAURI_KEY_PASSWORD` добавлять не нужно.
+
+После push тега workflow соберёт приложение и Go sidecar для каждой ОС, создаст GitHub Release и загрузит установщики, подписи и `latest.json`. Пользователи увидят предложение установить обновление при запуске приложения. Версию тега нужно предварительно синхронизировать в `package.json`, `src-tauri/Cargo.toml` и `src-tauri/tauri.conf.json`.
+
 Приложение включает обзор, поиск, медиатеку с лайками и плейлистами, воспроизведение треков, настройки и подключение аккаунта SoundCloud по access token.

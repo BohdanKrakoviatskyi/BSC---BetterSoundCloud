@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "BetterSoundCloud",
-  "version": "0.1.0",
+  "version": "0.1.11",
   "identifier": "com.bettersoundcloud.app",
   "build": {
     "beforeDevCommand": "npm run prepare:dev",
@@ -27,6 +27,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -34,6 +35,17 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "macOS": {
+      "signingIdentity": "-"
+    },
     "externalBin": ["binaries/local-api"]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVENkU0QUJCRjIzMkQ1N0MKUldSODFUTHl1MHB1N2F1L1B4N2ZIUjNEenFjMDk2MCtjNG9pcFNOazN5eUlkN1o0S0VPZzd1K1cK",
+      "endpoints": [
+        "https://github.com/BohdanKrakoviatskyi/BSC---BetterSoundCloud/releases/latest/download/latest.json"
+      ]
+    }
   }
 }
