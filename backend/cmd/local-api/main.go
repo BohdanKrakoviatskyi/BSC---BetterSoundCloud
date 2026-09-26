@@ -1329,6 +1329,7 @@ func (s *service) RPCTrackLyrics(params trackLyricsParams) (trackLyrics, error) 
 		}
 		collect(block)
 	}
+	lines = stripGeniusPagePreamble(lines)
 	clean := lines[:0]
 	for _, line := range lines {
 		if line.Text == "" {
@@ -1344,6 +1345,41 @@ func (s *service) RPCTrackLyrics(params trackLyricsParams) (trackLyrics, error) 
 		clean = clean[:len(clean)-1]
 	}
 	return trackLyrics{TrackID: params.TrackID, Lines: clean, SourceURL: pageURL}, nil
+}
+
+// Genius sometimes puts its page header and song description in the same container as the
+// lyrics. Start at the first verse marker when present; otherwise drop the page intro through
+// its “Read More” control. This keeps page chrome out of the lyrics sidebar without assuming
+// that every song has section labels.
+func stripGeniusPagePreamble(lines []lyricsLine) []lyricsLine {
+	for index, line := range lines {
+		if isGeniusSectionHeading(line.Text) {
+			return lines[index+1:]
+		}
+	}
+	for index, line := range lines {
+		if strings.Contains(strings.ToLower(strings.TrimSpace(line.Text)), "read more") {
+			return lines[index+1:]
+		}
+	}
+	return lines
+}
+
+func isGeniusSectionHeading(value string) bool {
+	value = strings.TrimSpace(value)
+	if len(value) < 3 || value[0] != '[' || value[len(value)-1] != ']' {
+		return false
+	}
+	heading := strings.ToLower(strings.TrimSpace(value[1 : len(value)-1]))
+	for _, prefix := range []string{
+		"intro", "verse", "chorus", "pre-chorus", "post-chorus", "bridge", "outro", "hook", "refrain", "part",
+		"интро", "куплет", "припев", "предприпев", "постприпев", "бридж", "аутро",
+	} {
+		if strings.HasPrefix(heading, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 type lrclibLyricsResponse struct {
