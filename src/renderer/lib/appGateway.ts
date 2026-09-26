@@ -139,6 +139,6 @@ export const appGateway = {
   artistProfile: async (userId: number) => mapArtistProfile(await window.desktop.userProfile(userId)),
   artistTracks: async (userId: number) => (await window.desktop.userTracks(userId)).map(mapTrack),
   artistPlaylists: async (userId: number): Promise<Playlist[]> => (await window.desktop.userPlaylists(userId)).map(mapPlaylist),
-  likeTrack: (trackId: number, trackUrn: string, datadomeCookie?: string) => window.desktop.likeTrack(trackId, trackUrn, datadomeCookie),
-  unlikeTrack: (trackId: number, trackUrn: string, datadomeCookie?: string) => window.desktop.unlikeTrack(trackId, trackUrn, datadomeCookie),
+  likeTrack: (trackId: number, trackUrn: string, datadomeCookie?: string, userAgent?: string) => window.desktop.likeTrack(trackId, trackUrn, datadomeCookie, userAgent),
+  unlikeTrack: (trackId: number, trackUrn: string, datadomeCookie?: string, userAgent?: string) => window.desktop.unlikeTrack(trackId, trackUrn, datadomeCookie, userAgent),
 };

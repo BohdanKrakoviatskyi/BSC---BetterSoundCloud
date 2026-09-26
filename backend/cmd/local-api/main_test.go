@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -540,7 +541,18 @@ func TestTrackLikeUsesSoundCloudV2Endpoints(t *testing.T) {
 		{name: "like after captcha", liked: true, wantMethod: http.MethodPut, dataDomeCookie: "verified-cookie", wantCookieHeader: "datadome=verified-cookie", wantDataDomeClientID: "verified-cookie"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			var warmedUp bool
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				// The track is opened before the like, the way the reference
+				// script does it, so that is the only other path expected here.
+				if r.URL.Path == "/tracks/2391534675" {
+					if r.Method != http.MethodGet {
+						t.Errorf("warm-up method = %q, want GET", r.Method)
+					}
+					warmedUp = true
+					w.WriteHeader(http.StatusOK)
+					return
+				}
 				if r.URL.Path != "/users/1323227109/track_likes/2391534675" {
 					t.Errorf("request path = %q", r.URL.Path)
 				}
@@ -581,6 +593,9 @@ func TestTrackLikeUsesSoundCloudV2Endpoints(t *testing.T) {
 			if result.Liked != test.liked || result.CaptchaURL != "" {
 				t.Fatalf("result = %#v", result)
 			}
+			if !warmedUp {
+				t.Fatal("the track should be opened before the like is sent")
+			}
 		})
 	}
 }
@@ -588,6 +603,10 @@ func TestTrackLikeUsesSoundCloudV2Endpoints(t *testing.T) {
 func TestTrackLikeReturnsCaptchaURLFromForbiddenResponse(t *testing.T) {
 	const captchaURL = "https://geo.captcha-delivery.com/captcha/?challenge=test"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/tracks/2391534675" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		if r.Method != http.MethodPut {
 			t.Errorf("request method = %q, want PUT", r.Method)
 		}
@@ -607,5 +626,271 @@ func TestTrackLikeReturnsCaptchaURLFromForbiddenResponse(t *testing.T) {
 	}
 	if result.Liked || result.CaptchaURL != captchaURL {
 		t.Fatalf("result = %#v, want captcha URL and no like", result)
+	}
+}
+
+func TestTrackLikeReplaysTheWebviewUserAgent(t *testing.T) {
+	const webviewAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+	var seen string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = r.Header.Get("User-Agent")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	svc := newTestService(t, server.URL)
+	svc.auth.Token = "test-token"
+	svc.auth.Profile.ID = 1323227109
+	svc.settings.ClientID = "test-client-id"
+	params := trackLikeParams{TrackID: 2391534675, DataDomeCookie: "verified-cookie", UserAgent: webviewAgent}
+	if _, err := svc.RPCTrackLike(params); err != nil {
+		t.Fatalf("like with webview agent: %v", err)
+	}
+	if seen != webviewAgent {
+		t.Fatalf("User-Agent = %q, want the webview identity %q", seen, webviewAgent)
+	}
+}
+
+func TestTrackLikeRejectsUnsafeUserAgent(t *testing.T) {
+	svc := newTestService(t, "http://127.0.0.1:1")
+	svc.auth.Token = "test-token"
+	svc.auth.Profile.ID = 1323227109
+	for _, agent := range []string{"bad\r\nInjected: 1", "bad\nValue", "bad\x00Value"} {
+		_, err := svc.RPCTrackLike(trackLikeParams{TrackID: 2391534675, UserAgent: agent})
+		if err == nil {
+			t.Fatalf("user agent %q should be rejected", agent)
+		}
+		if !strings.Contains(err.Error(), "User-Agent") {
+			t.Fatalf("error for %q = %v, want a User-Agent complaint", agent, err)
+		}
+	}
+}
+
+func TestTrackLikeFallsBackToDefaultUserAgent(t *testing.T) {
+	var seen string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = r.Header.Get("User-Agent")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	svc := newTestService(t, server.URL)
+	svc.auth.Token = "test-token"
+	svc.auth.Profile.ID = 1323227109
+	svc.settings.ClientID = "test-client-id"
+	if _, err := svc.RPCTrackLike(trackLikeParams{TrackID: 2391534675}); err != nil {
+		t.Fatalf("like without agent: %v", err)
+	}
+	if seen != defaultUserAgent {
+		t.Fatalf("User-Agent = %q, want the default %q", seen, defaultUserAgent)
+	}
+	// A truncated agent is what broke DataDome matching before.
+	if !strings.Contains(seen, "KHTML, like Gecko") {
+		t.Fatalf("default User-Agent %q is not a complete browser agent", seen)
+	}
+}
+
+func TestTrackLikeSendsBrowserHeaders(t *testing.T) {
+	const agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+	got := make(map[string]string)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for _, name := range []string{
+			"Accept", "Accept-Language", "Origin", "Referer", "X-Requested-With",
+			"Sec-Fetch-Dest", "Sec-Fetch-Mode", "Sec-Fetch-Site",
+			"sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-platform", "User-Agent",
+		} {
+			got[name] = r.Header.Get(name)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	svc := newTestService(t, server.URL)
+	svc.auth.Token = "test-token"
+	svc.auth.Profile.ID = 1323227109
+	svc.settings.ClientID = "test-client-id"
+	params := trackLikeParams{TrackID: 2391534675, UserAgent: agent}
+	if _, err := svc.RPCTrackLike(params); err != nil {
+		t.Fatalf("like: %v", err)
+	}
+
+	required := map[string]string{
+		"Accept":           "application/json, text/javascript, */*; q=0.01",
+		"Accept-Language":  "en-US,en;q=0.9,ru;q=0.8",
+		"Origin":           "https://soundcloud.com",
+		"Referer":          "https://soundcloud.com/",
+		"X-Requested-With": "XMLHttpRequest",
+		"Sec-Fetch-Dest":   "empty",
+		"Sec-Fetch-Mode":   "cors",
+		"Sec-Fetch-Site":   "same-site",
+		"sec-ch-ua-mobile": "?0",
+		"User-Agent":       agent,
+	}
+	for name, want := range required {
+		if got[name] != want {
+			t.Errorf("%s = %q, want %q", name, got[name], want)
+		}
+	}
+	// Клиентские подсказки не должны противоречить заявленному браузеру.
+	if !strings.Contains(got["sec-ch-ua"], `"131"`) {
+		t.Errorf("sec-ch-ua = %q, want it to carry the Chrome major version", got["sec-ch-ua"])
+	}
+	if got["sec-ch-ua-platform"] != `"Windows"` {
+		t.Errorf("sec-ch-ua-platform = %q, want %q for a Windows agent", got["sec-ch-ua-platform"], `"Windows"`)
+	}
+}
+
+func TestChromeIdentityFollowsTheAgent(t *testing.T) {
+	for _, test := range []struct{ agent, wantVersion, wantPlatform string }{
+		{"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36", "131", "Windows"},
+		{"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15", "", "macOS"},
+		{"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", "120", "Linux"},
+	} {
+		version, platform := chromeIdentity(test.agent)
+		if version != test.wantVersion || platform != test.wantPlatform {
+			t.Errorf("chromeIdentity(%q) = %q/%q, want %q/%q", test.agent, version, platform, test.wantVersion, test.wantPlatform)
+		}
+	}
+}
+
+func TestRequestPacerSpacesRequests(t *testing.T) {
+	pacer := newRequestPacer(40*time.Millisecond, 0)
+	started := time.Now()
+	for i := 0; i < 3; i++ {
+		if err := pacer.wait(context.Background()); err != nil {
+			t.Fatalf("wait %d: %v", i, err)
+		}
+	}
+	// The first call is free, the following two wait a gap each.
+	if elapsed := time.Since(started); elapsed < 70*time.Millisecond {
+		t.Fatalf("three paced calls took %v, want at least two gaps of 40ms", elapsed)
+	}
+}
+
+func TestZeroPacerDoesNotDelay(t *testing.T) {
+	var pacer requestPacer
+	started := time.Now()
+	for i := 0; i < 5; i++ {
+		if err := pacer.wait(context.Background()); err != nil {
+			t.Fatalf("wait %d: %v", i, err)
+		}
+	}
+	if elapsed := time.Since(started); elapsed > 20*time.Millisecond {
+		t.Fatalf("an unconfigured pacer delayed for %v", elapsed)
+	}
+	if err := pacer.pause(context.Background()); err != nil {
+		t.Fatalf("pause: %v", err)
+	}
+}
+
+func TestRequestPacerPenaltyGrowsAndDecays(t *testing.T) {
+	pacer := newRequestPacer(10*time.Millisecond, 0)
+	pacer.penalize(soundCloudBurstPenalty)
+	if pacer.penalty != soundCloudBurstPenalty {
+		t.Fatalf("penalty = %v, want %v", pacer.penalty, soundCloudBurstPenalty)
+	}
+	pacer.penalize(soundCloudBurstPenalty)
+	if pacer.penalty != 2*soundCloudBurstPenalty {
+		t.Fatalf("repeated penalty = %v, want it to double to %v", pacer.penalty, 2*soundCloudBurstPenalty)
+	}
+	for i := 0; i < 10; i++ {
+		pacer.penalize(soundCloudBurstPenalty)
+	}
+	if pacer.penalty > maxRequestPenalty {
+		t.Fatalf("penalty = %v, want it capped at %v", pacer.penalty, maxRequestPenalty)
+	}
+	// Once the penalty window passes the next call resets it.
+	pacer.penaltyUntil = time.Now().Add(-time.Second)
+	if delay := pacer.reserve(); delay > time.Second {
+		t.Fatalf("delay after decay = %v, want the penalty to be dropped", delay)
+	}
+	if pacer.penalty != 0 {
+		t.Fatalf("penalty after decay = %v, want 0", pacer.penalty)
+	}
+}
+
+func TestOnlySoundCloudHostsArePaced(t *testing.T) {
+	for _, test := range []struct {
+		host string
+		want bool
+	}{
+		{"api-v2.soundcloud.com", true},
+		{"api.soundcloud.com", true},
+		{"soundcloud.com", true},
+		{"api.genius.com", false},
+		{"lrclib.net", false},
+		{"i1.sndcdn.com", false},
+		{"example.com", false},
+	} {
+		if got := isSoundCloudHost(test.host); got != test.want {
+			t.Errorf("isSoundCloudHost(%q) = %v, want %v", test.host, got, test.want)
+		}
+	}
+}
+
+func TestSendSkipsPacingForForeignHosts(t *testing.T) {
+	var paced int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	svc := newTestService(t, server.URL)
+	svc.pacer = newRequestPacer(150*time.Millisecond, 0)
+	// The test host is not SoundCloud, so the pacer must stay out of the way.
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/ping", nil)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	started := time.Now()
+	resp, err := svc.send(req)
+	if err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	resp.Body.Close()
+	if elapsed := time.Since(started); elapsed > 100*time.Millisecond {
+		t.Fatalf("a foreign host was paced for %v (%d slots)", elapsed, paced)
+	}
+}
+
+func TestTrackWarmUpLooksLikeNavigation(t *testing.T) {
+	var warmHeaders, likeHeaders http.Header
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/tracks/2391534675":
+			warmHeaders = r.Header.Clone()
+		case "/users/1323227109/track_likes/2391534675":
+			likeHeaders = r.Header.Clone()
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	svc := newTestService(t, server.URL)
+	svc.auth.Token = "test-token"
+	svc.auth.Profile.ID = 1323227109
+	svc.settings.ClientID = "test-client-id"
+	if _, err := svc.RPCTrackLike(trackLikeParams{TrackID: 2391534675}); err != nil {
+		t.Fatalf("like: %v", err)
+	}
+
+	if warmHeaders == nil {
+		t.Fatal("the track was never opened before the like")
+	}
+	if got := warmHeaders.Get("Sec-Fetch-Dest"); got != "document" {
+		t.Errorf("warm-up Sec-Fetch-Dest = %q, want document", got)
+	}
+	if got := warmHeaders.Get("Sec-Fetch-Mode"); got != "navigate" {
+		t.Errorf("warm-up Sec-Fetch-Mode = %q, want navigate", got)
+	}
+	if got := warmHeaders.Get("X-Requested-With"); got != "" {
+		t.Errorf("warm-up must not look like XHR, X-Requested-With = %q", got)
+	}
+	// The like itself stays an API call.
+	if got := likeHeaders.Get("Sec-Fetch-Dest"); got != "empty" {
+		t.Errorf("like Sec-Fetch-Dest = %q, want empty", got)
+	}
+	if got := likeHeaders.Get("X-Requested-With"); got != "XMLHttpRequest" {
+		t.Errorf("like X-Requested-With = %q, want XMLHttpRequest", got)
 	}
 }

@@ -219,12 +219,12 @@ class LocalBackend {
     return this.request<SoundCloudPlaylist[]>('user.playlists', { userId }, 30_000);
   }
 
-  async likeTrack(trackId: number, trackUrn: string, datadomeCookie?: string): Promise<TrackLikeResult> {
-    return this.request<TrackLikeResult>('track.like', { trackId, trackUrn, datadomeCookie }, 30_000);
+  async likeTrack(trackId: number, trackUrn: string, datadomeCookie?: string, userAgent?: string): Promise<TrackLikeResult> {
+    return this.request<TrackLikeResult>('track.like', { trackId, trackUrn, datadomeCookie, userAgent }, 30_000);
   }
 
-  async unlikeTrack(trackId: number, trackUrn: string, datadomeCookie?: string): Promise<TrackLikeResult> {
-    return this.request<TrackLikeResult>('track.unlike', { trackId, trackUrn, datadomeCookie }, 30_000);
+  async unlikeTrack(trackId: number, trackUrn: string, datadomeCookie?: string, userAgent?: string): Promise<TrackLikeResult> {
+    return this.request<TrackLikeResult>('track.unlike', { trackId, trackUrn, datadomeCookie, userAgent }, 30_000);
   }
 
   private async request<T>(method: string, params: object = {}, timeoutMs = 5000): Promise<T> {
@@ -327,6 +327,6 @@ export const desktop = {
   userProfile: (userId: number) => backend.userProfile(userId),
   userTracks: (userId: number) => backend.userTracks(userId),
   userPlaylists: (userId: number) => backend.userPlaylists(userId),
-  likeTrack: (trackId: number, trackUrn: string, datadomeCookie?: string) => backend.likeTrack(trackId, trackUrn, datadomeCookie),
-  unlikeTrack: (trackId: number, trackUrn: string, datadomeCookie?: string) => backend.unlikeTrack(trackId, trackUrn, datadomeCookie),
+  likeTrack: (trackId: number, trackUrn: string, datadomeCookie?: string, userAgent?: string) => backend.likeTrack(trackId, trackUrn, datadomeCookie, userAgent),
+  unlikeTrack: (trackId: number, trackUrn: string, datadomeCookie?: string, userAgent?: string) => backend.unlikeTrack(trackId, trackUrn, datadomeCookie, userAgent),
 };

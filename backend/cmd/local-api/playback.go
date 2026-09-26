@@ -254,11 +254,9 @@ func (s *service) getSoundCloudJSONLimit(endpoint string, destination any, maxBy
 		return err
 	}
 	req.Header.Set("Authorization", "OAuth "+s.auth.Token)
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("Origin", "https://soundcloud.com")
-	req.Header.Set("Referer", "https://soundcloud.com/")
-	resp, err := s.httpClient.Do(req)
+	req.Header.Set("User-Agent", defaultUserAgent)
+	applyBrowserHeaders(req, defaultUserAgent)
+	resp, err := s.send(req)
 	if err != nil {
 		log.Printf("track.stream stage=transport_error error=%q", err.Error())
 		return fmt.Errorf("сетевая ошибка: %w", err)

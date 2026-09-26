@@ -41,19 +41,38 @@ function reasonText(reason: unknown, fallback: string): string {
   return reason instanceof Error ? reason.message : fallback;
 }
 
-type CaptchaChallengeStatus = { completed: boolean; closed: boolean; datadomeCookie?: string | null };
+type CaptchaChallengeStatus = { completed: boolean; closed: boolean; datadomeCookie?: string | null; userAgent?: string | null; unavailable?: string | null };
 
 async function waitForCaptchaChallenge(): Promise<CaptchaChallengeStatus | null> {
   const deadline = Date.now() + 3 * 60_000;
   while (Date.now() < deadline) {
     const status = await invoke<CaptchaChallengeStatus>('poll_captcha_challenge');
     if (status.completed) return status;
-    if (status.closed) return null;
+    if (status.unavailable) {
+      // DataDome refused to serve a solvable challenge, so there is nothing to
+      // retry: report it instead of looking like a finished but failed check.
+      console.warn('[ui.captcha] challenge unavailable', { reason: status.unavailable });
+      return { completed: false, closed: true, unavailable: status.unavailable };
+    }
+    if (status.closed) {
+      console.warn('[ui.captcha] window closed before the challenge was solved');
+      return null;
+    }
     await new Promise((resolve) => window.setTimeout(resolve, 1000));
   }
+  console.warn('[ui.captcha] timed out waiting for the challenge to be solved');
   return null;
 }
 
+function captchaFailureText(challenge: CaptchaChallengeStatus | null): string {
+  if (challenge?.unavailable === 'blocked') {
+    return 'SoundCloud временно заблокировал адрес: проверка недоступна и не решается. Смените сеть (VPN или мобильный интернет) и повторите позже.';
+  }
+  if (challenge === null) {
+    return 'Проверка SoundCloud не завершена: окно закрылось или истекло время. Откройте консоль приложения и пришлите строки [bsc-captcha].';
+  }
+  return 'Проверка SoundCloud не завершена. Пройдите её в открытом окне и попробуйте снова.';
+}
 export function App() {
   const [settings, setSettings] = useState(defaultSettings);
   const [ready, setReady] = useState(false);
@@ -282,13 +301,21 @@ export function App() {
           await invoke('show_captcha_window', { url: challengeUrl });
           const challenge = await waitForCaptchaChallenge();
           if (!challenge) {
-            setTracksError('Проверка SoundCloud не завершена. Пройди её в открытом окне и попробуй снова.');
+            setTracksError(captchaFailureText(challenge));
             return;
           }
           const datadomeCookie = challenge.datadomeCookie ?? undefined;
+          // The sidecar has to replay the same browser identity that solved the
+          // challenge, otherwise DataDome rejects the retried request.
+          const challengeUserAgent = challenge.userAgent ?? undefined;
+          console.info('[ui.captcha] challenge solved', {
+            trackId: track.id,
+            hasCookie: Boolean(datadomeCookie),
+            hasUserAgent: Boolean(challengeUserAgent),
+          });
           const retry = wasLiked
-            ? await appGateway.unlikeTrack(track.id, track.urn, datadomeCookie)
-            : await appGateway.likeTrack(track.id, track.urn, datadomeCookie);
+            ? await appGateway.unlikeTrack(track.id, track.urn, datadomeCookie, challengeUserAgent)
+            : await appGateway.likeTrack(track.id, track.urn, datadomeCookie, challengeUserAgent);
           if (!retry.captchaUrl) {
             applyTrackLikeState(track, retry.liked);
             console.info(`[ui.track.${operation}] completed after captcha`, { trackId: track.id, liked: retry.liked });

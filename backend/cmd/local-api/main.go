@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -35,7 +36,11 @@ const (
 	officialAPIBase = "https://api.soundcloud.com"
 	// webAPIBase — Web API v2, который принимает токены веб-сессии SoundCloud.
 	webAPIBase = "https://api-v2.soundcloud.com"
-	userAgent  = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+	// defaultUserAgent — полный браузерный User-Agent. Обрезанная строка вида
+	// "AppleWebKit/537.36" без "(KHTML, like Gecko)" и версии браузера не
+	// сопоставляется DataDome, поэтому используется целый заголовок.
+	defaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+		"(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 )
 
 // errTokenRejected означает, что SoundCloud отклонил токен (401/403),
@@ -189,6 +194,10 @@ type trackLikeParams struct {
 	TrackID        int64  `json:"trackId"`
 	TrackURN       string `json:"trackUrn"`
 	DataDomeCookie string `json:"datadomeCookie,omitempty"`
+	// UserAgent — идентичность webview, который прошёл проверку DataDome.
+	// Повтор запроса должен предъявлять тот же User-Agent, иначе cookie
+	// проверки не совпадёт с клиентом и SoundCloud вернёт 403 снова.
+	UserAgent string `json:"userAgent,omitempty"`
 }
 
 type trackLikeResult struct {
@@ -349,8 +358,148 @@ type service struct {
 	history      []soundcloudTrackCard
 	apiBase      string
 	httpClient   *http.Client
+	pacer        requestPacer
 }
 
+const (
+	// soundCloudRequestGap is the minimum pause between two calls to
+	// SoundCloud. The UI fires several loads at once on start, and DataDome
+	// answers bursts with a captcha or a temporary address block.
+	soundCloudRequestGap = 350 * time.Millisecond
+	// trackWarmUpPause separates opening a track from reacting to it, the way
+	// the working reference script in scripts/like.py does.
+	trackWarmUpPause = 800 * time.Millisecond
+	// soundCloudBurstPenalty is added to the gap after HTTP 429.
+	soundCloudBurstPenalty = 5 * time.Second
+	// maxRequestPenalty caps the penalty so a single 429 cannot stall the
+	// sidecar for minutes.
+	maxRequestPenalty = 30 * time.Second
+)
+
+// requestPacer spaces requests out and remembers a penalty. The zero value
+// disables pacing, which keeps tests fast.
+type requestPacer struct {
+	mu           sync.Mutex
+	gap          time.Duration
+	warmUpPause  time.Duration
+	penalty      time.Duration
+	penaltyUntil time.Time
+	next         time.Time
+}
+
+func newRequestPacer(gap, warmUpPause time.Duration) requestPacer {
+	return requestPacer{gap: gap, warmUpPause: warmUpPause}
+}
+
+// reserve claims the next slot and reports how long the caller must wait.
+func (p *requestPacer) reserve() time.Duration {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	now := time.Now()
+	if !p.penaltyUntil.IsZero() && now.After(p.penaltyUntil) {
+		p.penalty = 0
+		p.penaltyUntil = time.Time{}
+	}
+	// The cursor only ever moves forward from the slot that was handed out
+	// last, otherwise every call would measure from its own start and the
+	// spacing would collapse to a single gap.
+	ready := p.next
+	if ready.Before(now) {
+		ready = now
+	}
+	p.next = ready.Add(p.gap + p.penalty)
+	return ready.Sub(now)
+}
+
+// wait blocks until the previously reserved slot has passed.
+func (p *requestPacer) wait(ctx context.Context) error {
+	if p.gap <= 0 {
+		return nil
+	}
+	return sleep(ctx, p.reserve())
+}
+
+// pause waits between two related requests, for example opening a track before
+// liking it. It is a no-op while pacing is disabled.
+func (p *requestPacer) pause(ctx context.Context) error {
+	if p.gap <= 0 || p.warmUpPause <= 0 {
+		return nil
+	}
+	return sleep(ctx, p.warmUpPause)
+}
+
+// penalize pushes the following requests away after a rate limit, doubling the
+// penalty while the server keeps complaining and letting it decay afterwards.
+func (p *requestPacer) penalize(d time.Duration) {
+	if p.gap <= 0 || d <= 0 {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	now := time.Now()
+	switch {
+	case p.penaltyUntil.IsZero() || now.After(p.penaltyUntil):
+		p.penalty = d
+	case p.penalty < maxRequestPenalty:
+		p.penalty *= 2
+		if p.penalty > maxRequestPenalty {
+			p.penalty = maxRequestPenalty
+		}
+	}
+	p.penaltyUntil = now.Add(p.penalty)
+}
+
+func sleep(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+// isSoundCloudHost reports whether a request targets SoundCloud itself, so
+// Genius and lyric lookups are not paced against the same budget.
+func isSoundCloudHost(host string) bool {
+	host = strings.ToLower(host)
+	return host == "soundcloud.com" || strings.HasSuffix(host, ".soundcloud.com")
+}
+
+// send performs a request, pacing calls to SoundCloud. A 429 stretches the gap
+// for the requests that follow.
+func (s *service) send(req *http.Request) (*http.Response, error) {
+	soundcloud := isSoundCloudHost(req.URL.Hostname())
+	if soundcloud {
+		if err := s.pacer.wait(req.Context()); err != nil {
+			return nil, err
+		}
+	}
+	resp, err := s.httpClient.Do(req)
+	if err == nil && soundcloud && resp.StatusCode == http.StatusTooManyRequests {
+		s.pacer.penalize(soundCloudBurstPenalty)
+	}
+	return resp, err
+}
+
+// warmUpBase returns the host used to open a track before liking it: the web
+// API when it is reachable, otherwise whatever host is configured.
+func (s *service) warmUpBase() string {
+	bases := s.apiBases()
+	for _, base := range bases {
+		if base == webAPIBase {
+			return base
+		}
+	}
+	if len(bases) > 0 {
+		return bases[0]
+	}
+	return ""
+}
 func main() {
 	if err := run(os.Stdin, os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "local backend:", err)
@@ -375,6 +524,7 @@ func run(input io.Reader, output io.Writer) error {
 		historyPath:  filepath.Join(dataDir, "history.json"),
 		apiBase:      apiBase(),
 		httpClient:   &http.Client{Timeout: 15 * time.Second},
+		pacer:        newRequestPacer(soundCloudRequestGap, trackWarmUpPause),
 	}
 	if err := svc.loadSettings(); err != nil {
 		return err
@@ -1278,7 +1428,7 @@ func (s *service) RPCTrackLyrics(params trackLyricsParams) (trackLyrics, error) 
 		return trackLyrics{}, errors.New("Genius вернул некорректную ссылку")
 	}
 	pageReq, _ := http.NewRequest(http.MethodGet, pageURL, nil)
-	pageReq.Header.Set("User-Agent", userAgent)
+	pageReq.Header.Set("User-Agent", defaultUserAgent)
 	pageResp, err := s.httpClient.Do(pageReq)
 	if err != nil {
 		return trackLyrics{}, fmt.Errorf("ошибка загрузки страницы Genius: %w", err)
@@ -1956,11 +2106,62 @@ func normalizeSearchTrack(id int64, urn, title, permalinkURL, artworkURL, avatar
 }
 
 func (s *service) RPCTrackLike(params trackLikeParams) (trackLikeResult, error) {
-	return trackLikeResponse(s.setTrackLiked(params.TrackID, params.TrackURN, true, params.DataDomeCookie), true)
+	return trackLikeResponse(s.setTrackLiked(params.TrackID, params.TrackURN, true, params.DataDomeCookie, params.UserAgent), true)
 }
 
 func (s *service) RPCTrackUnlike(params trackLikeParams) (trackLikeResult, error) {
-	return trackLikeResponse(s.setTrackLiked(params.TrackID, params.TrackURN, false, params.DataDomeCookie), false)
+	return trackLikeResponse(s.setTrackLiked(params.TrackID, params.TrackURN, false, params.DataDomeCookie, params.UserAgent), false)
+}
+
+// applyBrowserHeaders оформляет запрос как обычный вызов из браузера.
+// DataDome оценивает каждый заголовок: запрос из sidecar с голым
+// User-Agent и без Sec-Fetch-*/sec-ch-ua выглядит как автоматизация, и
+// SoundCloud отвечает на него проверкой или блокировкой адреса.
+func applyBrowserHeaders(req *http.Request, requestAgent string) {
+	version, platform := chromeIdentity(requestAgent)
+	major := "131"
+	if version != "" {
+		major = version
+	}
+	req.Header.Set("Accept", "application/json, text/javascript, */*; q=0.01")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9,ru;q=0.8")
+	req.Header.Set("Origin", "https://soundcloud.com")
+	req.Header.Set("Referer", "https://soundcloud.com/")
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "same-site")
+	req.Header.Set("sec-ch-ua", fmt.Sprintf("%q;v=%q, %q;v=%q, %q;v=%q",
+		"Chromium", major, "Not:A-Brand", "24", "Google Chrome", major))
+	req.Header.Set("sec-ch-ua-mobile", "?0")
+	req.Header.Set("sec-ch-ua-platform", fmt.Sprintf("%q", platform))
+}
+
+// chromeIdentity вытаскивает из User-Agent версию Chromium и платформу, чтобы
+// клиентские подсказки не противоречили заявленному браузеру.
+func chromeIdentity(agent string) (string, string) {
+	version := ""
+	if idx := strings.Index(agent, "Chrome/"); idx >= 0 {
+		rest := agent[idx+len("Chrome/"):]
+		end := strings.IndexFunc(rest, func(character rune) bool {
+			return character < '0' || character > '9'
+		})
+		if end > 0 {
+			version = rest[:end]
+		}
+	}
+	platform := "Windows"
+	switch {
+	case strings.Contains(agent, "Windows"):
+		platform = "Windows"
+	case strings.Contains(agent, "Macintosh"), strings.Contains(agent, "Mac OS"):
+		platform = "macOS"
+	case strings.Contains(agent, "Android"):
+		platform = "Android"
+	case strings.Contains(agent, "Linux"):
+		platform = "Linux"
+	}
+	return version, platform
 }
 
 func trackLikeResponse(err error, requestedLiked bool) (trackLikeResult, error) {
@@ -1974,7 +2175,54 @@ func trackLikeResponse(err error, requestedLiked bool) (trackLikeResult, error) 
 	return trackLikeResult{}, err
 }
 
-func (s *service) setTrackLiked(trackID int64, trackURN string, liked bool, dataDomeCookie string) error {
+// applyNavigationHeaders оформляет разогрев как обычное открытие страницы, а не
+// как XHR к API.
+func applyNavigationHeaders(req *http.Request, requestAgent string) {
+	_, platform := chromeIdentity(requestAgent)
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9,ru;q=0.8")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("sec-ch-ua-mobile", "?0")
+	req.Header.Set("sec-ch-ua-platform", fmt.Sprintf("%q", platform))
+}
+
+// warmUpTrack opens the track before reacting to it. A like that is also the
+// very first request to that track is one of the shapes DataDome scores as
+// automation, so the reference script in scripts/like.py does the same. Failures
+// are not fatal: the like is still attempted afterwards.
+func (s *service) warmUpTrack(base string, trackID int64, requestAgent string) {
+	endpoint := fmt.Sprintf("%s/tracks/%d", strings.TrimRight(base, "/"), trackID)
+	if parsed, err := url.Parse(endpoint); err == nil {
+		query := parsed.Query()
+		query.Set("client_id", s.settings.ClientID)
+		parsed.RawQuery = query.Encode()
+		endpoint = parsed.String()
+	}
+	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+	if err != nil {
+		log.Printf("track.warmup stage=build_error track_id=%d error=%q", trackID, err.Error())
+		return
+	}
+	req.Header.Set("Authorization", "OAuth "+s.auth.Token)
+	req.Header.Set("User-Agent", requestAgent)
+	applyNavigationHeaders(req, requestAgent)
+	resp, err := s.send(req)
+	if err != nil {
+		log.Printf("track.warmup stage=transport_error track_id=%d error=%q", trackID, err.Error())
+		return
+	}
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+	resp.Body.Close()
+	log.Printf("track.warmup stage=done track_id=%d status=%d", trackID, resp.StatusCode)
+	if err := s.pacer.pause(req.Context()); err != nil {
+		log.Printf("track.warmup stage=interrupted track_id=%d error=%q", trackID, err.Error())
+	}
+}
+
+func (s *service) setTrackLiked(trackID int64, trackURN string, liked bool, dataDomeCookie string, userAgent string) error {
 	action := "unlike"
 	if liked {
 		action = "like"
@@ -1996,6 +2244,24 @@ func (s *service) setTrackLiked(trackID int64, trackURN string, liked bool, data
 	}) >= 0 {
 		return errors.New("некорректная cookie проверки SoundCloud")
 	}
+	// User-Agent попадает в заголовок запроса, поэтому принимаем только
+	// printable однострочные ASCII-строки ограниченной длины.
+	requestAgent := userAgent
+	if len(requestAgent) > 512 || strings.IndexFunc(requestAgent, func(character rune) bool {
+		return character < 0x20 || character > 0x7e
+	}) >= 0 {
+		return errors.New("некорректный User-Agent проверки SoundCloud")
+	}
+	if strings.TrimSpace(requestAgent) == "" {
+		requestAgent = defaultUserAgent
+		log.Printf("track.%s stage=agent_fallback track_id=%d", action, trackID)
+	}
+	// Открыть трек перед реакцией: лайк, который одновременно является первым
+	// запросом к треку, выглядит для DataDome как автоматизация.
+	if warmBase := s.warmUpBase(); warmBase != "" {
+		s.warmUpTrack(warmBase, trackID, requestAgent)
+	}
+
 	method := http.MethodDelete
 	if liked {
 		method = http.MethodPost
@@ -2034,17 +2300,13 @@ func (s *service) setTrackLiked(trackID int64, trackURN string, liked bool, data
 			return err
 		}
 		req.Header.Set("Authorization", "OAuth "+s.auth.Token)
-		req.Header.Set("Accept", "application/json")
-		req.Header.Set("User-Agent", userAgent)
+		req.Header.Set("User-Agent", requestAgent)
+		applyBrowserHeaders(req, requestAgent)
 		if dataDomeCookie != "" {
 			req.Header.Set("Cookie", "datadome="+dataDomeCookie)
 			req.Header.Set("X-Datadome-ClientId", dataDomeCookie)
 		}
-		if base == webAPIBase {
-			req.Header.Set("Origin", "https://soundcloud.com")
-			req.Header.Set("Referer", "https://soundcloud.com/")
-		}
-		resp, err := s.httpClient.Do(req)
+		resp, err := s.send(req)
 		if err != nil {
 			lastErr = fmt.Errorf("SoundCloud недоступен, проверьте подключение к интернету: %w", err)
 			log.Printf("track.%s stage=transport_error host=%s track_id=%d error=%q", action, hostForLog(base), trackID, err.Error())
@@ -2205,13 +2467,13 @@ func (s *service) fetchProfileFrom(base, token string) (profile, error) {
 	}
 	req.Header.Set("Authorization", "OAuth "+token)
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", defaultUserAgent)
 	if base == webAPIBase {
 		req.Header.Set("Origin", "https://soundcloud.com")
 		req.Header.Set("Referer", "https://soundcloud.com/")
 	}
 
-	resp, err := s.httpClient.Do(req)
+	resp, err := s.send(req)
 	if err != nil {
 		return profile{}, fmt.Errorf("SoundCloud недоступен, проверьте подключение к интернету: %w", err)
 	}
@@ -2279,12 +2541,12 @@ func (s *service) fetchMyTracks(token string, userID int64) ([]soundcloudTrackCa
 			}
 			req.Header.Set("Authorization", "OAuth "+token)
 			req.Header.Set("Accept", "application/json")
-			req.Header.Set("User-Agent", userAgent)
+			req.Header.Set("User-Agent", defaultUserAgent)
 			if base == webAPIBase {
 				req.Header.Set("Origin", "https://soundcloud.com")
 				req.Header.Set("Referer", "https://soundcloud.com/")
 			}
-			resp, err := s.httpClient.Do(req)
+			resp, err := s.send(req)
 			if err != nil {
 				lastErr = fmt.Errorf("SoundCloud недоступен, проверьте подключение к интернету: %w", err)
 				log.Printf("tracks.mine stage=response host=%s page=%d error=%q", hostForLog(base), pageCount, err.Error())

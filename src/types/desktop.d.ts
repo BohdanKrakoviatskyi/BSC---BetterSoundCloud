@@ -37,8 +37,8 @@ declare global {
       userProfile(userId: number): Promise<SoundCloudUserProfile>;
       userTracks(userId: number): Promise<SoundCloudTrack[]>;
       userPlaylists(userId: number): Promise<SoundCloudPlaylist[]>;
-      likeTrack(trackId: number, trackUrn: string, datadomeCookie?: string): Promise<TrackLikeResult>;
-      unlikeTrack(trackId: number, trackUrn: string, datadomeCookie?: string): Promise<TrackLikeResult>;
+      likeTrack(trackId: number, trackUrn: string, datadomeCookie?: string, userAgent?: string): Promise<TrackLikeResult>;
+      unlikeTrack(trackId: number, trackUrn: string, datadomeCookie?: string, userAgent?: string): Promise<TrackLikeResult>;
     };
   }
 }

@@ -399,10 +399,22 @@
           "markdownDescription": "Allows the captcha webview to report a successful challenge check."
         },
         {
+          "description": "Allows the captcha webview to report that the challenge cannot be solved, for example when the address is blocked.",
+          "type": "string",
+          "const": "allow-mark-captcha-unavailable",
+          "markdownDescription": "Allows the captcha webview to report that the challenge cannot be solved, for example when the address is blocked."
+        },
+        {
           "description": "Allows the main window to poll for completion of the SoundCloud captcha challenge.",
           "type": "string",
           "const": "allow-poll-captcha-challenge",
           "markdownDescription": "Allows the main window to poll for completion of the SoundCloud captcha challenge."
+        },
+        {
+          "description": "Allows the captcha webview to report the browser identity that solved the challenge.",
+          "type": "string",
+          "const": "allow-save-captcha-user-agent",
+          "markdownDescription": "Allows the captcha webview to report the browser identity that solved the challenge."
         },
         {
           "description": "Allows the SoundCloud webview to hand the captured OAuth token and client id back to the app.",

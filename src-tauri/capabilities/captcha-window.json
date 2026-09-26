@@ -5,7 +5,7 @@
   "local": false,
   "windows": ["soundcloud-captcha"],
   "remote": {
-    "urls": ["https://geo.captcha-delivery.com", "https://*.captcha-delivery.com"]
+    "urls": ["https://geo.captcha-delivery.com", "https://*.captcha-delivery.com", "https://soundcloud.com", "https://*.soundcloud.com"]
   },
-  "permissions": ["allow-mark-captcha-completed"]
+  "permissions": ["allow-mark-captcha-completed", "allow-save-captcha-user-agent", "allow-mark-captcha-unavailable"]
 }
