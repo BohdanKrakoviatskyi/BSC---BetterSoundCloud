@@ -64,9 +64,6 @@ export function TrackSearch({ onSelect }: Props) {
 
   function choose(track: Track) {
     onSelect(track);
-    setQuery('');
-    setResults([]);
-    setOpen(false);
   }
 
   const showDropdown = open && query.trim().length >= 2;
