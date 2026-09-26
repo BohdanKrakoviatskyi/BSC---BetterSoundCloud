@@ -16,7 +16,7 @@ jobs:
       fail-fast: false
       max-parallel: 1
       matrix:
-        platform: ${{ fromJSON((github.ref_name == 'v0.1.4' || github.ref_name == 'v0.1.5' || github.ref_name == 'v0.1.6' || github.ref_name == 'v0.1.7' || github.ref_name == 'v0.1.8' || github.ref_name == 'v0.1.9' || github.ref_name == 'v0.1.10' || github.ref_name == 'v0.1.11') && '["macos-latest"]' || '["ubuntu-24.04","windows-latest","macos-latest"]') }}
+        platform: ${{ fromJSON((github.ref_name == 'v0.1.4' || github.ref_name == 'v0.1.5' || github.ref_name == 'v0.1.6' || github.ref_name == 'v0.1.7' || github.ref_name == 'v0.1.8' || github.ref_name == 'v0.1.9' || github.ref_name == 'v0.1.10') && '["macos-latest"]' || '["ubuntu-24.04","windows-latest","macos-latest"]') }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
