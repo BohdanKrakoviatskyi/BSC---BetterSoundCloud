@@ -36,7 +36,7 @@ export function UpdaterNotification() {
   function addLog(message: string) {
     const line = `${new Date().toLocaleTimeString()}  ${message}`;
     console.info(`[updater] ${line}`);
-    setLogs((current) => [...current.slice(-99), line]);
+    if (import.meta.env.DEV) setLogs((current) => [...current.slice(-99), line]);
   }
 
   function formatReason(reason: unknown): string {
@@ -121,15 +121,16 @@ export function UpdaterNotification() {
     {open && <section className="updater-popover" role="dialog" aria-label="Обновление приложения">
       <div className="updater-popover-title">Обновления</div>
       <p className="updater-current-version">Текущая версия: <strong>{currentVersion}</strong></p>
-      <p className="updater-release-channel">Канал обновлений: GitHub Releases</p>
       <p className={`updater-popover-status${status.startsWith('Ошибка') ? ' is-error' : ''}`} aria-live="polite">{status || 'Проверка ещё не выполнена'}</p>
       {update
-        ? <button className="updater-button has-update" type="button" onClick={() => void installUpdate()} disabled={updating}>{updating ? 'Установка…' : `Установить ${update.version}`}</button>
-        : <button className="updater-button" type="button" onClick={() => void checkForUpdate()} disabled={checking}>{checking ? 'Проверяю…' : 'Проверить снова'}</button>}
-      <details className="updater-log-details" open>
+        ? <button className="updater-button has-update" type="button" onClick={() => void installUpdate()} disabled={updating}>{updating ? 'Установка…' : 'Обновить'}</button>
+        : <button className="updater-button updater-check-button" type="button" onClick={() => void checkForUpdate()} disabled={checking} aria-label={checking ? 'Проверка обновлений' : 'Проверить обновления'} title={checking ? 'Проверка обновлений…' : 'Проверить обновления'}>
+            <svg className={checking ? 'is-checking' : ''} viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3m0 0L7.5 7.5M12 3l4.5 4.5M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" /></svg>
+          </button>}
+      {import.meta.env.DEV && <details className="updater-log-details" open>
         <summary>Журнал обновления ({logs.length})</summary>
         <pre className="updater-log" aria-live="polite">{logs.length ? logs.join('\n') : 'Ожидание событий…'}</pre>
-      </details>
+      </details>}
     </section>}
   </div>;
 }
