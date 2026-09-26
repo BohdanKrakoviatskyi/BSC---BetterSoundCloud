@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { ArtistProfile, Playlist, Track, TrackDetails, TrackCollection } from '../domain/models';
+import type { ArtistProfile, Playlist, Track, TrackDetails, TrackCollection, TrackLyrics } from '../domain/models';
 import { appGateway } from '../lib/appGateway';
 import type { SoundCloudCredentials } from '../lib/useSoundCloudAuth';
 import { AuthScreen } from './components/AuthScreen';
 import { HomePage } from './components/HomePage';
 import { LikedTracksSection } from './components/LikedTracksSection';
+import { LyricsSidebar } from './components/LyricsSidebar';
 import { PlayerBar, type PlayerSeekRequest } from './components/PlayerBar';
 import { SettingsPanel } from './components/SettingsPanel';
 import { TrackSearch } from './components/TrackSearch';
@@ -15,8 +16,10 @@ import { Sidebar } from './components/Sidebar';
 import { MyLibraryPage } from './components/MyLibraryPage';
 import { PlaylistPage } from './components/PlaylistPage';
 import { ConfirmDialog } from './components/ConfirmDialog';
-import type { Page, Profile, Settings } from './types';
+import type { LyricsPanelPhase, Page, Profile, Settings } from './types';
+import { measureElementRect, type ElementRect } from './lib/artworkFlight';
 import { ErrorMessage } from './components/ErrorMessage';
+import { MyProfilePage } from './components/MyProfilePage';
 
 const defaultSettings: Settings = { accent: '#ff765d', compact: false, volume: 70, clientId: '', backgroundImage: '', backgroundBlur: 0 };
 
@@ -99,6 +102,20 @@ export function App() {
   const [artistTracksLoading, setArtistTracksLoading] = useState(false);
   const [artistTracksError, setArtistTracksError] = useState('');
   const artistRequestId = useRef(0);
+  const [myProfileDetails, setMyProfileDetails] = useState<ArtistProfile | null>(null);
+  const [myProfileTracks, setMyProfileTracks] = useState<Track[]>([]);
+  const [myProfilePlaylists, setMyProfilePlaylists] = useState<Playlist[]>([]);
+  const [myProfileLoading, setMyProfileLoading] = useState(false);
+  const [myProfileError, setMyProfileError] = useState('');
+  const myProfileRequestId = useRef(0);
+  // Lyrics sidebar. The phase drives the artwork flight, so the panel stays mounted in both
+  // directions until the track artwork has reached its destination.
+  const [lyricsPhase, setLyricsPhase] = useState<LyricsPanelPhase>('closed');
+  const [lyrics, setLyrics] = useState<TrackLyrics | null>(null);
+  const [lyricsLoading, setLyricsLoading] = useState(false);
+  const [lyricsError, setLyricsError] = useState('');
+  const [lyricsOrigin, setLyricsOrigin] = useState<ElementRect | null>(null);
+  const lyricsRequestId = useRef(0);
 
   function recordPlayedTrack(track: Track) {
     historyMutationRef.current += 1;
@@ -488,6 +505,29 @@ export function App() {
     }
   }
 
+  async function openMyProfile() {
+    setPage('profile');
+    if (!profile) return;
+    const requestId = ++myProfileRequestId.current;
+    setMyProfileLoading(true);
+    setMyProfileError('');
+    const [detailsResult, tracksResult, playlistsResult] = await Promise.allSettled([
+      appGateway.artistProfile(profile.id),
+      appGateway.artistTracks(profile.id),
+      appGateway.artistPlaylists(profile.id),
+    ]);
+    if (requestId !== myProfileRequestId.current) return;
+    const errors: string[] = [];
+    if (detailsResult.status === 'fulfilled') setMyProfileDetails(detailsResult.value);
+    else errors.push(reasonText(detailsResult.reason, 'Не удалось загрузить данные профиля'));
+    if (tracksResult.status === 'fulfilled') setMyProfileTracks(tracksResult.value);
+    else errors.push(reasonText(tracksResult.reason, 'Не удалось загрузить опубликованные треки'));
+    if (playlistsResult.status === 'fulfilled') setMyProfilePlaylists(playlistsResult.value);
+    else errors.push(reasonText(playlistsResult.reason, 'Не удалось загрузить плейлисты профиля'));
+    setMyProfileError(errors.join(' · '));
+    setMyProfileLoading(false);
+  }
+
   function playDetailsTrack() {
     const track = detailsTrack ?? currentTrack;
     if (!track) return;
@@ -515,6 +555,48 @@ export function App() {
     setShouldPlay(true);
     console.info('[ui.player] loading official SoundCloud widget from details', { trackId: track.id, permalinkUrl: track.permalink });
   }
+
+  // The lyrics sidebar is opened only by the track page button, which passes the current rectangle
+  // of the track artwork so the panel can start its flight exactly where the artwork is standing.
+  function toggleLyrics(artworkRect: ElementRect | null) {
+    if (lyricsPhase !== 'closed') {
+      requestCloseLyrics();
+      return;
+    }
+    setLyricsOrigin(artworkRect);
+    setLyricsPhase('opening');
+    console.info('[ui.lyrics] opening', { trackId: detailsTrack?.id, hasOrigin: Boolean(artworkRect) });
+  }
+
+  function requestCloseLyrics() {
+    if (lyricsPhase === 'closed' || lyricsPhase === 'measuring' || lyricsPhase === 'closing') return;
+    // `measuring` restores the track page layout for a single frame so the artwork's home rectangle
+    // can be read without the panel visibly moving.
+    setLyricsPhase('measuring');
+    console.info('[ui.lyrics] closing', { trackId: detailsTrack?.id });
+  }
+
+  useLayoutEffect(() => {
+    if (lyricsPhase !== 'measuring') return;
+    setLyricsOrigin(measureElementRect(document.querySelector('[data-track-artwork]')));
+    setLyricsPhase('closing');
+  }, [lyricsPhase]);
+
+  function handleLyricsSettled() {
+    if (lyricsPhase === 'opening') {
+      setLyricsPhase('open');
+    } else if (lyricsPhase === 'closing') {
+      setLyricsPhase('closed');
+      setLyricsOrigin(null);
+    }
+  }
+
+  // Leaving the track page has no artwork to fly back to, so the panel is dropped without a flight.
+  useEffect(() => {
+    if (page === 'track' || lyricsPhase === 'closed') return;
+    setLyricsPhase('closed');
+    setLyricsOrigin(null);
+  }, [page, lyricsPhase]);
 
 
   useEffect(() => {
@@ -566,6 +648,33 @@ export function App() {
     document.documentElement.style.setProperty('--accent', settings.accent);
     document.documentElement.dataset.compact = String(settings.compact);
   }, [settings.accent, settings.compact]);
+
+  // Lyrics follow the open track, so switching tracks inside the panel reloads the words and the
+  // active-line highlight keeps matching what is playing.
+  const lyricsPanelActive = lyricsPhase !== 'closed';
+  useEffect(() => {
+    if (!lyricsPanelActive || !detailsTrack) return;
+    const trackId = detailsTrack.id;
+    const requestId = ++lyricsRequestId.current;
+    setLyricsLoading(true);
+    setLyricsError('');
+    console.info('[ui.lyrics] loading', { trackId });
+    void appGateway.trackLyrics(detailsTrack)
+      .then((loaded) => {
+        if (requestId !== lyricsRequestId.current) return;
+        setLyrics(loaded);
+        console.info('[ui.lyrics] loaded', { trackId, lines: loaded.lines.length });
+      })
+      .catch((reason: unknown) => {
+        if (requestId !== lyricsRequestId.current) return;
+        setLyricsError(reasonText(reason, 'Не удалось загрузить текст песни'));
+        console.error('[ui.lyrics] failed', { trackId, error: reasonText(reason, 'unknown error') });
+      })
+      .finally(() => {
+        if (requestId === lyricsRequestId.current) setLyricsLoading(false);
+      });
+    // Keyed by id on purpose: re-running for the same track would only duplicate the request.
+  }, [detailsTrack?.id, lyricsPanelActive]);
 
   async function updateSettings(patch: Partial<Settings>) {
     const next = { ...settings, ...patch };
@@ -735,10 +844,11 @@ export function App() {
   if (auth === 'guest') return <AuthScreen error={loginError} busy={loginBusy} clientId={settings.clientId} onLogin={(token, clientId) => void login(token, clientId)} onSilentLogin={silentLogin} />;
 
   const isViewingPlayingTrack = page === 'track' && currentTrack !== null && detailsTrack !== null && currentTrack.id === detailsTrack.id;
+  const lyricsPanelState = lyricsPhase === 'closed' ? '' : `lyrics-panel-${lyricsPhase}`;
 
   return (
     <div
-      className={`app-shell ${playerVisible && !isViewingPlayingTrack ? 'player-visible' : ''} ${settings.backgroundImage ? 'has-custom-background' : ''}`}
+      className={`app-shell ${playerVisible && !isViewingPlayingTrack ? 'player-visible' : ''} ${settings.backgroundImage ? 'has-custom-background' : ''} ${lyricsPanelState}`}
       style={{
         '--custom-background-image': settings.backgroundImage ? `url("${settings.backgroundImage}")` : 'none',
         '--custom-background-blur': `${settings.backgroundBlur}px`,
@@ -750,12 +860,12 @@ export function App() {
         <div className="global-search"><TrackSearch onSelect={selectTrack} /></div>
         <div className="top-actions">
 
-          <div className="header-account" title={profile?.fullName || profile?.username || 'SoundCloud'}>
+          <button className={`header-account${page === 'profile' ? ' is-current' : ''}`} type="button" onClick={() => void openMyProfile()} title="Открыть профиль" aria-label="Мой профиль">
             {profile?.avatarUrl
               ? <img className="header-avatar" src={profile.avatarUrl} alt="" />
               : <span className="header-avatar header-avatar-fallback" aria-hidden="true">{(profile?.username || 'SC').slice(0, 2).toUpperCase()}</span>}
             <span className="header-account-copy"><b>{profile?.fullName || profile?.username || 'SoundCloud'}</b><small>@{profile?.username || 'аккаунт'}</small></span>
-          </div>
+          </button>
           <button className="icon-button header-settings" type="button" onClick={() => setPage('settings')} aria-label="Настройки" title="Настройки">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33h-.08a1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51h-.08a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82v-.08a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1v-.08a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.08a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.08a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.08a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
           </button>
@@ -826,6 +936,23 @@ export function App() {
             />
           : page === 'settings'
             ? <SettingsPanel settings={settings} saved={saved} error={error} profile={profile} tokenError={loginError} tokenBusy={loginBusy} onSaveToken={saveAccessToken} onClearData={clearAppData} onUpdate={(patch) => void updateSettings(patch)} />
+          : page === 'profile' && profile
+            ? <MyProfilePage
+                account={profile}
+                details={myProfileDetails}
+                tracks={myProfileTracks}
+                history={history}
+                historyLoading={historyLoading}
+                playlists={myProfilePlaylists}
+                loading={myProfileLoading}
+                error={myProfileError}
+                currentTrackId={currentTrack?.id ?? null}
+                isPlaying={shouldPlay}
+                playbackLoading={playbackLoading}
+                onPlayTrack={selectTrack}
+                onOpenTrack={(track, context) => void openTrackDetails(track, context)}
+                onOpenPlaylist={(playlist) => void openPlaylist(playlist)}
+              />
           : page === 'artist'
             ? <ArtistProfilePage
                 profile={artistProfile}
@@ -873,10 +1000,24 @@ export function App() {
                 playbackPositionMs={currentTrack?.id === detailsTrack?.id ? playbackPositionMs : 0}
                 volume={settings.volume}
                 onVolumeChange={(volume) => void updateSettings({ volume })}
+                lyricsOpen={lyricsPanelActive}
+                onToggleLyrics={toggleLyrics}
               />}
         {tracksError && page !== 'likes' && <ErrorMessage message={tracksError} className="app-track-error" />}
         </div></main>
       </div>
+      <LyricsSidebar
+        phase={lyricsPhase}
+        track={detailsTrack ?? { id: 0, urn: '', title: '', durationMs: 0, artist: { name: '' } }}
+        lyrics={lyrics}
+        loading={lyricsLoading}
+        error={lyricsError}
+        isCurrentTrack={currentTrack !== null && detailsTrack !== null && currentTrack.id === detailsTrack.id}
+        playbackPositionMs={currentTrack?.id === detailsTrack?.id ? playbackPositionMs : 0}
+        originRect={lyricsOrigin}
+        onClose={requestCloseLyrics}
+        onSettled={handleLyricsSettled}
+      />
       {logoutDialogOpen && <ConfirmDialog
         eyebrow="АККАУНТ SOUNDCLOUD"
         title="Выйти из аккаунта?"

@@ -19,6 +19,7 @@ export type AuthStatus = { authorized: boolean; profile?: SoundCloudProfile };
 export type TrackLikeResult = { liked: boolean; captchaUrl?: string };
 export type TrackStreamOption = { url: string; preview: boolean; hls: boolean; quality: string };
 export type TrackStream = TrackStreamOption & { alternatives?: TrackStreamOption[] };
+export type TrackLyricsDTO = { trackId: number; lines: Array<{ id: string; text: string; startMs: number }>; sourceUrl?: string; isSynced?: boolean };
 export type SoundCloudTrack = {
   id: number;
   trackUrn: string;
@@ -186,6 +187,10 @@ class LocalBackend {
     return this.request<SoundCloudTrackDetails>('track.details', { trackId }, 30_000);
   }
 
+  async trackLyrics(trackId: number, title: string, artist: string, durationMs: number): Promise<TrackLyricsDTO> {
+    return this.request<TrackLyricsDTO>('track.lyrics', { trackId, title, artist, durationMs }, 30_000);
+  }
+
   async trackStream(trackUrn: string): Promise<TrackStream> {
     return this.request<TrackStream>('track.stream', { trackUrn }, 30_000);
   }
@@ -208,6 +213,10 @@ class LocalBackend {
 
   async userTracks(userId: number): Promise<SoundCloudTrack[]> {
     return this.request<SoundCloudTrack[]>('user.tracks', { userId }, 30_000);
+  }
+
+  async userPlaylists(userId: number): Promise<SoundCloudPlaylist[]> {
+    return this.request<SoundCloudPlaylist[]>('user.playlists', { userId }, 30_000);
   }
 
   async likeTrack(trackId: number, trackUrn: string, datadomeCookie?: string): Promise<TrackLikeResult> {
@@ -310,12 +319,14 @@ export const desktop = {
   myPlaylists: () => backend.myPlaylists(),
   playlistTracks: (playlistUrn: string) => backend.playlistTracks(playlistUrn),
   trackDetails: (trackId: number) => backend.trackDetails(trackId),
+  trackLyrics: (trackId: number, title: string, artist: string, durationMs: number) => backend.trackLyrics(trackId, title, artist, durationMs),
   trackStream: (trackUrn: string) => backend.trackStream(trackUrn),
   searchTracks: (query: string) => backend.searchTracks(query),
   relatedTracks: (trackId: number) => backend.relatedTracks(trackId),
   mixedSelections: () => backend.mixedSelections(),
   userProfile: (userId: number) => backend.userProfile(userId),
   userTracks: (userId: number) => backend.userTracks(userId),
+  userPlaylists: (userId: number) => backend.userPlaylists(userId),
   likeTrack: (trackId: number, trackUrn: string, datadomeCookie?: string) => backend.likeTrack(trackId, trackUrn, datadomeCookie),
   unlikeTrack: (trackId: number, trackUrn: string, datadomeCookie?: string) => backend.unlikeTrack(trackId, trackUrn, datadomeCookie),
 };

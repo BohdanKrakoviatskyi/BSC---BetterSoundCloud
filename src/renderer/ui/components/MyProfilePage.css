@@ -1,0 +1,389 @@
+.my-profile-page {
+  max-width: 1360px;
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 0 0 36px;
+}
+
+.my-profile-hero {
+  position: relative;
+  display: flex;
+  min-height: 260px;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 28px;
+  margin: -1px -30px 0;
+  padding: 30px 34px;
+  overflow: hidden;
+  isolation: isolate;
+  background: linear-gradient(125deg,
+    color-mix(in srgb, var(--accent) 34%, #282333),
+    color-mix(in srgb, var(--accent) 24%, #55516b) 52%,
+    color-mix(in srgb, var(--accent) 16%, #8c8ca7));
+}
+
+.my-profile-banner,
+.my-profile-hero-shade {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.my-profile-banner {
+  object-fit: cover;
+  filter: saturate(.72);
+}
+
+.my-profile-hero-shade {
+  background:
+    linear-gradient(90deg,
+      color-mix(in srgb, var(--accent) 18%, #0b0b0eb8) 0%,
+      color-mix(in srgb, var(--accent) 13%, #0b0b0e80) 50%,
+      color-mix(in srgb, var(--accent) 8%, #0b0b0e28) 100%),
+    linear-gradient(0deg, #0b0b0ea6, transparent 76%);
+  -webkit-backdrop-filter: blur(var(--custom-background-blur, 0px));
+  backdrop-filter: blur(var(--custom-background-blur, 0px));
+  transition: backdrop-filter .2s ease;
+}
+
+.my-profile-identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 24px;
+}
+
+.my-profile-avatar {
+  display: grid;
+  width: 126px;
+  height: 126px;
+  flex: 0 0 126px;
+  place-items: center;
+  border: 4px solid #ffffffd9;
+  border-radius: 50%;
+  background: #23232a;
+  box-shadow: 0 12px 35px #0007;
+  object-fit: cover;
+}
+
+.my-profile-avatar-fallback {
+  color: #fff;
+  font-size: 44px;
+  font-weight: 800;
+}
+
+.my-profile-name-block {
+  min-width: 0;
+}
+
+.my-profile-name-block h1 {
+  max-width: min(640px, 48vw);
+  margin: 0;
+  color: #fff;
+  font-size: clamp(32px, 5vw, 58px);
+  font-weight: 850;
+  letter-spacing: -2px;
+  line-height: 1.02;
+  overflow-wrap: anywhere;
+  text-shadow: 0 3px 25px #0008;
+}
+
+.my-profile-name-block p {
+  margin: 9px 0 0;
+  color: #e0dde7;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.my-profile-stats {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-end;
+  gap: clamp(18px, 3vw, 48px);
+  padding: 0 3px 4px;
+}
+
+.my-profile-stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.my-profile-stats b {
+  color: #fff;
+  font-size: 27px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.my-profile-stats span {
+  color: #dedde4;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.my-profile-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 22px 0 27px;
+  padding: 0 4px;
+  border-bottom: 1px solid #ffffff16;
+}
+
+.my-profile-tabs button {
+  position: relative;
+  min-width: 68px;
+  padding: 11px 13px 14px;
+  background: transparent;
+  color: #929198;
+  font-size: 12px;
+  font-weight: 750;
+  text-align: center;
+  transition: color .16s ease;
+}
+
+.my-profile-tabs button:hover,
+.my-profile-tabs button.is-active {
+  color: #fff;
+}
+
+.my-profile-tabs button.is-active::after {
+  position: absolute;
+  right: 10px;
+  bottom: -1px;
+  left: 10px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  content: '';
+}
+
+.my-profile-tabs button:focus-visible,
+.my-profile-track-art:focus-visible,
+.my-profile-track-title:focus-visible,
+.my-profile-play:focus-visible,
+.my-profile-playlist:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.my-profile-content {
+  padding: 0 4px;
+}
+
+.my-profile-section-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 13px;
+}
+
+.my-profile-section-heading h2 {
+  margin: 0;
+  color: #f3f2f4;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -.55px;
+}
+
+.my-profile-section-heading span {
+  color: #88878e;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.my-profile-track-list {
+  display: grid;
+  gap: 7px;
+}
+
+.my-profile-track {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 13px;
+  padding: 8px 11px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: #ffffff05;
+  transition: border-color .16s ease, background .16s ease;
+}
+
+.my-profile-track:hover {
+  border-color: #ffffff13;
+  background: #ffffff0a;
+}
+
+.my-profile-track-art {
+  display: grid;
+  width: 60px;
+  height: 60px;
+  flex: 0 0 60px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #24242a;
+  color: var(--accent);
+  font-size: 23px;
+}
+
+.my-profile-track-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.my-profile-track-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.my-profile-track-title {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0;
+  background: transparent;
+  color: #f2f1f3;
+  font-size: 13px;
+  font-weight: 750;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.my-profile-track-title:hover {
+  color: #fff;
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 3px;
+}
+
+.my-profile-track-copy > span {
+  overflow: hidden;
+  max-width: 100%;
+  color: #aaa9b0;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.my-profile-track-copy > small {
+  color: #77767e;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.my-profile-play {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  place-items: center;
+  border: 1px solid #ffffff1b;
+  border-radius: 50%;
+  background: #f1f0f3;
+  color: #17171a;
+  font-size: 14px;
+  font-weight: 800;
+  transition: transform .16s ease, background .16s ease;
+}
+
+.my-profile-play:hover:not(:disabled) {
+  transform: scale(1.06);
+  background: #fff;
+}
+
+.my-profile-play:disabled {
+  opacity: .65;
+  cursor: wait;
+}
+
+.my-profile-playlist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 18px;
+}
+
+.my-profile-playlist {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+  padding: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.my-profile-playlist > img,
+.my-profile-playlist-fallback {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 1;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #ffffff13;
+  border-radius: 9px;
+  background: linear-gradient(145deg, #34323c, #1c1c21);
+  color: var(--accent);
+  font-size: 45px;
+  object-fit: cover;
+  transition: transform .2s ease, filter .2s ease;
+}
+
+.my-profile-playlist:hover > img,
+.my-profile-playlist:hover > .my-profile-playlist-fallback {
+  transform: translateY(-2px);
+  filter: brightness(1.12);
+}
+
+.my-profile-playlist b {
+  overflow: hidden;
+  color: #ecebef;
+  font-size: 11px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.my-profile-playlist small,
+.my-profile-state {
+  color: #89888f;
+  font-size: 10px;
+}
+
+.my-profile-playlist small {
+  margin-top: -4px;
+}
+
+.my-profile-state {
+  padding: 20px 0;
+}
+
+@media (max-width: 900px) {
+  .my-profile-hero {
+    min-height: 220px;
+    margin-right: -18px;
+    margin-left: -18px;
+    padding: 24px 20px;
+  }
+
+  .my-profile-identity { gap: 15px; }
+  .my-profile-avatar { width: 92px; height: 92px; flex-basis: 92px; }
+  .my-profile-stats { gap: 15px; }
+  .my-profile-stats b { font-size: 20px; }
+}
+
+@media (max-width: 650px) {
+  .my-profile-hero { min-height: 250px; flex-direction: column; align-items: flex-start; justify-content: flex-end; }
+  .my-profile-identity { gap: 12px; }
+  .my-profile-avatar { width: 76px; height: 76px; flex-basis: 76px; }
+  .my-profile-name-block h1 { max-width: 70vw; font-size: 34px; }
+  .my-profile-stats { width: 100%; justify-content: flex-end; }
+}

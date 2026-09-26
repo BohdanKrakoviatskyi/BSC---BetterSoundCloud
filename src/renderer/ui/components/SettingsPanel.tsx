@@ -182,13 +182,13 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
       </header>
 
       <div className="settings-layout">
-        <section className="settings-card settings-personalization" aria-labelledby="personalization-title">
+        <section className="settings-card settings-appearance" aria-labelledby="personalization-title">
           <div className="settings-card-heading">
             <span className="settings-card-icon" aria-hidden="true">✦</span>
             <div>
               <span className="eyebrow">ТВОЙ СТИЛЬ</span>
-              <h2 id="personalization-title">Персонализация</h2>
-              <p>Маленькие детали, которые делают приложение твоим.</p>
+              <h2 id="personalization-title">Интерфейс</h2>
+              <p>Цвет и плотность элементов.</p>
             </div>
             <button className="settings-reset-button" type="button" disabled={backgroundBusy} onClick={() => { setBackgroundError(''); onUpdate({ accent: '#ff765d', compact: false, backgroundImage: '', backgroundBlur: 0 }); }}>
               Сбросить оформление
@@ -207,6 +207,19 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
               <span><b>Начальная громкость</b><small>Сохраняется локально для следующего запуска</small></span>
               <span className="volume-control"><input aria-label="Начальная громкость" type="range" min="0" max="100" value={settings.volume} onChange={(event) => onUpdate({ volume: Number(event.target.value) })} /><output>{settings.volume}%</output></span>
             </label>
+          </div>
+        </section>
+
+        <section className="settings-card settings-background" aria-labelledby="background-title">
+          <div className="settings-card-heading">
+            <span className="settings-card-icon" aria-hidden="true">▧</span>
+            <div>
+              <span className="eyebrow">АТМОСФЕРА</span>
+              <h2 id="background-title">Фон приложения</h2>
+              <p>Выбери изображение и настрой его отображение.</p>
+            </div>
+          </div>
+          <div className="settings-options settings-background-options">
             <div className="setting-row background-image-setting">
               <span><b>Фоновое изображение</b><small>Появится во всём приложении, кроме боковой панели</small></span>
               <label className="background-upload-button">

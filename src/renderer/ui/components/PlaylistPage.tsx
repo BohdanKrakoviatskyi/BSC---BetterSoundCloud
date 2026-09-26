@@ -1,5 +1,6 @@
 import type { Playlist, Track } from '../../domain/models';
 import { ErrorMessage } from './ErrorMessage';
+import './PlaylistPage.css';
 
 type Props = {
   playlist: Playlist;
@@ -25,8 +26,10 @@ export function PlaylistPage({ playlist, tracks, loading, error, onBack, onPlay 
           : tracks.length === 0 ? <p className="tracks-empty">В этом плейлисте нет доступных треков.</p>
           : tracks.map((track, index) => <button type="button" className="playlist-dialog-track" key={`${track.id}-${index}`} onClick={() => onPlay(index)}>
             {track.artwork ? <img src={track.artwork} alt="" /> : <span className="playlist-dialog-track-fallback">♫</span>}
-            <span><b>{track.title}</b><small>{track.artist.name || 'SoundCloud'}</small></span>
-            <span className="playlist-dialog-track-play">▶</span>
+            <span className="playlist-dialog-track-index">{index + 1}</span>
+            <span className="playlist-dialog-track-copy"><b>{track.title}</b><small>{track.artist.name || 'SoundCloud'}</small></span>
+            {track.playCount !== undefined && <span className="playlist-dialog-track-plays">▶ {track.playCount.toLocaleString('ru-RU')}</span>}
+            <span className="playlist-dialog-track-play" aria-hidden="true">▶</span>
           </button>)}
       </div>
     </section>

@@ -21,6 +21,8 @@ import (
 	"sync"
 	"time"
 	"unicode"
+
+	"golang.org/x/net/html"
 )
 
 const (
@@ -206,6 +208,40 @@ type trackDetailsParams struct {
 	TrackID int64 `json:"trackId"`
 }
 
+type trackLyricsParams struct {
+	TrackID    int64  `json:"trackId"`
+	Title      string `json:"title"`
+	Artist     string `json:"artist"`
+	DurationMs int64  `json:"durationMs"`
+}
+
+type geniusSearchResponse struct {
+	Response struct {
+		Hits []struct {
+			Result struct {
+				URL           string `json:"url"`
+				Title         string `json:"title"`
+				PrimaryArtist struct {
+					Name string `json:"name"`
+				} `json:"primary_artist"`
+			} `json:"result"`
+		} `json:"hits"`
+	} `json:"response"`
+}
+
+type trackLyrics struct {
+	TrackID   int64        `json:"trackId"`
+	Lines     []lyricsLine `json:"lines"`
+	SourceURL string       `json:"sourceUrl,omitempty"`
+	IsSynced  bool         `json:"isSynced,omitempty"`
+}
+
+type lyricsLine struct {
+	ID      string `json:"id"`
+	Text    string `json:"text"`
+	StartMs int64  `json:"startMs"`
+}
+
 type playlistTracksParams struct {
 	PlaylistURN string `json:"playlistUrn"`
 }
@@ -323,6 +359,7 @@ func main() {
 }
 
 func run(input io.Reader, output io.Writer) error {
+	loadGeniusKeyFromDotEnv()
 	dataDir, err := appDataDir()
 	if err != nil {
 		return err
@@ -379,6 +416,44 @@ func run(input io.Reader, output io.Writer) error {
 		}
 	}
 	return scanner.Err()
+}
+
+// loadGeniusKeyFromDotEnv supports a project-local .env during development. Packaged builds should
+// receive GENIUS_API_KEY from the process environment; the file is never created or logged here.
+func loadGeniusKeyFromDotEnv() {
+	if strings.TrimSpace(os.Getenv("GENIUS_API_KEY")) != "" {
+		return
+	}
+	dir, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	for depth := 0; depth < 4; depth++ {
+		file, err := os.Open(filepath.Join(dir, ".env"))
+		if err == nil {
+			scanner := bufio.NewScanner(file)
+			for scanner.Scan() {
+				line := strings.TrimSpace(scanner.Text())
+				if strings.HasPrefix(line, "GENIUS_API_KEY=") {
+					value := strings.TrimSpace(strings.TrimPrefix(line, "GENIUS_API_KEY="))
+					value = strings.Trim(value, "\"'")
+					if value != "" {
+						_ = os.Setenv("GENIUS_API_KEY", value)
+					}
+					break
+				}
+			}
+			_ = file.Close()
+			if strings.TrimSpace(os.Getenv("GENIUS_API_KEY")) != "" {
+				return
+			}
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return
+		}
+		dir = parent
+	}
 }
 
 const swaggerHTML = `<!doctype html>
@@ -1164,6 +1239,177 @@ func (s *service) fetchFirstPlaylistTrackArtwork(base string, playlistID int64) 
 	return "", nil
 }
 
+func (s *service) RPCTrackLyrics(params trackLyricsParams) (trackLyrics, error) {
+	if params.TrackID <= 0 || strings.TrimSpace(params.Title) == "" {
+		return trackLyrics{}, errors.New("некорректные данные трека")
+	}
+	if synced, ok := s.fetchSyncedLyrics(params); ok {
+		return synced, nil
+	}
+	apiKey := strings.TrimSpace(os.Getenv("GENIUS_API_KEY"))
+	if apiKey == "" {
+		return trackLyrics{}, errors.New("не задан GENIUS_API_KEY")
+	}
+	query := strings.TrimSpace(params.Artist + " " + params.Title)
+	searchURL := "https://api.genius.com/search?q=" + url.QueryEscape(query)
+	searchReq, err := http.NewRequest(http.MethodGet, searchURL, nil)
+	if err != nil {
+		return trackLyrics{}, err
+	}
+	searchReq.Header.Set("Authorization", "Bearer "+apiKey)
+	searchResp, err := s.httpClient.Do(searchReq)
+	if err != nil {
+		return trackLyrics{}, fmt.Errorf("ошибка поиска Genius: %w", err)
+	}
+	defer searchResp.Body.Close()
+	if searchResp.StatusCode != http.StatusOK {
+		return trackLyrics{}, fmt.Errorf("Genius API вернул статус %d", searchResp.StatusCode)
+	}
+	var result geniusSearchResponse
+	if err := json.NewDecoder(io.LimitReader(searchResp.Body, 4<<20)).Decode(&result); err != nil {
+		return trackLyrics{}, fmt.Errorf("не удалось прочитать ответ Genius: %w", err)
+	}
+	if len(result.Response.Hits) == 0 {
+		return trackLyrics{TrackID: params.TrackID, Lines: []lyricsLine{}}, nil
+	}
+	pageURL := result.Response.Hits[0].Result.URL
+	parsedURL, err := url.Parse(pageURL)
+	if err != nil || parsedURL.Hostname() != "genius.com" && !strings.HasSuffix(parsedURL.Hostname(), ".genius.com") {
+		return trackLyrics{}, errors.New("Genius вернул некорректную ссылку")
+	}
+	pageReq, _ := http.NewRequest(http.MethodGet, pageURL, nil)
+	pageReq.Header.Set("User-Agent", userAgent)
+	pageResp, err := s.httpClient.Do(pageReq)
+	if err != nil {
+		return trackLyrics{}, fmt.Errorf("ошибка загрузки страницы Genius: %w", err)
+	}
+	defer pageResp.Body.Close()
+	if pageResp.StatusCode != http.StatusOK {
+		return trackLyrics{}, fmt.Errorf("страница Genius вернула статус %d", pageResp.StatusCode)
+	}
+	doc, err := html.Parse(io.LimitReader(pageResp.Body, 8<<20))
+	if err != nil {
+		return trackLyrics{}, fmt.Errorf("не удалось прочитать страницу Genius: %w", err)
+	}
+	var blocks []*html.Node
+	var walk func(*html.Node)
+	walk = func(node *html.Node) {
+		if node.Type == html.ElementNode {
+			for _, attr := range node.Attr {
+				if attr.Key == "class" && strings.Contains(attr.Val, "Lyrics__Container") {
+					blocks = append(blocks, node)
+					return
+				}
+			}
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+	}
+	walk(doc)
+	var lines []lyricsLine
+	for _, block := range blocks {
+		var collect func(*html.Node)
+		collect = func(node *html.Node) {
+			if node.Type == html.ElementNode && node.Data == "br" {
+				lines = append(lines, lyricsLine{Text: ""})
+				return
+			}
+			if node.Type == html.TextNode {
+				for _, part := range strings.Split(node.Data, "\n") {
+					text := strings.TrimSpace(part)
+					if text != "" && !(strings.HasPrefix(text, "[") && strings.HasSuffix(text, "]")) {
+						lines = append(lines, lyricsLine{Text: text})
+					}
+				}
+			}
+			for child := node.FirstChild; child != nil; child = child.NextSibling {
+				collect(child)
+			}
+		}
+		collect(block)
+	}
+	clean := lines[:0]
+	for _, line := range lines {
+		if line.Text == "" {
+			if len(clean) > 0 && clean[len(clean)-1].Text != "" {
+				clean = append(clean, line)
+			}
+			continue
+		}
+		line.ID = fmt.Sprintf("genius-%d", len(clean))
+		clean = append(clean, line)
+	}
+	for len(clean) > 0 && clean[len(clean)-1].Text == "" {
+		clean = clean[:len(clean)-1]
+	}
+	return trackLyrics{TrackID: params.TrackID, Lines: clean, SourceURL: pageURL}, nil
+}
+
+type lrclibLyricsResponse struct {
+	SyncedLyrics string `json:"syncedLyrics"`
+}
+
+func (s *service) fetchSyncedLyrics(params trackLyricsParams) (trackLyrics, bool) {
+	query := url.Values{}
+	query.Set("track_name", params.Title)
+	query.Set("artist_name", params.Artist)
+	if params.DurationMs > 0 {
+		query.Set("duration", strconv.FormatInt((params.DurationMs+500)/1000, 10))
+	}
+	req, err := http.NewRequest(http.MethodGet, "https://lrclib.net/api/get?"+query.Encode(), nil)
+	if err != nil {
+		return trackLyrics{}, false
+	}
+	req.Header.Set("User-Agent", "BetterSoundCloud/0.1.0 (lyrics sidebar)")
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return trackLyrics{}, false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return trackLyrics{}, false
+	}
+	var payload lrclibLyricsResponse
+	if json.NewDecoder(io.LimitReader(resp.Body, 2<<20)).Decode(&payload) != nil {
+		return trackLyrics{}, false
+	}
+	lines := parseLRC(payload.SyncedLyrics)
+	if len(lines) == 0 {
+		return trackLyrics{}, false
+	}
+	return trackLyrics{TrackID: params.TrackID, Lines: lines, SourceURL: "https://lrclib.net", IsSynced: true}, true
+}
+
+func parseLRC(content string) []lyricsLine {
+	var lines []lyricsLine
+	for _, row := range strings.Split(content, "\n") {
+		row = strings.TrimSpace(row)
+		for strings.HasPrefix(row, "[") {
+			end := strings.IndexByte(row, ']')
+			if end < 0 {
+				break
+			}
+			timestamp := row[1:end]
+			parts := strings.Split(timestamp, ":")
+			if len(parts) != 2 {
+				break
+			}
+			minutes, errM := strconv.ParseInt(parts[0], 10, 64)
+			seconds, errS := strconv.ParseFloat(parts[1], 64)
+			if errM != nil || errS != nil {
+				break
+			}
+			text := strings.TrimSpace(row[end+1:])
+			if text != "" {
+				lines = append(lines, lyricsLine{ID: fmt.Sprintf("lrclib-%d", len(lines)), Text: text, StartMs: minutes*60_000 + int64(seconds*1000)})
+			}
+			row = row[end+1:]
+		}
+	}
+	return lines
+}
+
 func (s *service) RPCTrackDetails(params trackDetailsParams) (soundcloudTrackDetails, error) {
 	if s.auth.Token == "" {
 		return soundcloudTrackDetails{}, errors.New("сначала подключите аккаунт SoundCloud")
@@ -1426,6 +1672,38 @@ func (s *service) RPCUserTracks(params userProfileParams) ([]soundcloudTrackCard
 	}
 	log.Printf("user.tracks stage=complete user_id=%d count=%d elapsed_ms=%d", params.UserID, len(result), time.Since(startedAt).Milliseconds())
 	return result, nil
+}
+
+func (s *service) RPCUserPlaylists(params userProfileParams) ([]soundcloudPlaylistCard, error) {
+	if s.auth.Token == "" {
+		return nil, errors.New("сначала подключите аккаунт SoundCloud")
+	}
+	if params.UserID <= 0 {
+		return nil, errors.New("некорректный ID пользователя")
+	}
+	var lastErr error
+	for _, base := range s.apiBases() {
+		endpoint, err := url.Parse(strings.TrimRight(base, "/") + fmt.Sprintf("/users/%d/playlists", params.UserID))
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		query := endpoint.Query()
+		query.Set("limit", "200")
+		query.Set("linked_partitioning", "true")
+		query.Set("client_id", s.settings.ClientID)
+		endpoint.RawQuery = query.Encode()
+		playlists, err := s.fetchPlaylistsFrom(base, endpoint.String())
+		if err == nil {
+			return playlists, nil
+		}
+		lastErr = err
+		log.Printf("user.playlists stage=fallback host=%s error=%q", hostForLog(base), err.Error())
+	}
+	if lastErr == nil {
+		lastErr = errors.New("SoundCloud API не вернул плейлисты автора")
+	}
+	return nil, fmt.Errorf("не удалось загрузить плейлисты автора: %w", lastErr)
 }
 
 func (s *service) RPCMixedSelections(_ emptyParams) ([]mixedSelection, error) {

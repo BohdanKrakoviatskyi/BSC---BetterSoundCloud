@@ -41,6 +41,25 @@ export type TrackDetails = Track & {
   };
 };
 
+/** A single lyrics line with its position inside the track, so the UI can highlight what is being sung. */
+export type LyricsLine = {
+  id: string;
+  text: string;
+  startMs: number;
+};
+
+export type TrackLyrics = {
+  trackId: number;
+  lines: LyricsLine[];
+  sourceUrl?: string;
+  isSynced?: boolean;
+  /**
+   * Marks lyrics that are not the real words of the track. The demo provider sets it, and the UI
+   * labels the panel so placeholder text is never mistaken for the actual song.
+   */
+  isDemo?: boolean;
+};
+
 export type ArtistProfile = {
   id: number;
   username: string;

@@ -3,6 +3,7 @@ import type { Track, TrackDetails } from '../../domain/models';
 import { TrackCarouselSection } from './TrackCarouselSection';
 import { ErrorMessage } from './ErrorMessage';
 import { createWaveform } from '../lib/waveform';
+import { measureElementRect, type ElementRect } from '../lib/artworkFlight';
 
 type Props = {
   track: TrackDetails | null;
@@ -32,6 +33,9 @@ type Props = {
   playbackPositionMs: number;
   volume: number;
   onVolumeChange: (volume: number) => void;
+  /** Whether the lyrics sidebar currently owns the track artwork. */
+  lyricsOpen: boolean;
+  onToggleLyrics: (artworkRect: ElementRect | null) => void;
 };
 
 function formatDuration(ms: number): string {
@@ -228,8 +232,18 @@ function TrackCoverflow({ contextTracks, activeTrackId, playingTrackId, isPlayin
   );
 }
 
-export function TrackDetailsPage({ track, loading, error, isCurrent, isPlaying, playbackLoading, playbackPositionMs, contextTracks, relatedTracks, relatedLoading, relatedError, currentTrackId, isPlayingNow, onPlayRelated, onOpenRelated, onOpenContextTrack, onOpenArtist, onBack, onPlay, onToggleRepeat, repeatOne, liked, likeBusy, onToggleLike, onSeek, volume, onVolumeChange }: Props) {
+export function TrackDetailsPage({ track, loading, error, isCurrent, isPlaying, playbackLoading, playbackPositionMs, contextTracks, relatedTracks, relatedLoading, relatedError, currentTrackId, isPlayingNow, onPlayRelated, onOpenRelated, onOpenContextTrack, onOpenArtist, onBack, onPlay, onToggleRepeat, repeatOne, liked, likeBusy, onToggleLike, onSeek, volume, onVolumeChange, lyricsOpen, onToggleLyrics }: Props) {
   const [expandedDescriptionTrackId, setExpandedDescriptionTrackId] = useState<number | null>(null);
+  const artworkRef = useRef<HTMLDivElement>(null);
+
+  function toggleLyrics() {
+    if (lyricsOpen) {
+      onToggleLyrics(null);
+      return;
+    }
+    // Hand the artwork's current rectangle to the sidebar so it knows where the flight starts.
+    onToggleLyrics(measureElementRect(artworkRef.current));
+  }
 
   if (loading && !track) return <div className="track-details-loading">Загружаю информацию о треке…</div>;
   if (!track) return <div className="track-details-error"><p>{error || 'Не удалось загрузить трек.'}</p><button type="button" onClick={onBack}>Вернуться к лайкам</button></div>;
@@ -253,7 +267,7 @@ export function TrackDetailsPage({ track, loading, error, isCurrent, isPlaying, 
     <article className="track-detail-page">
       <button className="track-detail-back" type="button" onClick={onBack}><span aria-hidden="true">←</span> Мои лайки</button>
       <section className="track-detail-hero" key={track.id}>
-        <div className="track-detail-artwork-wrap">
+        <div className="track-detail-artwork-wrap" ref={artworkRef} data-track-artwork="">
           {track.artwork ? <img className="track-detail-artwork" src={track.artwork} alt={`Обложка: ${track.title}`} /> : <div className="track-detail-artwork track-detail-artwork-fallback">♫</div>}
         </div>
         <div className="track-detail-content">
@@ -288,6 +302,17 @@ export function TrackDetailsPage({ track, loading, error, isCurrent, isPlaying, 
                 title={liked ? 'В любимых' : 'Добавить в любимые'}
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z" /></svg>
+              </button>
+              <button
+                className={`track-detail-lyrics${lyricsOpen ? ' is-active' : ''}`}
+                type="button"
+                onClick={toggleLyrics}
+                aria-expanded={lyricsOpen}
+                aria-controls="lyrics-sidebar"
+                title={lyricsOpen ? 'Скрыть текст песни' : 'Показать текст песни'}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h11M4 10h11M4 15h7" /><path d="M18 14v6M15 17h6" /></svg>
+                <span>Текст песни</span>
               </button>
               <div className="track-detail-copy">
                 <h1>{track.title}</h1>

@@ -1,5 +1,5 @@
 import type { SoundCloudMixedSelection, SoundCloudSearchTrack, SoundCloudTrack, SoundCloudTrackDetails, SoundCloudUserProfile, TrackStream } from './desktop';
-import type { ArtistProfile, Playlist, Profile, Settings, Track, TrackCollection, TrackDetails } from '../domain/models';
+import type { ArtistProfile, Playlist, Profile, Settings, Track, TrackCollection, TrackDetails, TrackLyrics } from '../domain/models';
 import type { AuthStatus } from './desktop';
 
 function mapTrack(source: SoundCloudTrack | SoundCloudSearchTrack): Track {
@@ -131,12 +131,14 @@ export const appGateway = {
   myPlaylists: async (): Promise<Playlist[]> => (await window.desktop.myPlaylists()).map(mapPlaylist),
   playlistTracks: async (playlistUrn: string) => (await window.desktop.playlistTracks(playlistUrn)).map(mapTrack),
   trackDetails: async (trackId: number) => mapTrackDetails(await window.desktop.trackDetails(trackId)),
+  trackLyrics: async (track: Track): Promise<TrackLyrics> => window.desktop.trackLyrics(track.id, track.title, track.artist.name, track.durationMs),
   trackStream: (trackUrn: string): Promise<TrackStream> => window.desktop.trackStream(trackUrn),
   searchTracks: async (query: string) => (await window.desktop.searchTracks(query)).map(mapTrack),
   relatedTracks: async (trackId: number) => (await window.desktop.relatedTracks(trackId)).map(mapTrack),
   mixedSelections: async () => (await window.desktop.mixedSelections()).map(mapCollection),
   artistProfile: async (userId: number) => mapArtistProfile(await window.desktop.userProfile(userId)),
   artistTracks: async (userId: number) => (await window.desktop.userTracks(userId)).map(mapTrack),
+  artistPlaylists: async (userId: number): Promise<Playlist[]> => (await window.desktop.userPlaylists(userId)).map(mapPlaylist),
   likeTrack: (trackId: number, trackUrn: string, datadomeCookie?: string) => window.desktop.likeTrack(trackId, trackUrn, datadomeCookie),
   unlikeTrack: (trackId: number, trackUrn: string, datadomeCookie?: string) => window.desktop.unlikeTrack(trackId, trackUrn, datadomeCookie),
 };
