@@ -20,6 +20,7 @@ import type { LyricsPanelPhase, Page, Profile, Settings } from './types';
 import { measureElementRect, type ElementRect } from './lib/artworkFlight';
 import { ErrorMessage } from './components/ErrorMessage';
 import { MyProfilePage } from './components/MyProfilePage';
+import { UpdaterNotification } from './components/UpdaterNotification';
 
 const defaultSettings: Settings = { accent: '#ff765d', compact: false, volume: 70, clientId: '', backgroundImage: '', backgroundBlur: 0 };
 const sidebarWidthsKey = 'better-soundcloud.sidebar-widths';
@@ -896,6 +897,7 @@ export function App() {
         '--lyrics-panel-width': `${lyricsPanelWidth}px`,
       } as CSSProperties}
     >
+      <UpdaterNotification />
       <header className="topbar">
         <div className="window-tools"><button className="icon-button" type="button" onClick={() => setPage('likes')} aria-label="Назад">‹</button></div>
         <div className="global-search"><TrackSearch onSelect={selectTrack} /></div>
