@@ -888,6 +888,7 @@
 .updater-badge { position: absolute; top: 7px; right: 7px; width: 8px; height: 8px; border: 2px solid #141416; border-radius: 50%; background: var(--accent); }
 .updater-popover { position: absolute; z-index: 30; top: calc(100% + 9px); right: -46px; width: 280px; padding: 16px; border: 1px solid #ffffff1c; border-radius: 12px; background: #17171b; color: #f5f5f7; box-shadow: 0 12px 36px #000a; }
 .updater-popover-title { font-size: 14px; font-weight: 700; }
+.updater-release-channel { margin: 5px 0 0; color: #92929a; font-size: 10px; }
 .updater-popover-status { margin: 9px 0 13px; color: #c9c9ce; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .updater-popover-status.is-error { color: #ff9b88; }
 .updater-button { display: inline-flex; align-items: center; justify-content: center; min-height: 34px; max-width: 100%; padding: 0 11px; overflow: hidden; border: 1px solid #ffffff20; border-radius: 9px; background: #ffffff0a; color: #d0cdd2; font: 600 11px/1.2 inherit; white-space: nowrap; text-overflow: ellipsis; transition: background .16s ease, border-color .16s ease, color .16s ease; }

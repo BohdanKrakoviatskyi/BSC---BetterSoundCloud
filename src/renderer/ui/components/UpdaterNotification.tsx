@@ -121,6 +121,7 @@ export function UpdaterNotification() {
     {open && <section className="updater-popover" role="dialog" aria-label="Обновление приложения">
       <div className="updater-popover-title">Обновления</div>
       <p className="updater-current-version">Текущая версия: <strong>{currentVersion}</strong></p>
+      <p className="updater-release-channel">Канал обновлений: GitHub Releases</p>
       <p className={`updater-popover-status${status.startsWith('Ошибка') ? ' is-error' : ''}`} aria-live="polite">{status || 'Проверка ещё не выполнена'}</p>
       {update
         ? <button className="updater-button has-update" type="button" onClick={() => void installUpdate()} disabled={updating}>{updating ? 'Установка…' : `Установить ${update.version}`}</button>
