@@ -18,11 +18,12 @@ type Props = {
   onPlayTrack: (track: Track) => void;
   onOpenTrack: (track: Track, context: Track[]) => void;
   onOpenPlaylist: (playlist: Playlist) => void;
+  onOpenSocial: (tab: 'followers' | 'followings') => void;
 };
 
 type ProfileTab = 'all' | 'playlists';
 
-export function MyProfilePage({ account, details, tracks, history, historyLoading, playlists, loading, error, currentTrackId, isPlaying, playbackLoading, onPlayTrack, onOpenTrack, onOpenPlaylist }: Props) {
+export function MyProfilePage({ account, details, tracks, history, historyLoading, playlists, loading, error, currentTrackId, isPlaying, playbackLoading, onPlayTrack, onOpenTrack, onOpenPlaylist, onOpenSocial }: Props) {
   const [tab, setTab] = useState<ProfileTab>('all');
   const avatar = details?.avatar || account.avatarUrl;
   const displayName = details?.fullName || account.fullName || account.username;
@@ -61,8 +62,8 @@ export function MyProfilePage({ account, details, tracks, history, historyLoadin
           </div>
         </div>
         <div className="my-profile-stats" aria-label="Статистика профиля">
-          {followers !== undefined && <div><b>{followers.toLocaleString('ru-RU')}</b><span>подписчиков</span></div>}
-          {details?.followingsCount !== undefined && <div><b>{details.followingsCount.toLocaleString('ru-RU')}</b><span>подписок</span></div>}
+          {followers !== undefined && <button className="my-profile-stat-button" type="button" onClick={() => onOpenSocial('followers')}><b>{followers.toLocaleString('ru-RU')}</b><span>подписчиков</span></button>}
+          {details?.followingsCount !== undefined && <button className="my-profile-stat-button" type="button" onClick={() => onOpenSocial('followings')}><b>{details.followingsCount.toLocaleString('ru-RU')}</b><span>подписок</span></button>}
           {trackCount !== undefined && <div><b>{trackCount.toLocaleString('ru-RU')}</b><span>треков</span></div>}
         </div>
       </header>

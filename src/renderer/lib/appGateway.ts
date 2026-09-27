@@ -1,5 +1,5 @@
-import type { SoundCloudMixedSelection, SoundCloudSearchTrack, SoundCloudTrack, SoundCloudTrackDetails, SoundCloudUserProfile, TrackStream } from './desktop';
-import type { ArtistProfile, Playlist, Profile, Settings, Track, TrackCollection, TrackDetails, TrackLyrics } from '../domain/models';
+import type { SoundCloudMixedSelection, SoundCloudSearchTrack, SoundCloudSocialPage, SoundCloudTrack, SoundCloudTrackDetails, SoundCloudUserProfile, TrackStream } from './desktop';
+import type { ArtistProfile, Playlist, Profile, Settings, SocialPage, SocialUser, Track, TrackCollection, TrackDetails, TrackLyrics } from '../domain/models';
 import type { AuthStatus } from './desktop';
 
 function mapTrack(source: SoundCloudTrack | SoundCloudSearchTrack): Track {
@@ -53,6 +53,22 @@ function mapArtistProfile(source: SoundCloudUserProfile): ArtistProfile {
     followingsCount: source.followingsCount,
     trackCount: source.trackCount,
     verified: source.verified,
+  };
+}
+
+function mapSocialPage(source: SoundCloudSocialPage): SocialPage {
+  return {
+    users: source.collection.map((user): SocialUser => ({
+      id: user.id,
+      username: user.username,
+      fullName: user.fullName,
+      permalink: user.permalinkUrl,
+      avatar: user.avatarUrl,
+      followersCount: user.followersCount,
+      followingsCount: user.followingsCount,
+      trackCount: user.trackCount,
+    })),
+    next: source.nextHref,
   };
 }
 
@@ -138,6 +154,9 @@ export const appGateway = {
   mixedSelections: async () => (await window.desktop.mixedSelections()).map(mapCollection),
   artistProfile: async (userId: number) => mapArtistProfile(await window.desktop.userProfile(userId)),
   artistTracks: async (userId: number) => (await window.desktop.userTracks(userId)).map(mapTrack),
+  artistLikes: async (userId: number) => (await window.desktop.userLikes(userId)).map(mapTrack),
+  artistFollowers: async (userId: number, next?: string) => mapSocialPage(await window.desktop.userFollowers(userId, next)),
+  artistFollowings: async (userId: number, next?: string) => mapSocialPage(await window.desktop.userFollowings(userId, next)),
   artistPlaylists: async (userId: number): Promise<Playlist[]> => (await window.desktop.userPlaylists(userId)).map(mapPlaylist),
   likeTrack: (trackId: number, trackUrn: string, datadomeCookie?: string) => window.desktop.likeTrack(trackId, trackUrn, datadomeCookie),
   unlikeTrack: (trackId: number, trackUrn: string, datadomeCookie?: string) => window.desktop.unlikeTrack(trackId, trackUrn, datadomeCookie),

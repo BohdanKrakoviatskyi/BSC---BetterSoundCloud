@@ -1,0 +1,12 @@
+.artist-track-list-page { max-width: 1360px; padding-bottom: 40px; }
+.artist-track-list-page > .track-detail-back { margin-bottom: 18px; }
+.artist-track-list-header { margin-bottom: 22px; padding-bottom: 17px; border-bottom: 1px solid #ffffff14; }
+.artist-track-list-header h1 { margin: 0 0 6px; font-size: clamp(27px, 4vw, 40px); letter-spacing: -.04em; }
+.artist-track-list-header p { margin: 0; color: #9999a2; font-size: 11px; }
+.artist-track-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 22px 16px; }
+.artist-track-card-grid .music-card { min-width: 0; }
+.view-all-tracks { margin-left: 12px; }
+.view-all-tracks:hover { color: #fff; }
+@media (max-width: 700px) {
+  .artist-track-card-grid { grid-template-columns: repeat(auto-fill, minmax(125px, 1fr)); gap: 17px 11px; }
+}

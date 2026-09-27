@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { ArtistProfile, Playlist, Track, TrackDetails, TrackCollection, TrackLyrics } from '../domain/models';
+import type { ArtistProfile, Playlist, SocialUser, Track, TrackDetails, TrackCollection, TrackLyrics } from '../domain/models';
 import { appGateway } from '../lib/appGateway';
 import type { SoundCloudCredentials } from '../lib/useSoundCloudAuth';
 import { AuthScreen } from './components/AuthScreen';
@@ -12,6 +12,8 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { TrackSearch } from './components/TrackSearch';
 import { TrackDetailsPage } from './components/TrackDetailsPage';
 import { ArtistProfilePage } from './components/ArtistProfilePage';
+import { ArtistTrackListPage } from './components/ArtistTrackListPage';
+import { SocialUsersPage } from './components/SocialUsersPage';
 import { Sidebar } from './components/Sidebar';
 import { MyLibraryPage } from './components/MyLibraryPage';
 import { PlaylistPage } from './components/PlaylistPage';
@@ -126,12 +128,42 @@ export function App() {
   const [artistTracks, setArtistTracks] = useState<Track[]>([]);
   const [artistTracksLoading, setArtistTracksLoading] = useState(false);
   const [artistTracksError, setArtistTracksError] = useState('');
+  const [artistLikedTracks, setArtistLikedTracks] = useState<Track[]>([]);
+  const [artistLikedTracksLoading, setArtistLikedTracksLoading] = useState(false);
+  const [artistLikedTracksError, setArtistLikedTracksError] = useState('');
+  const [artistPlaylists, setArtistPlaylists] = useState<Playlist[]>([]);
+  const [artistPlaylistsLoading, setArtistPlaylistsLoading] = useState(false);
+  const [artistPlaylistsError, setArtistPlaylistsError] = useState('');
+  const [artistSocialTab, setArtistSocialTab] = useState<'followers' | 'followings'>('followers');
+  const [artistFollowers, setArtistFollowers] = useState<SocialUser[]>([]);
+  const [artistFollowings, setArtistFollowings] = useState<SocialUser[]>([]);
+  const [artistFollowersNext, setArtistFollowersNext] = useState('');
+  const [artistFollowingsNext, setArtistFollowingsNext] = useState('');
+  const [artistSocialLoading, setArtistSocialLoading] = useState(false);
+  const [artistSocialError, setArtistSocialError] = useState('');
   const artistRequestId = useRef(0);
+  const artistSocialRequestId = useRef(0);
+  const artistReturnPage = useRef<Page>('library');
+  const artistSocialReturnSnapshot = useRef<{
+    followers: SocialUser[];
+    followings: SocialUser[];
+    followersNext: string;
+    followingsNext: string;
+  } | null>(null);
   const [myProfileDetails, setMyProfileDetails] = useState<ArtistProfile | null>(null);
   const [myProfileTracks, setMyProfileTracks] = useState<Track[]>([]);
   const [myProfilePlaylists, setMyProfilePlaylists] = useState<Playlist[]>([]);
   const [myProfileLoading, setMyProfileLoading] = useState(false);
   const [myProfileError, setMyProfileError] = useState('');
+  const [myProfileSocialTab, setMyProfileSocialTab] = useState<'followers' | 'followings' | null>(null);
+  const [myProfileFollowers, setMyProfileFollowers] = useState<SocialUser[]>([]);
+  const [myProfileFollowings, setMyProfileFollowings] = useState<SocialUser[]>([]);
+  const [myProfileFollowersNext, setMyProfileFollowersNext] = useState('');
+  const [myProfileFollowingsNext, setMyProfileFollowingsNext] = useState('');
+  const [myProfileSocialLoading, setMyProfileSocialLoading] = useState(false);
+  const [myProfileSocialError, setMyProfileSocialError] = useState('');
+  const myProfileSocialRequestId = useRef(0);
+  const [socialPageOwner, setSocialPageOwner] = useState<'my' | 'artist'>('my');
   const myProfileRequestId = useRef(0);
   // Lyrics sidebar. The phase drives the artwork flight, so the panel stays mounted in both
   // directions until the track artwork has reached its destination.
@@ -468,9 +500,11 @@ export function App() {
 
   async function runArtistProfileRequest(requestId: number, artistId: number) {
     console.info('[ui.artist.profile] loading', { artistId });
-    const [profileResult, tracksResult] = await Promise.allSettled([
+    const [profileResult, tracksResult, likesResult, playlistsResult] = await Promise.allSettled([
       appGateway.artistProfile(artistId),
       appGateway.artistTracks(artistId),
+      appGateway.artistLikes(artistId),
+      appGateway.artistPlaylists(artistId),
     ]);
     if (requestId !== artistRequestId.current) {
       console.debug('[ui.artist.profile] ignored stale response', { artistId, requestId });
@@ -492,32 +526,119 @@ export function App() {
       console.error('[ui.artist.tracks] failed', { artistId, error: message });
       setArtistTracksError(message);
     }
+    if (likesResult.status === 'fulfilled') setArtistLikedTracks(likesResult.value);
+    else {
+      setArtistLikedTracks([]);
+      setArtistLikedTracksError(reasonText(likesResult.reason, 'Лайки автора недоступны'));
+    }
+    if (playlistsResult.status === 'fulfilled') setArtistPlaylists(playlistsResult.value);
+    else {
+      setArtistPlaylists([]);
+      setArtistPlaylistsError(reasonText(playlistsResult.reason, 'Не удалось загрузить плейлисты автора'));
+    }
     setArtistProfileLoading(false);
     setArtistTracksLoading(false);
+    setArtistLikedTracksLoading(false);
+    setArtistPlaylistsLoading(false);
+  }
+
+  async function loadArtistSocial(artistId: number, tab: 'followers' | 'followings', next?: string, append = false) {
+    const requestId = ++artistSocialRequestId.current;
+    setArtistSocialLoading(true);
+    setArtistSocialError('');
+    try {
+      const result = tab === 'followers'
+        ? await appGateway.artistFollowers(artistId, next)
+        : await appGateway.artistFollowings(artistId, next);
+      if (requestId !== artistSocialRequestId.current || artistProfile?.id !== artistId) return;
+      const setter = tab === 'followers' ? setArtistFollowers : setArtistFollowings;
+      setter((current) => append ? [...current, ...result.users.filter((user) => !current.some((item) => item.id === user.id))] : result.users);
+      if (tab === 'followers') setArtistFollowersNext(result.next || '');
+      else setArtistFollowingsNext(result.next || '');
+    } catch (reason) {
+      if (requestId !== artistSocialRequestId.current) return;
+      setArtistSocialError(reasonText(reason, 'Не удалось загрузить список пользователей'));
+    } finally {
+      if (requestId === artistSocialRequestId.current) setArtistSocialLoading(false);
+    }
+  }
+
+  function selectArtistSocialTab(tab: 'followers' | 'followings') {
+    setSocialPageOwner('artist');
+    setPage(tab);
+    setArtistSocialTab(tab);
+    if (!artistProfile) return;
+    const isLoaded = tab === 'followers' ? artistFollowers.length > 0 : artistFollowings.length > 0;
+    if (!isLoaded) void loadArtistSocial(artistProfile.id, tab);
+  }
+
+  function loadMoreArtistSocial() {
+    if (!artistProfile) return;
+    const next = artistSocialTab === 'followers' ? artistFollowersNext : artistFollowingsNext;
+    if (next) void loadArtistSocial(artistProfile.id, artistSocialTab, next, true);
   }
 
   async function openArtistProfile(artistId: number) {
     if (!artistId) return;
+    artistReturnPage.current = page;
+    if ((page === 'followers' || page === 'followings') && socialPageOwner === 'artist') {
+      artistSocialReturnSnapshot.current = {
+        followers: artistFollowers,
+        followings: artistFollowings,
+        followersNext: artistFollowersNext,
+        followingsNext: artistFollowingsNext,
+      };
+    } else {
+      artistSocialReturnSnapshot.current = null;
+    }
     const requestId = ++artistRequestId.current;
+    artistSocialRequestId.current += 1;
     setPage('artist');
+    setArtistSocialTab('followers');
+    setArtistFollowers([]);
+    setArtistFollowings([]);
+    setArtistFollowersNext('');
+    setArtistFollowingsNext('');
+    setArtistSocialError('');
     setArtistProfileLoading(true);
     setArtistProfileError('');
     setArtistTracks([]);
     setArtistTracksLoading(true);
     setArtistTracksError('');
+    setArtistLikedTracks([]);
+    setArtistLikedTracksLoading(true);
+    setArtistLikedTracksError('');
+    setArtistPlaylists([]);
+    setArtistPlaylistsLoading(true);
+    setArtistPlaylistsError('');
     setArtistProfile((prev) => (prev?.id === artistId ? prev : null));
     await runArtistProfileRequest(requestId, artistId);
   }
 
   async function openArtistFromTrack(track: Track) {
+    artistReturnPage.current = page;
+    artistSocialReturnSnapshot.current = null;
     const requestId = ++artistRequestId.current;
+    artistSocialRequestId.current += 1;
     setPage('artist');
+    setArtistSocialTab('followers');
+    setArtistFollowers([]);
+    setArtistFollowings([]);
+    setArtistFollowersNext('');
+    setArtistFollowingsNext('');
+    setArtistSocialError('');
     setArtistProfile(null);
     setArtistProfileLoading(true);
     setArtistProfileError('');
     setArtistTracks([]);
     setArtistTracksLoading(true);
     setArtistTracksError('');
+    setArtistLikedTracks([]);
+    setArtistLikedTracksLoading(true);
+    setArtistLikedTracksError('');
+    setArtistPlaylists([]);
+    setArtistPlaylistsLoading(true);
+    setArtistPlaylistsError('');
     try {
       const details = await appGateway.trackDetails(track.id);
       if (requestId !== artistRequestId.current) return;
@@ -526,6 +647,8 @@ export function App() {
         setArtistProfileError('SoundCloud не вернул ID автора для этого трека');
         setArtistProfileLoading(false);
         setArtistTracksLoading(false);
+        setArtistLikedTracksLoading(false);
+        setArtistPlaylistsLoading(false);
         return;
       }
       await runArtistProfileRequest(requestId, artistId);
@@ -536,13 +659,31 @@ export function App() {
       setArtistProfileError(message);
       setArtistProfileLoading(false);
       setArtistTracksLoading(false);
+      setArtistLikedTracksLoading(false);
+      setArtistPlaylistsLoading(false);
     }
+  }
+
+  function backFromArtistProfile() {
+    if ((artistReturnPage.current === 'followers' || artistReturnPage.current === 'followings') && socialPageOwner === 'artist' && artistSocialReturnSnapshot.current) {
+      setArtistFollowers(artistSocialReturnSnapshot.current.followers);
+      setArtistFollowings(artistSocialReturnSnapshot.current.followings);
+      setArtistFollowersNext(artistSocialReturnSnapshot.current.followersNext);
+      setArtistFollowingsNext(artistSocialReturnSnapshot.current.followingsNext);
+    }
+    setPage(artistReturnPage.current);
   }
 
   async function openMyProfile() {
     setPage('profile');
     if (!profile) return;
     const requestId = ++myProfileRequestId.current;
+    setMyProfileSocialTab(null);
+    setMyProfileFollowers([]);
+    setMyProfileFollowings([]);
+    setMyProfileFollowersNext('');
+    setMyProfileFollowingsNext('');
+    setMyProfileSocialError('');
     setMyProfileLoading(true);
     setMyProfileError('');
     const [detailsResult, tracksResult, playlistsResult] = await Promise.allSettled([
@@ -560,6 +701,42 @@ export function App() {
     else errors.push(reasonText(playlistsResult.reason, 'Не удалось загрузить плейлисты профиля'));
     setMyProfileError(errors.join(' · '));
     setMyProfileLoading(false);
+  }
+
+  async function openMySocialPage(tab: 'followers' | 'followings') {
+    setSocialPageOwner('my');
+    setPage(tab);
+    const loaded = tab === 'followers' ? myProfileFollowers.length > 0 : myProfileFollowings.length > 0;
+    if (!loaded) await loadMyProfileSocial(tab);
+    else setMyProfileSocialTab(tab);
+  }
+
+  async function loadMyProfileSocial(tab: 'followers' | 'followings', next?: string, append = false) {
+    if (!profile) return;
+    const requestId = ++myProfileSocialRequestId.current;
+    setMyProfileSocialTab(tab);
+    setMyProfileSocialLoading(true);
+    setMyProfileSocialError('');
+    try {
+      const result = tab === 'followers'
+        ? await appGateway.artistFollowers(profile.id, next)
+        : await appGateway.artistFollowings(profile.id, next);
+      if (requestId !== myProfileSocialRequestId.current) return;
+      const setter = tab === 'followers' ? setMyProfileFollowers : setMyProfileFollowings;
+      setter((current) => append ? [...current, ...result.users.filter((user) => !current.some((item) => item.id === user.id))] : result.users);
+      if (tab === 'followers') setMyProfileFollowersNext(result.next || '');
+      else setMyProfileFollowingsNext(result.next || '');
+    } catch (reason) {
+      if (requestId !== myProfileSocialRequestId.current) return;
+      setMyProfileSocialError(reasonText(reason, 'Не удалось загрузить список пользователей'));
+    } finally {
+      if (requestId === myProfileSocialRequestId.current) setMyProfileSocialLoading(false);
+    }
+  }
+
+  function loadMoreMyProfileSocial() {
+    if (myProfileSocialTab === 'followers' && myProfileFollowersNext) void loadMyProfileSocial('followers', myProfileFollowersNext, true);
+    else if (myProfileSocialTab === 'followings' && myProfileFollowingsNext) void loadMyProfileSocial('followings', myProfileFollowingsNext, true);
   }
 
   function playDetailsTrack() {
@@ -995,6 +1172,36 @@ export function App() {
                 onPlayTrack={selectTrack}
                 onOpenTrack={(track, context) => void openTrackDetails(track, context)}
                 onOpenPlaylist={(playlist) => void openPlaylist(playlist)}
+                onOpenSocial={(tab) => void openMySocialPage(tab)}
+              />
+          : (page === 'followers' || page === 'followings')
+            ? <SocialUsersPage
+                kind={page}
+                users={socialPageOwner === 'artist'
+                  ? page === 'followers' ? artistFollowers : artistFollowings
+                  : page === 'followers' ? myProfileFollowers : myProfileFollowings}
+                loading={socialPageOwner === 'artist' ? artistSocialLoading : myProfileSocialLoading}
+                error={socialPageOwner === 'artist' ? artistSocialError : myProfileSocialError}
+                hasMore={socialPageOwner === 'artist'
+                  ? Boolean(page === 'followers' ? artistFollowersNext : artistFollowingsNext)
+                  : Boolean(page === 'followers' ? myProfileFollowersNext : myProfileFollowingsNext)}
+                onBack={() => setPage(socialPageOwner === 'artist' ? 'artist' : 'profile')}
+                onSwitch={(kind) => socialPageOwner === 'artist' ? selectArtistSocialTab(kind) : void openMySocialPage(kind)}
+                onLoadMore={() => socialPageOwner === 'artist' ? loadMoreArtistSocial() : loadMoreMyProfileSocial()}
+                onOpenProfile={(userId) => void openArtistProfile(userId)}
+              />
+          : (page === 'artist-tracks-all' || page === 'artist-likes-all')
+            ? <ArtistTrackListPage
+                title={page === 'artist-tracks-all' ? 'Все треки' : 'Понравившиеся треки'}
+                artistName={artistProfile?.fullName || artistProfile?.username || ''}
+                tracks={page === 'artist-tracks-all' ? artistTracks : artistLikedTracks}
+                currentTrackId={currentTrack?.id ?? null}
+                isPlaying={shouldPlay}
+                playbackLoading={playbackLoading}
+                onBack={() => setPage('artist')}
+                onPlay={selectTrack}
+                onOpen={(track, context) => void openTrackDetails(track, context)}
+                onOpenArtist={(track) => void openArtistFromTrack(track)}
               />
           : page === 'artist'
             ? <ArtistProfilePage
@@ -1004,12 +1211,22 @@ export function App() {
                 tracks={artistTracks}
                 tracksLoading={artistTracksLoading}
                 tracksError={artistTracksError}
+                likedTracks={artistLikedTracks}
+                likedTracksLoading={artistLikedTracksLoading}
+                likedTracksError={artistLikedTracksError}
+                playlists={artistPlaylists}
+                playlistsLoading={artistPlaylistsLoading}
+                playlistsError={artistPlaylistsError}
                 currentTrackId={currentTrack?.id ?? null}
                 isPlaying={shouldPlay}
                 playbackLoading={playbackLoading}
                 onPlayTrack={selectTrack}
                 onOpenTrack={(track, context) => void openTrackDetails(track, context)}
-                onBack={() => setPage(detailsTrack ? 'track' : 'library')}
+                onOpenPlaylist={(playlist) => void openPlaylist(playlist)}
+                onSocialTab={selectArtistSocialTab}
+                onViewTracks={() => setPage('artist-tracks-all')}
+                onViewLikes={() => setPage('artist-likes-all')}
+                onBack={backFromArtistProfile}
               />
           : <TrackDetailsPage
                 track={detailsTrack}

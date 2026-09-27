@@ -18,9 +18,10 @@ type Props = {
   onPlayTrack: (track: Track) => void;
   onOpenTrack: (track: Track, context: Track[]) => void;
   onOpenArtist?: (track: Track) => void;
+  onViewAll?: () => void;
 };
 
-export function TrackCarouselSection({ title, kicker = 'SOUNDCLOUD', tracks, artistFallback, loading = false, error = '', emptyMessage = 'Пока нет треков для этой подборки.', onClear, currentTrackId, isPlaying, playbackLoading, onPlayTrack, onOpenTrack, onOpenArtist }: Props) {
+export function TrackCarouselSection({ title, kicker = 'SOUNDCLOUD', tracks, artistFallback, loading = false, error = '', emptyMessage = 'Пока нет треков для этой подборки.', onClear, currentTrackId, isPlaying, playbackLoading, onPlayTrack, onOpenTrack, onOpenArtist, onViewAll }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const uniqueTracks = Array.from(new Map(tracks.map((track) => [track.id, track])).values());
   function scroll(direction: -1 | 1) {
@@ -32,6 +33,7 @@ export function TrackCarouselSection({ title, kicker = 'SOUNDCLOUD', tracks, art
       <div className="section-heading">
         <div><div className="eyebrow">{kicker}</div><h2>{title}<span className="track-count"> {uniqueTracks.length}</span></h2></div>
         <div className="tracks-actions">
+          {onViewAll && uniqueTracks.length > 0 && <button className="text-action view-all-tracks" type="button" onClick={onViewAll}>Все <span aria-hidden="true">→</span></button>}
           {/*{onClear && uniqueTracks.length > 0 && <button className="text-action" type="button" onClick={onClear}>Очистить</button>}*/}
           {uniqueTracks.length > 3 && <div className="carousel-controls" aria-label="Прокрутка треков"><button type="button" aria-label="Прокрутить влево" onClick={() => scroll(-1)}>‹</button><button type="button" aria-label="Прокрутить вправо" onClick={() => scroll(1)}>›</button></div>}
         </div>
