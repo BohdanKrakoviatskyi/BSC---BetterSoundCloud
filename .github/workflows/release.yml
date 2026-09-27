@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to build and publish (for example, v0.1.12)
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -16,14 +22,14 @@ jobs:
       fail-fast: false
       max-parallel: 1
       matrix:
-        platform: ${{ fromJSON((github.ref_name == 'v0.1.4' || github.ref_name == 'v0.1.5' || github.ref_name == 'v0.1.6' || github.ref_name == 'v0.1.7' || github.ref_name == 'v0.1.8' || github.ref_name == 'v0.1.9' || github.ref_name == 'v0.1.10') && '["macos-latest"]' || '["ubuntu-24.04","windows-latest","macos-latest"]') }}
+        platform: [ubuntu-24.04, windows-latest, macos-latest]
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
       - name: Sync version from release tag
         env:
-          RELEASE_VERSION: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ inputs.tag || github.ref_name }}
         run: node scripts/sync-release-version.mjs
 
       - name: Install Linux build dependencies
@@ -72,8 +78,8 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
         with:
           tauriScript: npx tauri
-          tagName: ${{ github.ref_name }}
-          releaseName: BetterSoundCloud ${{ github.ref_name }}
+          tagName: ${{ inputs.tag || github.ref_name }}
+          releaseName: BetterSoundCloud ${{ inputs.tag || github.ref_name }}
           releaseBody: See the release assets to download and install this version.
           releaseDraft: false
           prerelease: false
