@@ -1,8 +1,12 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import type { SoundCloudCredentials } from '../../lib/useSoundCloudAuth';
-import { SilentAuthButton } from './SilentAuthButton';
+import { useSoundCloudAuth } from '../../lib/useSoundCloudAuth';
+import { ChevronGlyph, CloudGlyph } from './AuthIcons';
 import { ErrorMessage } from './ErrorMessage';
 import './AuthScreen.css';
+
+const BACKGROUND_VIDEO =
+  'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260808_064556_051587f1-74a1-4336-8c05-4dde3594ed05.mp4';
 
 type Props = {
   error: string;
@@ -12,64 +16,192 @@ type Props = {
   onSilentLogin: (credentials: SoundCloudCredentials) => void | Promise<void>;
 };
 
+function applyLineScales(lineOne: HTMLElement | null, lineTwo: HTMLElement | null) {
+  if (!lineOne || !lineTwo) return;
+  lineOne.style.setProperty('--line-scale', '1');
+  lineTwo.style.setProperty('--line-scale', '1');
+  const w1 = lineOne.scrollWidth;
+  const w2 = lineTwo.scrollWidth;
+  if (w1 <= 0 || w2 <= 0) return;
+  const target = Math.max(w1, w2);
+  lineOne.style.setProperty('--line-scale', String(target / w1));
+  lineTwo.style.setProperty('--line-scale', String(target / w2));
+}
+
 export function AuthScreen({ error, busy, clientId, onLogin, onSilentLogin }: Props) {
   const [token, setToken] = useState('');
   const [manualClientId, setManualClientId] = useState(clientId);
-  const [showToken, setShowToken] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [motionReady, setMotionReady] = useState(false);
+  const [manualPending, setManualPending] = useState(false);
+  const lineOneRef = useRef<HTMLSpanElement>(null);
+  const lineTwoRef = useRef<HTMLSpanElement>(null);
+  const { starting, error: silentError, startAuthFlow } = useSoundCloudAuth({ onCredentials: onSilentLogin });
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  const oauthBusy = busy || starting;
+  const canConnect = Boolean(token.trim() && manualClientId.trim()) && !busy;
+
+  useEffect(() => {
+    setManualClientId(clientId);
+  }, [clientId]);
+
+  useEffect(() => {
+    if (!manualPending || busy) return;
+    setManualPending(false);
+  }, [busy, manualPending]);
+
+  useEffect(() => {
+    document.title = 'Вход в SoundCloud';
+    document.documentElement.style.colorScheme = 'dark';
+    let theme = document.querySelector('meta[name="theme-color"]');
+    if (!theme) {
+      theme = document.createElement('meta');
+      theme.setAttribute('name', 'theme-color');
+      document.head.appendChild(theme);
+    }
+    theme.setAttribute('content', '#000000');
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const start = () => {
+      if (!cancelled) setMotionReady(true);
+    };
+    const fallback = window.setTimeout(start, 3500);
+    if (document.fonts?.ready) {
+      void document.fonts.ready.then(() => {
+        window.clearTimeout(fallback);
+        start();
+      });
+    }
+    return () => {
+      cancelled = true;
+      window.clearTimeout(fallback);
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    applyLineScales(lineOneRef.current, lineTwoRef.current);
+    const onResize = () => applyLineScales(lineOneRef.current, lineTwoRef.current);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [motionReady]);
+
+  function handleManualConnect(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (token.trim() && manualClientId.trim()) onLogin(token.trim(), manualClientId.trim());
+    const accessToken = token.trim();
+    const id = manualClientId.trim();
+    if (!accessToken || !id) return;
+    setManualPending(true);
+    onLogin(accessToken, id);
   }
 
   return (
-    <main className="auth-shell">
-      <section className="auth-card auth-entry-card" aria-labelledby="auth-title">
-        <div className="auth-content">
-          <div className="auth-brand" aria-label="BetterSoundCloud">
-            <span className="auth-brand-mark" aria-hidden="true">♫</span>
-            <span>Better<span>SoundCloud</span></span>
+    <main className={`viewport${motionReady ? '' : ' motion-pending'}`}>
+      <section className="screen" id="screen">
+        <video className="background" autoPlay muted loop playsInline disablePictureInPicture aria-hidden="true">
+          <source src={BACKGROUND_VIDEO} type="video/mp4" />
+        </video>
+
+        <header className="header">
+          <a className="brand" href="https://soundcloud.com" aria-label="SoundCloud" target="_blank" rel="noreferrer">
+            <CloudGlyph className="brand-mark" />
+          </a>
+
+          <div className="header-actions">
+            <button
+              className="primary-cta header-cta"
+              type="button"
+              onClick={() => void startAuthFlow()}
+              disabled={oauthBusy}
+            >
+              <span className="label">{oauthBusy ? 'Открываем SoundCloud…' : 'Войти через SoundCloud'}</span>
+              <span className="arrow-box" aria-hidden="true">
+                <CloudGlyph className="cta-cloud" />
+              </span>
+            </button>
+          </div>
+        </header>
+
+        <section className="hero">
+          <div className="hero-content">
+            <h1 className="hero-title">
+              <span className="line line-one" ref={lineOneRef}>
+                <span className="line-reveal">Войдите через</span>
+              </span>
+              <span className="line line-two" ref={lineTwoRef}>
+                <span className="line-reveal">SoundCloud.</span>
+              </span>
+            </h1>
+
+            <p className="hero-copy">
+              Подключите аккаунт, чтобы синхронизировать треки и статистику.
+              <br />
+              Один клик — и вы внутри. Если автоматический вход недоступен,
+              <br />
+              укажите access token и client ID вручную слева вверху.
+            </p>
+
+            {oauthBusy && (
+              <p className="hero-status" role="status">
+                Проверяем подключение…
+              </p>
+            )}
+            {silentError && <ErrorMessage message={silentError} className="auth-inline-error" />}
           </div>
 
-          <div className="auth-intro">
-            <span className="auth-eyebrow"><span className="auth-eyebrow-dot" /> ВАША МУЗЫКА — БЛИЖЕ</span>
-            <h1 id="auth-title">SoundCloud.<br /><span>По-новому.</span></h1>
-            <p className="auth-note">Подключите аккаунт, чтобы слушать любимые треки и собирать свою коллекцию в BetterSoundCloud.</p>
-          </div>
+          <aside className={`manual-panel${manualOpen ? ' is-open' : ''}`}>
+            <button
+              className="manual-link"
+              type="button"
+              aria-expanded={manualOpen}
+              onClick={() => setManualOpen((open) => !open)}
+            >
+              <CloudGlyph className="manual-link-icon" />
+              <span>Ввести данные вручную</span>
+              <ChevronGlyph className="manual-link-chevron" />
+            </button>
 
-          <div className="auth-actions">
-            <SilentAuthButton onAuthenticated={onSilentLogin} disabled={busy} />
-            {busy && <p className="auth-status" role="status">Проверяем подключение…</p>}
-            {error && <ErrorMessage message={error} className="auth-error" />}
-          </div>
-
-          <details className="auth-manual">
-            <summary>Ввести данные вручную <span className="auth-chevron" aria-hidden="true" /></summary>
-            <div className="auth-manual-content">
-              <p>Если автоматический вход не сработал, укажите access token и client_id SoundCloud.</p>
-              <form className="auth-form" onSubmit={submit}>
-                <label className="auth-field" htmlFor="auth-token">Access token</label>
-                <div className="auth-input-row">
-                  <input id="auth-token" type={showToken ? 'text' : 'password'} value={token} onChange={(event) => setToken(event.target.value)} placeholder="Вставьте access token" autoComplete="off" spellCheck={false} disabled={busy} />
-                  <button type="button" className="auth-ghost" aria-pressed={showToken} onClick={() => setShowToken((visible) => !visible)}>{showToken ? 'Скрыть' : 'Показать'}</button>
-                </div>
-                <label className="auth-field" htmlFor="auth-client-id">Client ID</label>
-                <div className="auth-input-row">
-                  <input id="auth-client-id" type="text" value={manualClientId} onChange={(event) => setManualClientId(event.target.value)} placeholder="Введите client_id" minLength={8} maxLength={128} pattern="[A-Za-z0-9_-]+" autoComplete="off" spellCheck={false} disabled={busy} required />
-                </div>
-                <button className="auth-manual-submit" type="submit" disabled={busy || !token.trim() || !manualClientId.trim()}>{busy ? 'Проверяем токен…' : 'Подключить аккаунт'}</button>
-              </form>
-            </div>
-          </details>
-        </div>
-
-        <div className="auth-art" aria-hidden="true">
-          <div className="auth-art-glow" />
-          <div className="auth-record"><div className="auth-record-label"><span>BETTER<br />SOUND<br />CLOUD</span><i /></div></div>
-          <div className="auth-art-caption"><span>01 / ВАШ ЗВУК</span><span>ВСЕГДА РЯДОМ ↗</span></div>
-        </div>
+            <form className="manual-inline" onSubmit={handleManualConnect} aria-hidden={!manualOpen}>
+              <input
+                id="access-token"
+                type="password"
+                value={token}
+                onChange={(event) => setToken(event.target.value)}
+                placeholder="Access token"
+                autoComplete="off"
+                spellCheck={false}
+                disabled={busy}
+                tabIndex={manualOpen ? 0 : -1}
+                aria-label="Access token"
+              />
+              <input
+                id="client-id"
+                type="text"
+                value={manualClientId}
+                onChange={(event) => setManualClientId(event.target.value)}
+                placeholder="Client ID"
+                minLength={8}
+                maxLength={128}
+                pattern="[A-Za-z0-9_-]+"
+                autoComplete="off"
+                spellCheck={false}
+                disabled={busy}
+                tabIndex={manualOpen ? 0 : -1}
+                aria-label="Client ID"
+              />
+              <button className="connect-button" type="submit" disabled={!canConnect} tabIndex={manualOpen ? 0 : -1}>
+                {busy || manualPending ? 'Подключаем…' : 'Подключить аккаунт'}
+              </button>
+              {manualOpen && error && (
+                <p className="manual-error" role="alert">
+                  {error}
+                </p>
+              )}
+            </form>
+          </aside>
+        </section>
       </section>
-      <p className="auth-footer">BETTERSOUNDCLOUD <span aria-hidden="true">✳</span> СЛУШАЙТЕ ПО-СВОЕМУ</p>
     </main>
   );
 }

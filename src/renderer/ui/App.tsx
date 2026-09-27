@@ -918,7 +918,7 @@ export function App() {
         </div>
       </header>
       <div className="workspace">
-        <Sidebar profile={profile} page={page} tracks={tracks} onNavigate={setPage} onPlayTrack={selectTrack} onOpenArtist={(track) => void openArtistFromTrack(track)} onResize={(delta) => setSidebarWidth((width) => Math.max(220, Math.min(380, width + delta)))} />
+        <Sidebar profile={profile} page={page} tracks={tracks} onNavigate={setPage} onPlayTrack={selectTrack} onOpenTrack={(track) => void openTrackDetails(track, tracks)} onOpenArtist={(track) => void openArtistFromTrack(track)} onResize={(delta) => setSidebarWidth((width) => Math.max(220, Math.min(380, width + delta)))} />
         <main className="main-view panel" id="mainView"><div className="main-scroll">
         {page === 'home'
           ? <HomePage
