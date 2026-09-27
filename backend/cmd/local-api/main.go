@@ -274,6 +274,47 @@ type soundcloudUserProfile struct {
 	Verified        bool   `json:"verified,omitempty"`
 }
 
+type soundcloudSocialUser struct {
+	ID              int64  `json:"id"`
+	Username        string `json:"username"`
+	FullName        string `json:"full_name,omitempty"`
+	PermalinkURL    string `json:"permalink_url,omitempty"`
+	AvatarURL       string `json:"avatar_url,omitempty"`
+	AvatarURLCamel  string `json:"avatarUrl,omitempty"`
+	Avatar          string `json:"avatar,omitempty"`
+	FollowersCount  int64  `json:"followers_count,omitempty"`
+	FollowersCamel  int64  `json:"followersCount,omitempty"`
+	FollowingsCount int64  `json:"followings_count,omitempty"`
+	FollowingsCamel int64  `json:"followingsCount,omitempty"`
+	TrackCount      int64  `json:"track_count,omitempty"`
+}
+
+type soundcloudSocialPage struct {
+	Collection []socialUserDTO `json:"collection"`
+	NextHref   string          `json:"nextHref,omitempty"`
+}
+
+type soundcloudSocialSourcePage struct {
+	Collection []soundcloudSocialUser `json:"collection"`
+	NextHref   string                 `json:"next_href"`
+}
+
+type socialUserDTO struct {
+	ID              int64  `json:"id"`
+	Username        string `json:"username"`
+	FullName        string `json:"fullName,omitempty"`
+	PermalinkURL    string `json:"permalinkUrl,omitempty"`
+	AvatarURL       string `json:"avatarUrl,omitempty"`
+	FollowersCount  int64  `json:"followersCount,omitempty"`
+	FollowingsCount int64  `json:"followingsCount,omitempty"`
+	TrackCount      int64  `json:"trackCount,omitempty"`
+}
+
+type userSocialParams struct {
+	UserID int64  `json:"userId"`
+	Next   string `json:"next,omitempty"`
+}
+
 type historyTrackParams struct {
 	Track soundcloudTrackCard `json:"track"`
 }
@@ -1677,37 +1718,155 @@ func (s *service) RPCUserTracks(params userProfileParams) ([]soundcloudTrackCard
 		return nil, errors.New("некорректный ID пользователя")
 	}
 	query := url.Values{}
-	query.Set("limit", "40")
-	query.Set("linked_partitioning", "true")
+	query.Set("limit", "200")
+	query.Set("linked_partitioning", "1")
 	endpoint, err := s.soundcloudV2URL("/users/"+strconv.FormatInt(params.UserID, 10)+"/tracks", query)
 	if err != nil {
 		return nil, fmt.Errorf("не удалось сформировать запрос треков автора: %w", err)
 	}
-	var response struct {
-		Collection []soundcloudTrack `json:"collection"`
-	}
 	startedAt := time.Now()
 	log.Printf("user.tracks stage=request user_id=%d", params.UserID)
+	result := make([]soundcloudTrackCard, 0, 200)
+	seenTracks := make(map[int64]struct{})
+	seenPages := make(map[string]struct{})
+	pageCount := 0
+	for endpoint != "" && pageCount < 100 {
+		if _, duplicate := seenPages[endpoint]; duplicate {
+			break
+		}
+		seenPages[endpoint] = struct{}{}
+		pageCount++
+		var page struct {
+			Collection []soundcloudTrack `json:"collection"`
+			NextHref   string            `json:"next_href"`
+		}
+		if err := s.getSoundCloudJSON(endpoint, &page); err != nil {
+			log.Printf("user.tracks stage=failed user_id=%d page=%d elapsed_ms=%d error=%q", params.UserID, pageCount, time.Since(startedAt).Milliseconds(), err.Error())
+			return nil, fmt.Errorf("не удалось загрузить треки автора: %w", err)
+		}
+		for _, track := range page.Collection {
+			if _, duplicate := seenTracks[track.ID]; duplicate {
+				continue
+			}
+			seenTracks[track.ID] = struct{}{}
+			artwork := track.ArtworkURL
+			if artwork != "" {
+				artwork = strings.Replace(artwork, "-large.", "-t500x500.", 1)
+			}
+			trackURN := track.URN
+			if trackURN == "" {
+				trackURN = fmt.Sprintf("soundcloud:tracks:%d", track.ID)
+			}
+			item := soundcloudTrackCard{ID: track.ID, TrackURN: trackURN, Title: track.Title, PermalinkURL: track.PermalinkURL, ArtworkURL: artwork, Duration: track.Duration, PlaybackCount: track.PlaybackCount, LikesCount: track.LikesCount}
+			item.User.Username = track.User.Username
+			result = append(result, item)
+		}
+		if page.NextHref == "" {
+			endpoint = ""
+			continue
+		}
+		endpoint, err = s.soundcloudV2URLFromAbsolute(page.NextHref)
+		if err != nil {
+			return nil, fmt.Errorf("SoundCloud вернул некорректную ссылку следующей страницы: %w", err)
+		}
+	}
+	log.Printf("user.tracks stage=complete user_id=%d count=%d pages=%d elapsed_ms=%d", params.UserID, len(result), pageCount, time.Since(startedAt).Milliseconds())
+	return result, nil
+}
+
+func (s *service) RPCUserLikes(params userProfileParams) ([]soundcloudTrackCard, error) {
+	if s.auth.Token == "" {
+		return nil, errors.New("сначала подключите аккаунт SoundCloud")
+	}
+	if params.UserID <= 0 {
+		return nil, errors.New("некорректный ID пользователя")
+	}
+	query := url.Values{}
+	query.Set("limit", "200")
+	query.Set("linked_partitioning", "1")
+	endpoint, err := s.soundcloudV2URL("/users/"+strconv.FormatInt(params.UserID, 10)+"/likes", query)
+	if err != nil {
+		return nil, fmt.Errorf("не удалось сформировать запрос лайков: %w", err)
+	}
+	var response struct {
+		Collection []struct {
+			Track *soundcloudTrack `json:"track"`
+		} `json:"collection"`
+	}
 	if err := s.getSoundCloudJSON(endpoint, &response); err != nil {
-		log.Printf("user.tracks stage=failed user_id=%d elapsed_ms=%d error=%q", params.UserID, time.Since(startedAt).Milliseconds(), err.Error())
-		return nil, fmt.Errorf("не удалось загрузить треки автора: %w", err)
+		return nil, fmt.Errorf("не удалось загрузить публичные лайки автора: %w", err)
 	}
 	result := make([]soundcloudTrackCard, 0, len(response.Collection))
-	for _, track := range response.Collection {
-		artwork := track.ArtworkURL
-		if artwork != "" {
-			artwork = strings.Replace(artwork, "-large.", "-t500x500.", 1)
+	for _, item := range response.Collection {
+		if item.Track == nil {
+			continue
 		}
+		track := item.Track
 		trackURN := track.URN
 		if trackURN == "" {
 			trackURN = fmt.Sprintf("soundcloud:tracks:%d", track.ID)
 		}
-		item := soundcloudTrackCard{ID: track.ID, TrackURN: trackURN, Title: track.Title, PermalinkURL: track.PermalinkURL, ArtworkURL: artwork, Duration: track.Duration, PlaybackCount: track.PlaybackCount, LikesCount: track.LikesCount}
-		item.User.Username = track.User.Username
-		result = append(result, item)
+		artwork := strings.Replace(track.ArtworkURL, "-large.", "-t500x500.", 1)
+		card := soundcloudTrackCard{ID: track.ID, TrackURN: trackURN, Title: track.Title, PermalinkURL: track.PermalinkURL, ArtworkURL: artwork, Duration: track.Duration, PlaybackCount: track.PlaybackCount, LikesCount: track.LikesCount}
+		card.User.Username = track.User.Username
+		result = append(result, card)
 	}
-	log.Printf("user.tracks stage=complete user_id=%d count=%d elapsed_ms=%d", params.UserID, len(result), time.Since(startedAt).Milliseconds())
 	return result, nil
+}
+
+func (s *service) RPCUserFollowers(params userSocialParams) (soundcloudSocialPage, error) {
+	return s.userSocialPage(params, "followers")
+}
+
+func (s *service) RPCUserFollowings(params userSocialParams) (soundcloudSocialPage, error) {
+	return s.userSocialPage(params, "followings")
+}
+
+func (s *service) userSocialPage(params userSocialParams, relation string) (soundcloudSocialPage, error) {
+	if s.auth.Token == "" {
+		return soundcloudSocialPage{}, errors.New("сначала подключите аккаунт SoundCloud")
+	}
+	if params.UserID <= 0 {
+		return soundcloudSocialPage{}, errors.New("некорректный ID пользователя")
+	}
+	query := url.Values{}
+	query.Set("limit", "50")
+	query.Set("linked_partitioning", "1")
+	endpoint, err := s.soundcloudV2URL("/users/"+strconv.FormatInt(params.UserID, 10)+"/"+relation, query)
+	if err != nil {
+		return soundcloudSocialPage{}, fmt.Errorf("не удалось сформировать запрос списка: %w", err)
+	}
+	if params.Next != "" {
+		endpoint, err = s.soundcloudV2URLFromAbsolute(params.Next)
+		if err != nil {
+			return soundcloudSocialPage{}, fmt.Errorf("некорректная ссылка следующей страницы: %w", err)
+		}
+	}
+	var source soundcloudSocialSourcePage
+	if err := s.getSoundCloudJSON(endpoint, &source); err != nil {
+		return soundcloudSocialPage{}, fmt.Errorf("не удалось загрузить список %s: %w", relation, err)
+	}
+	page := soundcloudSocialPage{NextHref: source.NextHref, Collection: make([]socialUserDTO, 0, len(source.Collection))}
+	for _, user := range source.Collection {
+		if user.AvatarURL == "" {
+			user.AvatarURL = user.AvatarURLCamel
+		}
+		if user.AvatarURL == "" {
+			user.AvatarURL = user.Avatar
+		}
+		if user.FollowersCount == 0 {
+			user.FollowersCount = user.FollowersCamel
+		}
+		if user.FollowingsCount == 0 {
+			user.FollowingsCount = user.FollowingsCamel
+		}
+		page.Collection = append(page.Collection, socialUserDTO{
+			ID: user.ID, Username: user.Username, FullName: user.FullName,
+			PermalinkURL: user.PermalinkURL, AvatarURL: user.AvatarURL,
+			FollowersCount: user.FollowersCount, FollowingsCount: user.FollowingsCount, TrackCount: user.TrackCount,
+		})
+	}
+	return page, nil
 }
 
 func (s *service) RPCUserPlaylists(params userProfileParams) ([]soundcloudPlaylistCard, error) {

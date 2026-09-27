@@ -757,11 +757,35 @@
 }
 
 /* Artist profile page. */
+.artist-profile-page, .social-users-page { --accent: transparent; }
 .artist-profile-page { padding-bottom: 10px; }
+.artist-skeleton-block, .artist-skeleton-stats > i, .artist-skeleton-card { display: block; background: linear-gradient(100deg, #ffffff08 20%, #ffffff17 38%, #ffffff08 56%); background-size: 220% 100%; animation: home-skeleton-shimmer 1.5s ease-in-out infinite; }
+.artist-skeleton-hero { display: flex; min-height: 250px; align-items: center; gap: 24px; margin: -18px -34px 18px; padding: 38px; border-radius: 10px; background: #17171a; }
+.artist-skeleton-avatar { width: 118px; height: 118px; flex: 0 0 118px; border-radius: 50%; }
+.artist-skeleton-identity { display: grid; flex: 1; gap: 12px; }
+.artist-skeleton-name { width: min(390px, 70%); height: 42px; border-radius: 8px; }
+.artist-skeleton-full-name { width: min(260px, 55%); height: 22px; border-radius: 6px; }
+.artist-skeleton-meta { width: min(220px, 45%); height: 12px; border-radius: 5px; }
+.artist-skeleton-stats { display: grid; gap: 12px; width: 105px; }
+.artist-skeleton-stats > i { height: 13px; border-radius: 5px; }
+.artist-skeleton-overview { display: flex; align-items: center; gap: 17px; margin-bottom: 26px; padding: 20px; border-radius: 10px; background: #ffffff08; }
+.artist-skeleton-avatar.small { width: 68px; height: 68px; flex-basis: 68px; }
+.artist-skeleton-name.small-name { width: 140px; height: 16px; }
+.artist-skeleton-description { width: min(330px, 60vw); height: 10px; margin-top: 9px; border-radius: 5px; }
+.artist-skeleton-section { margin: 0 0 29px; }
+.artist-skeleton-heading { width: 190px; height: 20px; margin-bottom: 12px; border-radius: 6px; }
+.artist-skeleton-section > div { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+.artist-skeleton-card { aspect-ratio: 1; border-radius: 9px; }
+@media (max-width: 900px) { .artist-skeleton-hero { margin-right: -24px; margin-left: -24px; padding: 28px; } .artist-skeleton-stats { display: none; } }
+@media (max-width: 620px) { .artist-skeleton-hero { min-height: 210px; gap: 15px; padding: 22px; } .artist-skeleton-avatar { width: 78px; height: 78px; flex-basis: 78px; } .artist-skeleton-section > div { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; } }
 .artist-hero { animation: track-detail-hero-in .5s cubic-bezier(.16, 1, .3, 1); }
+.artist-hero:before { background-image: var(--hero-background, var(--hero)); filter: brightness(.72); transform: none; }
+.artist-hero-copy { margin-left: 12px; }
+.artist-hero-copy > h1 { display: table; width: fit-content; max-width: 100%; margin: 9px 0 0; padding: 5px 9px 7px; background: #080809; color: #fff; font-size: clamp(34px, 5.2vw, 58px); line-height: 1.05; letter-spacing: -1.8px; overflow-wrap: anywhere; }
 .artist-profile-back { position: absolute; z-index: 2; top: 16px; left: 18px; padding: 8px 12px; border-radius: 999px; background: #09090ab0; color: #fff; backdrop-filter: blur(8px); }
 .artist-profile-back:hover { background: #09090ae0; }
 .artist-hero-copy > span { display: flex; align-items: center; }
+.artist-hero-copy .artist-hero-full-name { display: table; width: fit-content; max-width: 100%; margin: 0; padding: 4px 9px 6px; background: #080809; color: #f2f1f3; font-size: clamp(16px, 2vw, 24px); font-weight: 650; letter-spacing: -.5px; overflow-wrap: anywhere; }
 .artist-verified-badge {
   display: inline-grid;
   place-items: center;
@@ -769,7 +793,7 @@
   height: 15px;
   margin-right: 7px;
   border-radius: 50%;
-  background: var(--accent);
+  background: #fff;
   color: #171719;
   font-size: 10px;
   font-weight: 900;
@@ -778,16 +802,38 @@
 .artist-profile-overview .profile-fallback {
   display: grid;
   place-items: center;
-  background: linear-gradient(135deg, var(--accent), #7a3a2f);
-  color: #171719;
+  background: #25252a;
+  color: #eee;
   font-weight: 800;
   font-size: 20px;
 }
 .artist-stat-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
 .artist-stat-chips .chip { background: #ffffff09; border: 1px solid #ffffff14; color: #c7c7cd; }
 .artist-stat-chips .chip strong { margin-right: 4px; color: #fff; }
+.section-kicker { color: #85858d; font-size: 9px; letter-spacing: .12em; }
+.social-users-page { padding-bottom: 36px; }
+.social-users-page > .track-detail-back { margin-bottom: 22px; }
+.social-users-header { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 22px; padding: 20px 0; border-bottom: 1px solid #ffffff12; }
+.social-users-header h1 { margin: 7px 0 5px; font-size: clamp(28px, 4vw, 42px); letter-spacing: -.04em; }
+.social-users-header p { margin: 0; color: #9999a2; font-size: 12px; }
+.social-users-tabs { display: flex; flex: 0 0 auto; gap: 5px; padding: 4px; border: 1px solid #ffffff12; border-radius: 9px; background: #09090a; }
+.social-users-tabs button { padding: 9px 13px; border-radius: 6px; color: #a4a4aa; background: transparent; font-size: 11px; }
+.social-users-tabs button.is-active { color: #fff; background: #ffffff14; }
+.social-users-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+.social-users-card { display: flex; align-items: center; min-width: 0; gap: 12px; padding: 12px; border: 1px solid #ffffff12; border-radius: 11px; text-align: left; background: #ffffff05; transition: background .18s ease, border-color .18s ease; }
+.social-users-card:hover { border-color: #ffffff35; background: #ffffff0a; }
+.social-users-card > img, .social-users-avatar-fallback { display: block; width: 56px; height: 56px; flex: 0 0 56px; border: 1px solid #ffffff20; border-radius: 50%; background: #242427; object-fit: cover; object-position: center; }
+.social-users-avatar-fallback { display: grid; place-items: center; color: #f2f1f3; background: #242427; font-size: 20px; }
+.social-users-copy { display: grid; min-width: 0; gap: 3px; }
+.social-users-copy b, .social-users-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.social-users-copy b { font-size: 12px; }
+.social-users-copy small { color: #92929a; font-size: 10px; }
+.social-users-open { margin-left: auto; color: #77777e; }
+.social-users-state { padding: 18px 0; color: #96969d; }
+.social-users-more { display: block; margin: 18px auto 0; }
 @media (max-width: 760px) {
   .artist-stat-chips { margin-left: 0; }
+  .social-users-header { align-items: flex-start; flex-direction: column; }
 }
 .player-bar .track-artist-button {
   font-size: 10px;

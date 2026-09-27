@@ -36,7 +36,7 @@ export function PlaylistCarouselSection({ playlists, title = 'Мои плейл�
       </div>
       {error && <ErrorMessage message={error} />}
       {loading && playlists.length === 0
-        ? <p className="tracks-empty">Загружаю ваши плейлисты…</p>
+        ? <p className="tracks-empty">Загружаю плейлисты…</p>
         : playlists.length === 0
           ? <p className="tracks-empty">Плейлистов пока нет.</p>
           : <div ref={ref} className={`card-row playlist-carousel ${hasOverflow ? 'has-overflow' : ''}`}>

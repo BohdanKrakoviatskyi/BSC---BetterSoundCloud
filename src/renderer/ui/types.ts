@@ -1,5 +1,5 @@
 export type { Profile, Settings, TrackLyrics } from '../domain/models';
-export type Page = 'home' | 'search' | 'library' | 'playlist' | 'likes' | 'settings' | 'track' | 'artist' | 'profile';
+export type Page = 'home' | 'search' | 'library' | 'playlist' | 'likes' | 'settings' | 'track' | 'artist' | 'profile' | 'followers' | 'followings' | 'artist-tracks-all' | 'artist-likes-all';
 
 /**
  * Lifecycle of the lyrics sidebar. The panel stays mounted for the whole flight in both directions,

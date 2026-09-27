@@ -76,6 +76,19 @@ export type ArtistProfile = {
   verified?: boolean;
 };
 
+export type SocialUser = {
+  id: number;
+  username: string;
+  fullName?: string;
+  permalink?: string;
+  avatar?: string;
+  followersCount?: number;
+  followingsCount?: number;
+  trackCount?: number;
+};
+
+export type SocialPage = { users: SocialUser[]; next?: string };
+
 export type TrackCollection = {
   id: string;
   title: string;
