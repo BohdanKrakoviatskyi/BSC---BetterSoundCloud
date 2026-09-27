@@ -560,7 +560,6 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
 
 /* Give fullscreen lyrics the whole window and ease the global header out and back in. */
 .app-shell > .topbar {
-  overflow: hidden;
   transition: height .32s ease, flex-basis .32s ease, opacity .2s ease, transform .32s ease, padding .32s ease;
 }
 
