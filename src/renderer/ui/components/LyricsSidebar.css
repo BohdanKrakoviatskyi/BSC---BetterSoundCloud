@@ -546,16 +546,54 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
 }
 
 .lyrics-focus-head {
-  position: absolute;
+  position: fixed;
   top: 16px;
-  right: 18px;
-  z-index: 2;
+  right: 24px;
+  z-index: 20;
   display: flex;
   min-width: 0;
   align-items: flex-start;
   justify-content: space-between;
   gap: 20px;
   margin: 0;
+}
+
+/* Give fullscreen lyrics the whole window and ease the global header out and back in. */
+.app-shell > .topbar {
+  overflow: hidden;
+  transition: height .32s ease, flex-basis .32s ease, opacity .2s ease, transform .32s ease, padding .32s ease;
+}
+
+.app-shell:has(.lyrics-sidebar.is-focus) > .topbar {
+  height: 0;
+  flex-basis: 0;
+  padding-block: 0;
+  opacity: 0;
+  transform: translateY(-12px);
+  pointer-events: none;
+}
+
+.lyrics-focus-exit {
+  display: inline-flex;
+  width: auto;
+  height: 38px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 13px;
+  border: 1px solid #ffffff24;
+  border-radius: 999px;
+  background: #191a1de8;
+  color: #f2f2f4;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+}
+
+.lyrics-focus-exit:hover {
+  border-color: #ffffff48;
+  background: #292a2eeF;
 }
 
 .lyrics-focus-copy {
@@ -629,31 +667,15 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
   will-change: opacity, transform;
 }
 
-/*
- * Sung already. The line dissolves first and only then gives its height back, because
- * the collapse is what makes a line look broken: while max-height is shrinking it clips
- * the text from the bottom, so a line still at full opacity gets visibly squeezed shut
- * instead of leaving. Running the fade ahead of the collapse hides that clip, and the
- * gentler curve replaces the accelerating one that read as a jolt.
- */
+/* Played lines stay in the list and scroll above the centered active line. Their
+   distance fade matches the upcoming lines, without a collapse or exit animation. */
 .lyrics-line-lg.is-past {
-  max-height: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-  opacity: 0;
-  /* Lighter than before: a heavy blur surviving a slow collapse looked like a smear. */
-  filter: blur(3px);
-  /* A short drift rather than a shove, so the line reads as leaving upward. */
-  transform: translateY(-22px) scale(.96);
-  transition:
-    /* Gone in a quarter second, before anything else has visibly moved. */
-    opacity .24s ease-in,
-    filter .26s ease-in,
-    /* Keeps travelling upward after the text has gone, which carries the motion. */
-    transform .5s cubic-bezier(.3, 0, .2, 1),
-    /* Eases in and out and starts late, so the gap closes gently behind the fade. */
-    max-height .42s cubic-bezier(.4, 0, .2, 1) .12s,
-    padding .42s cubic-bezier(.4, 0, .2, 1) .12s;
+  max-height: 14em;
+  padding: 5px 0;
+  opacity: calc(1 - var(--lyrics-distance, 0) * .13);
+  filter: blur(calc(var(--lyrics-distance, 0) * .28px));
+  transform: none;
+  transition: color .48s ease, opacity .5s ease, filter .5s ease;
 }
 
 /* Not reached yet: parked below the line so becoming active reads as a rise. */
@@ -774,15 +796,65 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
   display: flex;
   align-items: center;
   gap: 30px;
+  width: max-content;
   /* Half the column plus a margin, so the open volume control cannot reach the text. */
-  max-width: calc(50% - min(260px, 17vw) - 72px);
+  max-width: calc(100vw - 112px);
   transform: translateY(-50%);
+}
+
+.lyrics-focus-track-meta {
+  display: flex;
+  width: max-content;
+  max-width: min(38vw, 460px);
+  align-items: center;
+  gap: 11px;
+  color: #f2f1f3;
+  font-size: 14px;
+  font-weight: 700;
+  text-shadow: 0 2px 12px #000a;
+}
+
+.lyrics-focus-seek-group {
+  display: flex;
+  width: max-content;
+  min-width: 200px;
+  max-width: 100%;
+  flex: 0 1 auto;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 20px;
+}
+
+.lyrics-focus-track-meta img,
+.lyrics-focus-track-art-fallback {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-radius: 6px;
+  object-fit: cover;
+  box-shadow: 0 4px 14px #0008;
+}
+
+.lyrics-focus-track-art-fallback {
+  display: grid;
+  place-items: center;
+  background: #292a2e;
+  color: #aaa;
+  font-size: 20px;
+}
+
+.lyrics-focus-track-meta > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .lyrics-focus-seek {
   position: relative;
   display: flex;
-  width: clamp(150px, 16vw, 240px);
+  width: 100%;
+  max-width: 100%;
+  min-width: 150px;
   min-width: 0;
   flex: 0 1 auto;
   align-items: center;
@@ -917,7 +989,7 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
   align-items: flex-start;
   /* Pin the control to the top of the cluster so its rail lines up with the scrubber's.
      Centring it here would aim at the middle of the seek block, clock label included. */
-  align-self: flex-start;
+  align-self: flex-end;
 }
 
 .lyrics-focus-volume-btn {
@@ -1009,7 +1081,9 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
   justify-content: center;
   gap: 9px;
   padding: 0 19px;
-  transform: translateX(-50%);
+  transform: translateX(-50%) translateY(12px) scale(.94);
+  opacity: 0;
+  pointer-events: none;
   border: 1px solid #ffffff24;
   border-radius: 999px;
   background: #f2f2f3;
@@ -1017,11 +1091,16 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
   font-size: 13px;
   font-weight: 800;
   box-shadow: 0 12px 36px #0008;
-  transition: transform .18s ease, background .18s ease;
+  transition: background .18s ease;
 }
 
-.lyrics-sync-button:hover {
-  transform: translateX(-50%) translateY(-2px);
+.lyrics-sync-button.is-visible {
+  transform: translateX(-50%) translateY(0) scale(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.lyrics-sync-button.is-visible:hover {
   background: #fff;
 }
 

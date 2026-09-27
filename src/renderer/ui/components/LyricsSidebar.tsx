@@ -68,8 +68,11 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
   const lineRefs = useRef<Array<HTMLParagraphElement | null>>([]);
   const focusLineRefs = useRef<Array<HTMLParagraphElement | null>>([]);
   const focusBodyRef = useRef<HTMLDivElement>(null);
+  const syncButtonRef = useRef<HTMLButtonElement>(null);
+  const focusScrollAnimationRef = useRef<number | null>(null);
   const manuallyScrolledAtRef = useRef(0);
   const [activeLineCentered, setActiveLineCentered] = useState(true);
+  const [currentLineDirection, setCurrentLineDirection] = useState<'up' | 'down'>('up');
   // Set while the reader drags, so the thumb follows the pointer instead of playback.
   const [scrubSeconds, setScrubSeconds] = useState<number | null>(null);
   // Kept in refs so a re-render of the owner can never restart a flight that is already running.
@@ -138,16 +141,57 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
     const bodyRect = body.getBoundingClientRect();
     const lineRect = line.getBoundingClientRect();
     const lineCenter = lineRect.top + lineRect.height / 2;
+    const bodyCenter = bodyRect.top + bodyRect.height / 2;
     const safeTop = bodyRect.top + bodyRect.height * 0.27;
     const safeBottom = bodyRect.bottom - bodyRect.height * 0.27;
+    setCurrentLineDirection(lineCenter < bodyCenter ? 'up' : 'down');
     setActiveLineCentered(lineCenter >= safeTop && lineCenter <= safeBottom);
   }, [activeIndex, isCurrentTrack]);
 
   const syncToCurrentLine = useCallback(() => {
     manuallyScrolledAtRef.current = 0;
-    focusLineRefs.current[activeIndex]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    window.setTimeout(updateActiveLinePosition, 350);
+    const body = focusBodyRef.current;
+    const line = focusLineRefs.current[activeIndex];
+    if (!body || !line) return;
+    if (focusScrollAnimationRef.current !== null) {
+      cancelAnimationFrame(focusScrollAnimationRef.current);
+    }
+    const from = body.scrollTop;
+    const bodyRect = body.getBoundingClientRect();
+    const lineRect = line.getBoundingClientRect();
+    const to = Math.max(0, Math.min(
+      body.scrollHeight - body.clientHeight,
+      from + (lineRect.top + lineRect.height / 2) - (bodyRect.top + bodyRect.height / 2),
+    ));
+    const startedAt = performance.now();
+    const duration = 760;
+    const animate = (now: number) => {
+      const progress = Math.min(1, (now - startedAt) / duration);
+      const eased = progress * progress * (3 - 2 * progress);
+      body.scrollTop = from + (to - from) * eased;
+      if (progress < 1) {
+        focusScrollAnimationRef.current = requestAnimationFrame(animate);
+      } else {
+        focusScrollAnimationRef.current = null;
+        updateActiveLinePosition();
+      }
+    };
+    focusScrollAnimationRef.current = requestAnimationFrame(animate);
   }, [activeIndex, updateActiveLinePosition]);
+
+  useLayoutEffect(() => {
+    if (activeLineCentered) return;
+    const button = syncButtonRef.current;
+    if (!button) return;
+    const animation = button.animate(
+      [
+        { opacity: 0, transform: 'translateX(-50%) translateY(14px) scale(.94)' },
+        { opacity: 1, transform: 'translateX(-50%) translateY(0) scale(1)' },
+      ],
+      { duration: 420, easing: 'cubic-bezier(.22, 1, .36, 1)' },
+    );
+    return () => animation.cancel();
+  }, [activeLineCentered]);
 
   // The panel frame itself is never transformed, otherwise the artwork slot would drift while the
   // artwork is being measured against it. The motion lives in the inner text blocks instead.
@@ -185,19 +229,54 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
       setActiveLineCentered(true);
       return;
     }
-    const lastManualScroll = manuallyScrolledAtRef.current;
-    if (lastManualScroll && Date.now() - lastManualScroll < FOLLOW_RESUME_MS) {
+    // Once the reader scrolls manually, leave the viewport under their control. The
+    // sync button explicitly resumes following the currently sung line.
+    if (manuallyScrolledAtRef.current) {
       updateActiveLinePosition();
       return;
     }
-    focusLineRefs.current[activeIndex]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    window.setTimeout(updateActiveLinePosition, 350);
-  }, [playbackPositionMs, activeIndex, focusMode, isCurrentTrack, updateActiveLinePosition]);
+    const body = focusBodyRef.current;
+    const line = focusLineRefs.current[activeIndex];
+    if (!body || !line) return;
+
+    if (focusScrollAnimationRef.current !== null) {
+      cancelAnimationFrame(focusScrollAnimationRef.current);
+    }
+    const from = body.scrollTop;
+    const bodyRect = body.getBoundingClientRect();
+    const lineRect = line.getBoundingClientRect();
+    const to = Math.max(0, Math.min(
+      body.scrollHeight - body.clientHeight,
+      from + (lineRect.top + lineRect.height / 2) - (bodyRect.top + bodyRect.height / 2),
+    ));
+    const startedAt = performance.now();
+    const duration = 620;
+    const animate = (now: number) => {
+      const progress = Math.min(1, (now - startedAt) / duration);
+      // Smoothstep keeps both ends gentle, like a carousel settling onto its next item.
+      const eased = progress * progress * (3 - 2 * progress);
+      body.scrollTop = from + (to - from) * eased;
+      if (progress < 1) {
+        focusScrollAnimationRef.current = requestAnimationFrame(animate);
+      } else {
+        focusScrollAnimationRef.current = null;
+        updateActiveLinePosition();
+      }
+    };
+    focusScrollAnimationRef.current = requestAnimationFrame(animate);
+    return () => {
+      if (focusScrollAnimationRef.current !== null) {
+        cancelAnimationFrame(focusScrollAnimationRef.current);
+        focusScrollAnimationRef.current = null;
+      }
+    };
+  }, [activeIndex, focusMode, isCurrentTrack, updateActiveLinePosition]);
 
   // A track change or a reset of the reader's view must not leave stale toggles behind.
   useEffect(() => {
     setExpanded(false);
     setFocusMode(false);
+    manuallyScrolledAtRef.current = 0;
   }, [track.id]);
 
   useEffect(() => {
@@ -324,6 +403,7 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
             <div className="lyrics-focus-head">
               <button className="lyrics-icon-button lyrics-focus-exit" type="button" onClick={handleExitFocus} aria-label="Вернуться к карточке трека" title="Вернуться к карточке трека">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6M9 12h11M4 5v14" /></svg>
+                <span>К карточке песни</span>
               </button>
             </div>
             <div
@@ -380,6 +460,13 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
             )}
 
             <div className="lyrics-focus-left">
+            <div className="lyrics-focus-seek-group">
+              <div className="lyrics-focus-track-meta">
+                {track.artwork
+                  ? <img src={track.artwork} alt={`Обложка: ${track.title}`} />
+                  : <span className="lyrics-focus-track-art-fallback" aria-hidden="true">♫</span>}
+                <span title={track.title}>{track.title}</span>
+              </div>
             {isCurrentTrack && durationSeconds > 0 && (
               <div
                 className={`lyrics-focus-seek${scrubSeconds !== null ? ' is-scrubbing' : ''}`}
@@ -414,6 +501,7 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
                 </span>
               </div>
             )}
+            </div>
 
             {isCurrentTrack && (
               <div className="lyrics-focus-volume">
@@ -450,9 +538,16 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
               </div>
             )}
             </div>
-            {isCurrentTrack && hasTimedLyrics && activeIndex >= 0 && !activeLineCentered && (
-              <button className="lyrics-sync-button" type="button" onClick={syncToCurrentLine}>
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
+            {isCurrentTrack && hasTimedLyrics && activeIndex >= 0 && (
+              <button
+                ref={syncButtonRef}
+                className={`lyrics-sync-button${activeLineCentered ? '' : ' is-visible'}`}
+                type="button"
+                onClick={syncToCurrentLine}
+                aria-hidden={activeLineCentered}
+                tabIndex={activeLineCentered ? -1 : 0}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d={currentLineDirection === 'up' ? 'M12 19V5M5 12l7-7 7 7' : 'M12 5v14M5 12l7 7 7-7'} /></svg>
                 К текущей строке
               </button>
             )}
