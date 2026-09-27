@@ -602,6 +602,8 @@
 .track-coverflow-heading { padding: 0 16px; margin-bottom: 6px; }
 .track-coverflow-position { color: #8b8b92; font-size: 10px; font-variant-numeric: tabular-nums; }
 .track-coverflow-stage { position: relative; display: flex; align-items: center; gap: 6px; }
+.track-coverflow-stage.is-interaction-locked .coverflow-card,
+.track-coverflow-stage.is-interaction-locked .coverflow-nav { pointer-events: none; }
 .coverflow-nav {
   position: relative;
   z-index: 5;

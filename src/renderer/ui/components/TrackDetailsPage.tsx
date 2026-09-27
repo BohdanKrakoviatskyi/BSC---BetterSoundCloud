@@ -154,35 +154,51 @@ function TrackWaveform({ track, isCurrent, positionMs, onSeek }: { track: TrackD
   );
 }
 
-function TrackCoverflow({ contextTracks, activeTrackId, playingTrackId, isPlayingNow, playbackLoading, onOpenTrack }: {
+function TrackCoverflow({ contextTracks, activeTrackId, playingTrackId, isPlayingNow, playbackLoading, onOpenTrack, onPlayCenter }: {
   contextTracks: Track[];
   activeTrackId: number;
   playingTrackId: number | null;
   isPlayingNow: boolean;
   playbackLoading: boolean;
   onOpenTrack: (track: Track) => void;
+  onPlayCenter: () => void;
 }) {
   const list = Array.from(new Map(contextTracks.map((item) => [item.id, item])).values());
   const index = list.findIndex((item) => item.id === activeTrackId);
-  const coverflowTrackRef = useRef<HTMLDivElement>(null);
-  const [visibleCount, setVisibleCount] = useState(7);
+  const visibleCount = 7;
+  const [interactionLocked, setInteractionLocked] = useState(false);
+  const lastActiveTrackIdRef = useRef(activeTrackId);
+  const pointerMovedRef = useRef(false);
+  const animationFinishedRef = useRef(true);
+  const interactionTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const element = coverflowTrackRef.current;
-    if (!element) return;
+    if (lastActiveTrackIdRef.current === activeTrackId) return;
+    lastActiveTrackIdRef.current = activeTrackId;
+    pointerMovedRef.current = false;
+    animationFinishedRef.current = false;
+    setInteractionLocked(true);
+    if (interactionTimerRef.current !== null) window.clearTimeout(interactionTimerRef.current);
+    interactionTimerRef.current = window.setTimeout(() => {
+      animationFinishedRef.current = true;
+      if (pointerMovedRef.current) setInteractionLocked(false);
+      interactionTimerRef.current = null;
+    }, 600);
+  }, [activeTrackId]);
 
-    const updateVisibleCount = () => {
-      const width = element.clientWidth;
-      const step = Number.parseFloat(getComputedStyle(element).getPropertyValue('--coverflow-step')) || 112;
-      const desiredCount = Math.ceil((width * 0.9) / step) + 1;
-      setVisibleCount(Math.min(desiredCount, Math.max(3, list.length * 2 - 1)));
+  useEffect(() => {
+    const unlockOnPointerMove = () => {
+      if (!interactionLocked) return;
+      pointerMovedRef.current = true;
+      if (animationFinishedRef.current) setInteractionLocked(false);
     };
+    window.addEventListener('pointermove', unlockOnPointerMove);
+    return () => window.removeEventListener('pointermove', unlockOnPointerMove);
+  }, [interactionLocked]);
 
-    updateVisibleCount();
-    const observer = new ResizeObserver(updateVisibleCount);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [list.length]);
+  useEffect(() => () => {
+    if (interactionTimerRef.current !== null) window.clearTimeout(interactionTimerRef.current);
+  }, []);
 
   if (index === -1 || list.length < 2) return null;
 
@@ -199,9 +215,9 @@ function TrackCoverflow({ contextTracks, activeTrackId, playingTrackId, isPlayin
         <div><div className="eyebrow">В ЭТОМ РАЗДЕЛЕ</div><h2>Далее и ранее</h2></div>
         <span className="track-coverflow-position">{index + 1} из {list.length}</span>
       </div>
-      <div className="track-coverflow-stage">
+      <div className={`track-coverflow-stage${interactionLocked ? ' is-interaction-locked' : ''}`}>
         <button type="button" className="coverflow-nav prev" aria-label="Предыдущий трек раздела" onClick={() => onOpenTrack(list[(index - 1 + list.length) % list.length])}>‹</button>
-        <div className="coverflow-track" ref={coverflowTrackRef}>
+        <div className="coverflow-track">
           {visible.map(({ track, offset }) => {
             const isCenter = offset === 0;
             const dist = Math.abs(offset);
@@ -210,14 +226,14 @@ function TrackCoverflow({ contextTracks, activeTrackId, playingTrackId, isPlayin
             const isNowPlaying = playingTrackId === track.id;
             return (
               <button
-                key={`${track.id}-${offset}`}
+                key={track.id}
                 type="button"
                 className={`coverflow-card${isCenter ? ' is-center' : ''}${offset < 0 ? ' is-past' : offset > 0 ? ' is-future' : ''}`}
                 style={style}
-                disabled={isCenter}
+                disabled={false}
                 aria-current={isCenter}
                 aria-label={isCenter ? `Сейчас: ${track.title}` : `Открыть трек ${track.title}`}
-                onClick={() => !isCenter && onOpenTrack(track)}
+                onClick={() => isCenter ? onPlayCenter() : onOpenTrack(track)}
               >
                 <span className="coverflow-card-inner">
                   {track.artwork ? <img src={track.artwork} alt="" loading="lazy" /> : <span className="coverflow-art-fallback" aria-hidden="true">♫</span>}
@@ -248,7 +264,9 @@ export function TrackDetailsPage({ track, loading, error, isCurrent, isPlaying, 
     onToggleLyrics(measureElementRect(artworkRef.current));
   }
 
-  if (loading) return (
+  // Keep the existing track page and its coverflow mounted while a new track's
+  // details are loading. Only show the full-page skeleton on the first open.
+  if (loading && !track) return (
     <article className="track-detail-page track-detail-page-loading" aria-busy="true" aria-label="Загрузка страницы трека">
       <button className="track-detail-back" type="button" onClick={onBack}><span aria-hidden="true">←</span> Мои лайки</button>
       <section className="track-detail-hero track-detail-skeleton" aria-hidden="true">
@@ -299,7 +317,7 @@ export function TrackDetailsPage({ track, loading, error, isCurrent, isPlaying, 
   return (
     <article className="track-detail-page">
       <button className="track-detail-back" type="button" onClick={onBack}><span aria-hidden="true">←</span> Мои лайки</button>
-      <section className="track-detail-hero" key={track.id}>
+      <section className="track-detail-hero">
         <div className="track-detail-artwork-wrap" ref={artworkRef} data-track-artwork="">
           {track.artwork ? <img className="track-detail-artwork" src={track.artwork} alt={`Обложка: ${track.title}`} /> : <div className="track-detail-artwork track-detail-artwork-fallback">♫</div>}
         </div>
@@ -396,6 +414,7 @@ export function TrackDetailsPage({ track, loading, error, isCurrent, isPlaying, 
         isPlayingNow={isPlayingNow}
         playbackLoading={playbackLoading}
         onOpenTrack={onOpenContextTrack}
+        onPlayCenter={onPlay}
       />
 
       <TrackCarouselSection
