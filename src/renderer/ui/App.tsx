@@ -21,6 +21,7 @@ import { measureElementRect, type ElementRect } from './lib/artworkFlight';
 import { ErrorMessage } from './components/ErrorMessage';
 import { MyProfilePage } from './components/MyProfilePage';
 import { UpdaterNotification } from './components/UpdaterNotification';
+import { QueuePanel } from './components/QueuePanel';
 
 const defaultSettings: Settings = { accent: '#ff765d', compact: false, volume: 70, clientId: '', backgroundImage: '', backgroundBlur: 0 };
 const sidebarWidthsKey = 'better-soundcloud.sidebar-widths';
@@ -96,6 +97,9 @@ export function App() {
   const [detailsError, setDetailsError] = useState('');
   const [currentTrackIndex, setCurrentTrackIndex] = useState(-1);
   const [queueTracks, setQueueTracks] = useState<Track[]>([]);
+  const [manualQueue, setManualQueue] = useState<Track[]>([]);
+  const [manualQueueEnabled, setManualQueueEnabled] = useState(false);
+  const [queueOpen, setQueueOpen] = useState(false);
   const [playbackLoading, setPlaybackLoading] = useState(false);
   const [shouldPlay, setShouldPlay] = useState(false);
   const [playbackError, setPlaybackError] = useState('');
@@ -313,12 +317,13 @@ export function App() {
     }
   }
 
-  function loadTrackAt(index: number, queue: Track[] = queueTracks) {
+  function loadTrackAt(index: number, queue: Track[] = queueTracks, fromManualQueue = false) {
     const track = queue[index];
     if (!track) {
       setShouldPlay(false);
       return;
     }
+    if (!fromManualQueue) setManualQueueEnabled(false);
     setCurrentTrack(track);
     setPlayerVisible(true);
     setCurrentTrackIndex(index);
@@ -336,6 +341,49 @@ export function App() {
     const pool = candidates.length ? candidates : liked;
     const selected = pool[Math.floor(Math.random() * pool.length)];
     loadTrackAt(liked.findIndex((item) => item.id === selected.id), liked);
+  }
+
+  function addCurrentTrackToQueue() {
+    if (!currentTrack) return;
+    setManualQueue((queue) => [...queue, currentTrack]);
+  }
+
+  function playQueuedTrack(index: number) {
+    const track = manualQueue[index];
+    if (!track) return;
+    setManualQueueEnabled(true);
+    if (index > 0) setManualQueue((queue) => [track, ...queue.filter((_, queueIndex) => queueIndex !== index)]);
+    loadTrackAt(0, [track], true);
+  }
+
+  function toggleManualQueuePlayback() {
+    if (manualQueueEnabled) {
+      setShouldPlay((playing) => !playing);
+      return;
+    }
+    if (!manualQueue.length) return;
+    setManualQueueEnabled(true);
+    loadTrackAt(0, [manualQueue[0]], true);
+  }
+
+  function advanceManualQueue() {
+    if (manualQueue.length > 1) {
+      const nextTrack = manualQueue[1];
+      setManualQueue((queue) => queue.slice(1));
+      loadTrackAt(0, [nextTrack], true);
+    } else {
+      setManualQueue([]);
+      setManualQueueEnabled(false);
+      setShouldPlay(false);
+    }
+  }
+
+  function playNextTrack() {
+    if (manualQueueEnabled) {
+      advanceManualQueue();
+      return;
+    }
+    if (currentTrackIndex + 1 < queueTracks.length) void loadTrackAt(currentTrackIndex + 1);
   }
 
   function selectTrack(track: Track) {
@@ -1104,14 +1152,17 @@ export function App() {
         error={playbackError}
         liked={currentTrack ? Boolean(likedTracks[currentTrack.id] || tracks.some((item) => item.id === currentTrack.id)) : false}
         onLike={() => { if (currentTrack) void toggleTrackLike(currentTrack); }}
+        queueOpen={queueOpen}
+        onToggleQueue={() => setQueueOpen((open) => !open)}
         onOpenTrack={() => { if (currentTrack) void openTrackDetails(currentTrack, queueTracks); }}
         onOpenArtist={() => { if (currentTrack) void openArtistFromTrack(currentTrack); }}
         onTogglePlayback={togglePlayback}
         onPrevious={() => void loadTrackAt(Math.max(currentTrackIndex - 1, 0))}
-        onNext={() => void loadTrackAt(currentTrackIndex + 1)}
-        hasNext={currentTrackIndex >= 0 && currentTrackIndex + 1 < queueTracks.length}
+        onNext={playNextTrack}
+        hasNext={(manualQueueEnabled && manualQueue.length > 1) || (!manualQueueEnabled && currentTrackIndex >= 0 && currentTrackIndex + 1 < queueTracks.length)}
         onEnded={() => {
-          if (shuffleLiked) playRandomLikedTrack();
+          if (manualQueueEnabled) advanceManualQueue();
+          else if (shuffleLiked) playRandomLikedTrack();
           else if (currentTrackIndex + 1 < queueTracks.length) void loadTrackAt(currentTrackIndex + 1);
           else setShouldPlay(false);
         }}
@@ -1120,6 +1171,21 @@ export function App() {
         onError={(message) => { setPlaybackError(message); setPlaybackLoading(false); setShouldPlay(false); }}
         onPlaybackStateChange={handlePlaybackStateChange}
       />
+      {queueOpen && <QueuePanel
+        tracks={manualQueue}
+        currentTrack={currentTrack}
+        queueState={manualQueueEnabled ? (shouldPlay ? 'playing' : 'paused') : 'idle'}
+        onAddCurrentTrack={addCurrentTrackToQueue}
+        onToggleQueuePlayback={toggleManualQueuePlayback}
+        onPlay={playQueuedTrack}
+        onRemove={(index) => {
+          setManualQueue((queue) => queue.filter((_, queueIndex) => queueIndex !== index));
+          if (manualQueueEnabled && index === 0) setManualQueueEnabled(false);
+        }}
+        currentQueueIndex={manualQueueEnabled && currentTrack?.id === manualQueue[0]?.id ? 0 : -1}
+        onClear={() => { setManualQueue([]); setManualQueueEnabled(false); }}
+        onClose={() => setQueueOpen(false)}
+      />}
     </div>
   );
 }

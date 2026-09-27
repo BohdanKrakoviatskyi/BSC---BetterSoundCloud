@@ -21,6 +21,8 @@ type Props = {
   hasNext: boolean;
   liked: boolean;
   onLike: () => void;
+  queueOpen: boolean;
+  onToggleQueue: () => void;
   onOpenTrack: () => void;
   onOpenArtist?: (track: Track) => void;
   onTogglePlayback: () => void;
@@ -41,7 +43,7 @@ function formatTime(seconds: number): string {
 
 const soundCloudLogo = 'https://developers.soundcloud.com/assets/logo_big_white-a38cb93cd8fa05a93183280f295e13aff1a4ae0945ca2fb0efbe85b82588431e.png';
 
-export function PlayerBar({ track, seekRequest, onSeekRequestHandled, repeatOne, onToggleRepeat, shuffleLiked, onToggleShuffle, loading, shouldPlay, volume, onVolumeChange, error, hasNext, liked, onLike, onOpenTrack, onOpenArtist, onTogglePlayback, onNext, onPrevious, onEnded, onReady, onProgress, onError, onPlaybackStateChange }: Props) {
+export function PlayerBar({ track, seekRequest, onSeekRequestHandled, repeatOne, onToggleRepeat, shuffleLiked, onToggleShuffle, loading, shouldPlay, volume, onVolumeChange, error, hasNext, liked, onLike, queueOpen, onToggleQueue, onOpenTrack, onOpenArtist, onTogglePlayback, onNext, onPrevious, onEnded, onReady, onProgress, onError, onPlaybackStateChange }: Props) {
   const [widgetControls, setWidgetControls] = useState<SoundCloudWidgetControls | null>(null);
   const [playbackMode, setPlaybackMode] = useState<'widget' | 'direct'>('widget');
 
@@ -293,6 +295,9 @@ export function PlayerBar({ track, seekRequest, onSeekRequestHandled, repeatOne,
           </div>
           <button className={`like-button ${liked ? 'liked' : ''}`} type="button" onClick={onLike} disabled={!track} aria-pressed={liked} aria-label={liked ? 'Убрать из любимых' : 'Добавить в любимые'} title={liked ? 'В любимых' : 'Добавить в любимые'}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z" /></svg>
+          </button>
+          <button className={`queue-open-button${queueOpen ? ' is-open' : ''}`} type="button" onClick={onToggleQueue} aria-expanded={queueOpen} aria-label="Открыть очередь" title="Очередь воспроизведения">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h12M4 11h12M4 16h8" /><path d="M19 14v7m-3.5-3.5h7" /></svg>
           </button>
         </div>
       </div>
