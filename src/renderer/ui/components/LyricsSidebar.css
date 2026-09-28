@@ -873,6 +873,9 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
   background: transparent;
   box-shadow: none;
   backdrop-filter: none;
+  /* Off: dimmed, so a disabled control stops looking armed next to the play button. It used to
+     inherit the transport near-white from the shared rule above. */
+  color: #56565f;
 }
 
 .lyrics-focus-skip {
@@ -913,9 +916,10 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
   stroke-linejoin: round;
 }
 
+/* On: brighter, nothing else. */
 .lyrics-focus-repeat.is-on {
   background: transparent;
-  color: var(--accent);
+  color: #fff;
 }
 
 .lyrics-focus-play:hover {
@@ -927,10 +931,10 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
 .lyrics-focus-repeat:hover {
   transform: scale(1.08);
   background: transparent;
-  color: #fff;
+  color: #8a8a93;
 }
 
-.lyrics-focus-repeat.is-on:hover { color: var(--accent); }
+.lyrics-focus-repeat.is-on:hover { color: #fff; }
 
 .lyrics-focus-play:active,
 .lyrics-focus-repeat:active {
