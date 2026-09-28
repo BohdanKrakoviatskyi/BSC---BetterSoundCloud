@@ -222,6 +222,11 @@ type userProfileParams struct {
 	UserID int64 `json:"userId"`
 }
 
+type userLikesParams struct {
+	UserID int64  `json:"userId"`
+	Next   string `json:"next,omitempty"`
+}
+
 type soundcloudUserProfile struct {
 	ID              int64  `json:"id"`
 	Username        string `json:"username"`
@@ -235,6 +240,7 @@ type soundcloudUserProfile struct {
 	FollowersCount  int64  `json:"followersCount"`
 	FollowingsCount int64  `json:"followingsCount"`
 	TrackCount      int64  `json:"trackCount"`
+	LikesCount      int64  `json:"likesCount,omitempty"`
 	Verified        bool   `json:"verified,omitempty"`
 }
 
@@ -256,6 +262,11 @@ type soundcloudSocialUser struct {
 type soundcloudSocialPage struct {
 	Collection []socialUserDTO `json:"collection"`
 	NextHref   string          `json:"nextHref,omitempty"`
+}
+
+type soundcloudTrackPage struct {
+	Tracks   []soundcloudTrackCard `json:"tracks"`
+	NextHref string                `json:"nextHref,omitempty"`
 }
 
 type soundcloudSocialSourcePage struct {
@@ -1390,6 +1401,7 @@ func (s *service) RPCUserProfile(params userProfileParams) (soundcloudUserProfil
 		FollowersCount  int64  `json:"followers_count"`
 		FollowingsCount int64  `json:"followings_count"`
 		TrackCount      int64  `json:"track_count"`
+		LikesCount      int64  `json:"likes_count"`
 		Verified        bool   `json:"verified"`
 		Visuals         struct {
 			Visuals []struct {
@@ -1422,7 +1434,7 @@ func (s *service) RPCUserProfile(params userProfileParams) (soundcloudUserProfil
 	result := soundcloudUserProfile{
 		ID: user.ID, Username: user.Username, FullName: user.FullName, PermalinkURL: user.PermalinkURL,
 		AvatarURL: avatar, BannerURL: banner, Description: user.Description, City: user.City, Country: user.CountryCode,
-		FollowersCount: user.FollowersCount, FollowingsCount: user.FollowingsCount, TrackCount: user.TrackCount, Verified: user.Verified,
+		FollowersCount: user.FollowersCount, FollowingsCount: user.FollowingsCount, TrackCount: user.TrackCount, LikesCount: user.LikesCount, Verified: user.Verified,
 	}
 	log.Printf("user.profile stage=complete user_id=%d elapsed_ms=%d", params.UserID, time.Since(startedAt).Milliseconds())
 	return result, nil
@@ -1492,34 +1504,50 @@ func (s *service) RPCUserTracks(params userProfileParams) ([]soundcloudTrackCard
 	return result, nil
 }
 
-func (s *service) RPCUserLikes(params userProfileParams) ([]soundcloudTrackCard, error) {
+func (s *service) RPCUserLikes(params userLikesParams) (soundcloudTrackPage, error) {
 	if s.auth.Token == "" {
-		return nil, errors.New("сначала подключите аккаунт SoundCloud")
+		return soundcloudTrackPage{}, errors.New("сначала подключите аккаунт SoundCloud")
 	}
 	if params.UserID <= 0 {
-		return nil, errors.New("некорректный ID пользователя")
+		return soundcloudTrackPage{}, errors.New("некорректный ID пользователя")
 	}
 	query := url.Values{}
-	query.Set("limit", "200")
+	query.Set("limit", "20")
 	query.Set("linked_partitioning", "1")
 	endpoint, err := s.soundcloudV2URL("/users/"+strconv.FormatInt(params.UserID, 10)+"/likes", query)
 	if err != nil {
-		return nil, fmt.Errorf("не удалось сформировать запрос лайков: %w", err)
+		return soundcloudTrackPage{}, fmt.Errorf("не удалось сформировать запрос лайков: %w", err)
 	}
+	if params.Next != "" {
+		endpoint, err = s.soundcloudV2URLFromAbsolute(params.Next)
+		if err != nil {
+			return soundcloudTrackPage{}, fmt.Errorf("некорректная ссылка следующей страницы лайков: %w", err)
+		}
+	}
+	result := soundcloudTrackPage{Tracks: make([]soundcloudTrackCard, 0, 20)}
+	seenTracks := make(map[int64]struct{})
 	var response struct {
-		Collection []struct {
-			Track *soundcloudTrack `json:"track"`
-		} `json:"collection"`
+		Collection []json.RawMessage `json:"collection"`
+		NextHref   string            `json:"next_href"`
 	}
 	if err := s.getSoundCloudJSON(endpoint, &response); err != nil {
-		return nil, fmt.Errorf("не удалось загрузить публичные лайки автора: %w", err)
+		return soundcloudTrackPage{}, fmt.Errorf("не удалось загрузить публичные лайки автора: %w", err)
 	}
-	result := make([]soundcloudTrackCard, 0, len(response.Collection))
 	for _, item := range response.Collection {
-		if item.Track == nil {
+		var wrapped soundcloudLike
+		if err := json.Unmarshal(item, &wrapped); err != nil {
 			continue
 		}
-		track := item.Track
+		var track soundcloudTrack
+		if wrapped.Track != nil {
+			track = *wrapped.Track
+		} else if err := json.Unmarshal(item, &track); err != nil || track.ID == 0 {
+			continue
+		}
+		if _, duplicate := seenTracks[track.ID]; duplicate {
+			continue
+		}
+		seenTracks[track.ID] = struct{}{}
 		trackURN := track.URN
 		if trackURN == "" {
 			trackURN = fmt.Sprintf("soundcloud:tracks:%d", track.ID)
@@ -1527,7 +1555,13 @@ func (s *service) RPCUserLikes(params userProfileParams) ([]soundcloudTrackCard,
 		artwork := strings.Replace(track.ArtworkURL, "-large.", "-t500x500.", 1)
 		card := soundcloudTrackCard{ID: track.ID, TrackURN: trackURN, Title: track.Title, PermalinkURL: track.PermalinkURL, ArtworkURL: artwork, Duration: track.Duration, PlaybackCount: track.PlaybackCount, LikesCount: track.LikesCount}
 		card.User.Username = track.User.Username
-		result = append(result, card)
+		result.Tracks = append(result.Tracks, card)
+	}
+	if response.NextHref != "" {
+		result.NextHref, err = s.soundcloudV2URLFromAbsolute(response.NextHref)
+		if err != nil {
+			return soundcloudTrackPage{}, fmt.Errorf("SoundCloud вернул некорректную ссылку следующей страницы лайков: %w", err)
+		}
 	}
 	return result, nil
 }

@@ -99,6 +99,7 @@ export function ArtistProfilePage({ profile, loading, error, tracks, tracksLoadi
         title="Понравившиеся треки"
         kicker="ПУБЛИЧНЫЕ ЛАЙКИ"
         tracks={likedTracks}
+        totalCount={profile.likesCount}
         loading={likedTracksLoading}
         error={likedTracksError}
         emptyMessage="Публичные лайки не найдены или скрыты автором."

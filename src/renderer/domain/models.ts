@@ -74,6 +74,7 @@ export type ArtistProfile = {
   followersCount?: number;
   followingsCount?: number;
   trackCount?: number;
+  likesCount?: number;
   verified?: boolean;
 };
 
