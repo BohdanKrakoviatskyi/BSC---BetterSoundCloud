@@ -902,16 +902,6 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
   stroke-linejoin: round;
 }
 
-/* The "1" badge, placed on the arrow like it is in the player bar. */
-.lyrics-focus-repeat span {
-  position: absolute;
-  right: 15px;
-  bottom: 12px;
-  font-size: 10px;
-  font-weight: 800;
-  line-height: 1;
-}
-
 .lyrics-focus-repeat.is-on {
   background: transparent;
   color: var(--accent);
