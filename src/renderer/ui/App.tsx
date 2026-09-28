@@ -300,7 +300,7 @@ export function App() {
   }
 
   async function toggleTrackLike(track: Track) {
-    const wasLiked = Boolean(likedTracks[track.id] || tracks.some((item) => item.id === track.id));
+    const wasLiked = (likedTracks[track.id] !== undefined ? likedTracks[track.id] : tracks.some((item) => item.id === track.id));
     const operation = wasLiked ? 'unlike' : 'like';
     setLikedTracks((current) => ({ ...current, [track.id]: !wasLiked }));
     setLikeBusy((current) => ({ ...current, [track.id]: true }));
@@ -308,8 +308,8 @@ export function App() {
     console.info(`[ui.track.${operation}] started`, { trackId: track.id });
     try {
       const result = wasLiked
-        ? await appGateway.unlikeTrack(track.id, track.urn)
-        : await appGateway.likeTrack(track.id, track.urn);
+        ? await appGateway.unlikeTrack(track.id, track.urn, profile?.id, settings.clientId)
+        : await appGateway.likeTrack(track.id, track.urn, profile?.id, settings.clientId);
       if (result.captchaUrl) {
         setLikedTracks((current) => ({ ...current, [track.id]: wasLiked }));
         console.warn(`[ui.track.${operation}] SoundCloud requested a captcha`, { trackId: track.id });
@@ -323,8 +323,8 @@ export function App() {
           }
           const datadomeCookie = challenge.datadomeCookie ?? undefined;
           const retry = wasLiked
-            ? await appGateway.unlikeTrack(track.id, track.urn, datadomeCookie)
-            : await appGateway.likeTrack(track.id, track.urn, datadomeCookie);
+            ? await appGateway.unlikeTrack(track.id, track.urn, profile?.id, settings.clientId, datadomeCookie)
+            : await appGateway.likeTrack(track.id, track.urn, profile?.id, settings.clientId, datadomeCookie);
           if (!retry.captchaUrl) {
             applyTrackLikeState(track, retry.liked);
             console.info(`[ui.track.${operation}] completed after captcha`, { trackId: track.id, liked: retry.liked });
@@ -1299,7 +1299,7 @@ export function App() {
                 onToggleRepeat={() => setRepeatOne((enabled) => !enabled)}
                 shuffleLiked={shuffleLiked}
                 onToggleShuffle={() => setShuffleLiked((enabled) => !enabled)}
-                liked={detailsTrack ? Boolean(likedTracks[detailsTrack.id] || tracks.some((item) => item.id === detailsTrack.id)) : false}
+                liked={detailsTrack ? (likedTracks[detailsTrack.id] !== undefined ? likedTracks[detailsTrack.id] : tracks.some((item) => item.id === detailsTrack.id)) : false}
                 likeBusy={detailsTrack ? (likeBusy[detailsTrack.id] ?? false) : false}
                 onToggleLike={(track) => void toggleTrackLike(track)}
                 onSeek={(positionMs) => {
@@ -1314,7 +1314,7 @@ export function App() {
                 lyricsAvailable={Boolean(detailsTrack && lyrics?.trackId === detailsTrack.id && lyrics.lines.length > 0)}
                 onToggleLyrics={toggleLyrics}
               />}
-        {tracksError && page !== 'likes' && <ErrorMessage message={tracksError} className="app-track-error" />}
+        {tracksError && <ErrorMessage message={tracksError} className="app-track-error" />}
         </div></main>
       </div>
       <LyricsSidebar
@@ -1367,7 +1367,7 @@ export function App() {
         volume={settings.volume}
         onVolumeChange={(volume) => void updateSettings({ volume })}
         error={playbackError}
-        liked={currentTrack ? Boolean(likedTracks[currentTrack.id] || tracks.some((item) => item.id === currentTrack.id)) : false}
+        liked={currentTrack ? (likedTracks[currentTrack.id] !== undefined ? likedTracks[currentTrack.id] : tracks.some((item) => item.id === currentTrack.id)) : false}
         onLike={() => { if (currentTrack) void toggleTrackLike(currentTrack); }}
         queueOpen={queueOpen}
         onToggleQueue={() => setQueueOpen((open) => !open)}

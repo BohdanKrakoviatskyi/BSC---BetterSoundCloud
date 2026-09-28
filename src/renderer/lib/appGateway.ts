@@ -158,6 +158,6 @@ export const appGateway = {
   artistFollowers: async (userId: number, next?: string) => mapSocialPage(await window.desktop.userFollowers(userId, next)),
   artistFollowings: async (userId: number, next?: string) => mapSocialPage(await window.desktop.userFollowings(userId, next)),
   artistPlaylists: async (userId: number): Promise<Playlist[]> => (await window.desktop.userPlaylists(userId)).map(mapPlaylist),
-  likeTrack: (trackId: number, trackUrn: string, datadomeCookie?: string) => window.desktop.likeTrack(trackId, trackUrn, datadomeCookie),
-  unlikeTrack: (trackId: number, trackUrn: string, datadomeCookie?: string) => window.desktop.unlikeTrack(trackId, trackUrn, datadomeCookie),
+  likeTrack: (trackId: number, trackUrn: string, userId?: number, clientId?: string, datadomeCookie?: string) => window.desktop.likeTrack(trackId, trackUrn, userId, clientId, datadomeCookie),
+  unlikeTrack: (trackId: number, trackUrn: string, userId?: number, clientId?: string, datadomeCookie?: string) => window.desktop.unlikeTrack(trackId, trackUrn, userId, clientId, datadomeCookie),
 };

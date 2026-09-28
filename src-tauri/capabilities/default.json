@@ -11,6 +11,8 @@
     "allow-finish-auth-flow",
     "allow-show-captcha-window",
     "allow-poll-captcha-challenge",
+    "allow-like-track-webview",
+    "allow-sync-session",
     {
       "identifier": "shell:allow-spawn",
       "allow": [

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -210,7 +211,7 @@ func TestAuthLoginStoresTokenAndHidesIt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("auth file stat: %v", err)
 	}
-	if info.Mode().Perm() != 0o600 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("auth file permissions = %o, want 600", info.Mode().Perm())
 	}
 

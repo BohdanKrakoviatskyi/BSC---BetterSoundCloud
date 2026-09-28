@@ -393,6 +393,12 @@
           "markdownDescription": "Allows the main window to close the SoundCloud sign-in webview after validating the token."
         },
         {
+          "description": "Allows the main window to request liking a track directly inside the soundcloud webview context.",
+          "type": "string",
+          "const": "allow-like-track-webview",
+          "markdownDescription": "Allows the main window to request liking a track directly inside the soundcloud webview context."
+        },
+        {
           "description": "Allows the captcha webview to report a successful challenge check.",
           "type": "string",
           "const": "allow-mark-captcha-completed",
@@ -403,6 +409,18 @@
           "type": "string",
           "const": "allow-poll-captcha-challenge",
           "markdownDescription": "Allows the main window to poll for completion of the SoundCloud captcha challenge."
+        },
+        {
+          "description": "Allows the soundcloud webview to report like/unlike execution results back to the application core.",
+          "type": "string",
+          "const": "allow-report-like-result",
+          "markdownDescription": "Allows the soundcloud webview to report like/unlike execution results back to the application core."
+        },
+        {
+          "description": "Allows the soundcloud webview to report that it has initialized and is ready to process requests.",
+          "type": "string",
+          "const": "allow-report-session-ready",
+          "markdownDescription": "Allows the soundcloud webview to report that it has initialized and is ready to process requests."
         },
         {
           "description": "Allows the SoundCloud webview to hand the captured OAuth token and client id back to the app.",
@@ -427,6 +445,12 @@
           "type": "string",
           "const": "allow-start-auth-flow",
           "markdownDescription": "Allows the main window to open the background SoundCloud authentication webview."
+        },
+        {
+          "description": "Allows the main window to synchronize profile and pre-warm the soundcloud session webview.",
+          "type": "string",
+          "const": "allow-sync-session",
+          "markdownDescription": "Allows the main window to synchronize profile and pre-warm the soundcloud session webview."
         },
         {
           "description": "Default core plugins set.\n#### This default permission set includes:\n\n- `core:path:default`\n- `core:event:default`\n- `core:window:default`\n- `core:webview:default`\n- `core:app:default`\n- `core:image:default`\n- `core:resources:default`\n- `core:menu:default`\n- `core:tray:default`",

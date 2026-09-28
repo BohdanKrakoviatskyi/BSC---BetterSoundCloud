@@ -7,5 +7,10 @@
   "remote": {
     "urls": ["https://soundcloud.com", "https://*.soundcloud.com"]
   },
-  "permissions": ["allow-show-auth-window", "allow-save-credentials"]
+  "permissions": [
+    "allow-show-auth-window",
+    "allow-save-credentials",
+    "allow-report-like-result",
+    "allow-report-session-ready"
+  ]
 }

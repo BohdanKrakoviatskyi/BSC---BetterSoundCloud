@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core';
 import { appConfigDir } from '@tauri-apps/api/path';
 import { Command, type Child } from '@tauri-apps/plugin-shell';
 
@@ -243,12 +244,24 @@ class LocalBackend {
     return this.request<SoundCloudPlaylist[]>('user.playlists', { userId }, 30_000);
   }
 
-  async likeTrack(trackId: number, trackUrn: string, datadomeCookie?: string): Promise<TrackLikeResult> {
-    return this.request<TrackLikeResult>('track.like', { trackId, trackUrn, datadomeCookie }, 30_000);
+  async likeTrack(trackId: number, trackUrn: string, userId?: number, clientId?: string, datadomeCookie?: string): Promise<TrackLikeResult> {
+    try {
+      // statically imported instead
+      return await invoke('like_track_webview', { trackId, userId: userId ?? null, clientId: clientId ?? null, liked: true });
+    } catch (error) {
+      console.warn('[desktop] webview like failed, falling back to sidecar', error);
+      return this.request<TrackLikeResult>('track.like', { trackId, trackUrn, datadomeCookie }, 30_000);
+    }
   }
 
-  async unlikeTrack(trackId: number, trackUrn: string, datadomeCookie?: string): Promise<TrackLikeResult> {
-    return this.request<TrackLikeResult>('track.unlike', { trackId, trackUrn, datadomeCookie }, 30_000);
+  async unlikeTrack(trackId: number, trackUrn: string, userId?: number, clientId?: string, datadomeCookie?: string): Promise<TrackLikeResult> {
+    try {
+      // statically imported instead
+      return await invoke('like_track_webview', { trackId, userId: userId ?? null, clientId: clientId ?? null, liked: false });
+    } catch (error) {
+      console.warn('[desktop] webview unlike failed, falling back to sidecar', error);
+      return this.request<TrackLikeResult>('track.unlike', { trackId, trackUrn, datadomeCookie }, 30_000);
+    }
   }
 
   private async request<T>(method: string, params: object = {}, timeoutMs = 5000): Promise<T> {
@@ -354,6 +367,6 @@ export const desktop = {
   userFollowers: (userId: number, next?: string) => backend.userFollowers(userId, next),
   userFollowings: (userId: number, next?: string) => backend.userFollowings(userId, next),
   userPlaylists: (userId: number) => backend.userPlaylists(userId),
-  likeTrack: (trackId: number, trackUrn: string, datadomeCookie?: string) => backend.likeTrack(trackId, trackUrn, datadomeCookie),
-  unlikeTrack: (trackId: number, trackUrn: string, datadomeCookie?: string) => backend.unlikeTrack(trackId, trackUrn, datadomeCookie),
+  likeTrack: (trackId: number, trackUrn: string, userId?: number, clientId?: string, datadomeCookie?: string) => backend.likeTrack(trackId, trackUrn, userId, clientId, datadomeCookie),
+  unlikeTrack: (trackId: number, trackUrn: string, userId?: number, clientId?: string, datadomeCookie?: string) => backend.unlikeTrack(trackId, trackUrn, userId, clientId, datadomeCookie),
 };

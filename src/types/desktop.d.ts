@@ -40,8 +40,8 @@ declare global {
       userFollowers(userId: number, next?: string): Promise<SoundCloudSocialPage>;
       userFollowings(userId: number, next?: string): Promise<SoundCloudSocialPage>;
       userPlaylists(userId: number): Promise<SoundCloudPlaylist[]>;
-      likeTrack(trackId: number, trackUrn: string, datadomeCookie?: string): Promise<TrackLikeResult>;
-      unlikeTrack(trackId: number, trackUrn: string, datadomeCookie?: string): Promise<TrackLikeResult>;
+      likeTrack(trackId: number, trackUrn: string, userId?: number, clientId?: string, datadomeCookie?: string): Promise<TrackLikeResult>;
+      unlikeTrack(trackId: number, trackUrn: string, userId?: number, clientId?: string, datadomeCookie?: string): Promise<TrackLikeResult>;
     };
   }
 }

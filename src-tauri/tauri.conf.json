@@ -38,7 +38,9 @@
     "macOS": {
       "signingIdentity": "-"
     },
-    "externalBin": ["binaries/local-api"]
+    "externalBin": [
+      "binaries/local-api"
+    ]
   },
   "plugins": {
     "updater": {

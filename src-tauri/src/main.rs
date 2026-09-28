@@ -1,10 +1,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
-/// Label of the webview used for SoundCloud authentication.
+/// Label of the webview used for SoundCloud authentication and session requests.
 const AUTH_WINDOW_LABEL: &str = "soundcloud-auth";
 const CAPTCHA_WINDOW_LABEL: &str = "soundcloud-captcha";
 /// Event delivered to the React frontend once credentials are captured.
@@ -74,6 +77,38 @@ struct CaptchaChallengeStatus {
     completed: bool,
     closed: bool,
     datadome_cookie: Option<String>,
+}
+
+#[derive(Default)]
+struct AuthState {
+    token: Mutex<Option<String>>,
+    client_id: Mutex<Option<String>>,
+    user_id: Mutex<Option<i64>>,
+    session_ready: Mutex<bool>,
+}
+
+#[derive(Default)]
+struct LikeState {
+    next_req_id: AtomicU32,
+    pending: Mutex<HashMap<u32, tokio::sync::oneshot::Sender<TrackLikeResult>>>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TrackLikeResult {
+    liked: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    captcha_url: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
+struct LikeResultReport { req_id: u32,
+    liked: bool,
+    success: bool,
+    captcha_url: Option<String>,
+    error: Option<String>,
 }
 
 /// Inspect SoundCloud's own API requests inside the sign-in webview. The webview
@@ -158,8 +193,6 @@ const AUTH_INIT_SCRIPT: &str = r#"
       lastSent = null;
       if (String(error).includes('Tauri IPC is not available') && bridgeRetries++ < 8) {
         window.setTimeout(() => sendCredentials(token, clientId), 500);
-      } else {
-        console.warn('[bsc-auth] save_credentials failed', error);
       }
     });
   }
@@ -170,30 +203,28 @@ const AUTH_INIT_SCRIPT: &str = r#"
     if (!lastSent && token && clientId) sendCredentials(token, clientId);
   }
 
-  function inspectRequest(input, init) {
-    const url = asUrl(input, window.location.href);
-    if (!url || url.hostname !== API_HOST) return;
-    const clientId = url.searchParams.get('client_id') || storageGet(CLIENT_ID_CACHE_KEY);
-    if (clientId) storageSet(CLIENT_ID_CACHE_KEY, clientId);
-    const token = findToken(url, typeof Request !== 'undefined' && input instanceof Request ? input : null, init);
-    if (token && clientId) sendCredentials(token, clientId);
-  }
-
-  // 1. Patch fetch: SoundCloud keeps client_id in the query string of every api-v2 call.
+  // Intercept XHR and fetch to snatch live credentials.
   const originalFetch = window.fetch;
   if (typeof originalFetch === 'function') {
     window.fetch = function (input, init) {
-      try { inspectRequest(input, init); } catch (error) { /* never break the page */ }
+      try {
+        const url = asUrl(input, window.location.href);
+        if (url && url.hostname === API_HOST) {
+          const clientId = url.searchParams.get('client_id') || storageGet(CLIENT_ID_CACHE_KEY);
+          if (clientId) storageSet(CLIENT_ID_CACHE_KEY, clientId);
+          const token = findToken(url, init, null);
+          if (token && clientId) sendCredentials(token, clientId);
+        }
+      } catch (error) { /* ignore */ }
       return originalFetch.apply(this, arguments);
     };
   }
 
-  // 2. Fallback for XHR-based clients.
   const XHR = window.XMLHttpRequest;
-  if (typeof XHR === 'function' && XHR.prototype) {
+  if (XHR && XHR.prototype) {
     const originalOpen = XHR.prototype.open;
-    const originalSetRequestHeader = XHR.prototype.setRequestHeader;
     const originalSend = XHR.prototype.send;
+    const originalSetRequestHeader = XHR.prototype.setRequestHeader;
 
     XHR.prototype.open = function (method, url) {
       this.__bscRequestUrl = url;
@@ -220,6 +251,49 @@ const AUTH_INIT_SCRIPT: &str = r#"
     };
   }
 
+  // Like / Unlike handler running inside soundcloud.com context
+  window.__bscLikeTrack = async function (reqId, userId, trackId, clientId, token, liked) {
+    try {
+      const activeToken = token || storageGet('oauth_token') || cookieValue('oauth_token') || '';
+      const activeClientId = clientId || storageGet(CLIENT_ID_CACHE_KEY) || 'pmagYZKQF6mRtNmtRzPkXSQJ76jYHLN8';
+      const method = liked ? 'PUT' : 'DELETE';
+      const url = 'https://api-v2.soundcloud.com/users/' + userId + '/track_likes/' + trackId + '?client_id=' + encodeURIComponent(activeClientId);
+      const res = await window.fetch(url, {
+        method: method,
+        headers: {
+          'Authorization': 'OAuth ' + activeToken,
+          'Accept': 'application/json, text/javascript, */*; q=0.01'
+        },
+        credentials: 'include'
+      });
+      let captchaUrl = null;
+      if (res.status === 403) {
+        try {
+          const data = await res.json();
+          captchaUrl = data.url || data.blockScript || null;
+        } catch (_) {}
+      }
+      const success = res.status >= 200 && res.status < 300;
+      const errorText = success ? null : ('SoundCloud returned HTTP ' + res.status);
+      invoke('report_like_result', {
+        reqId: reqId,
+        liked: success ? liked : !liked,
+        success: success,
+        captchaUrl: captchaUrl,
+        error: errorText
+      }).catch(() => {});
+    } catch (err) {
+      invoke('report_like_result', {
+        reqId: reqId,
+        liked: !liked,
+        success: false,
+        captchaUrl: null,
+        error: String(err && err.message ? err.message : err)
+      }).catch(() => {});
+    }
+  };
+
+
   // Give live API requests a chance to reveal the current token first; then
   // check the saved session too. Keep polling so a later sign-in is detected.
   window.setTimeout(() => {
@@ -229,28 +303,92 @@ const AUTH_INIT_SCRIPT: &str = r#"
 })();
 "#;
 
-/// Opens the sign-in webview. A visible window avoids a permanently hidden
-/// flow when the SoundCloud page changes or only part of a session is present.
-#[tauri::command]
-async fn start_auth_flow(app: AppHandle) -> Result<(), String> {
+fn resolve_credentials(app: &AppHandle) -> (Option<String>, Option<String>, Option<i64>) {
+    let auth_state = app.state::<AuthState>();
+    let mut token = auth_state.token.lock().unwrap().clone();
+    let mut client_id = auth_state.client_id.lock().unwrap().clone();
+    let mut user_id = *auth_state.user_id.lock().unwrap();
+
+    let mut search_dirs = Vec::new();
+    #[cfg(windows)]
+    {
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            search_dirs.push(PathBuf::from(appdata).join("BetterSoundCloud"));
+        }
+    }
+    if let Ok(config_dir) = app.path().app_config_dir() {
+        search_dirs.push(config_dir);
+    }
+
+    for dir in search_dirs {
+        if token.is_none() || user_id.is_none() {
+            let auth_file = dir.join("auth.json");
+            if let Ok(content) = std::fs::read_to_string(&auth_file) {
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if token.is_none() {
+                        if let Some(t) = json.get("token").and_then(|v| v.as_str()) {
+                            token = Some(t.to_string());
+                        }
+                    }
+                    if user_id.is_none() {
+                        if let Some(id) = json.pointer("/profile/id").and_then(|v| v.as_i64()) {
+                            user_id = Some(id);
+                        }
+                    }
+                }
+            }
+        }
+        if client_id.is_none() {
+            let settings_file = dir.join("settings.json");
+            if let Ok(content) = std::fs::read_to_string(&settings_file) {
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(cid) = json.get("clientId").and_then(|v| v.as_str()) {
+                        client_id = Some(cid.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    (token, client_id, user_id)
+}
+
+fn ensure_session_window(app: &AppHandle) -> Result<WebviewWindow, String> {
     if let Some(window) = app.get_webview_window(AUTH_WINDOW_LABEL) {
-        return show_window(&window);
+        return Ok(window);
     }
 
     let url = SOUNDCLOUD_URL
         .parse::<tauri::Url>()
         .map_err(|error| format!("некорректный URL SoundCloud: {error}"))?;
 
-    WebviewWindowBuilder::new(&app, AUTH_WINDOW_LABEL, WebviewUrl::External(url))
+    let window = WebviewWindowBuilder::new(app, AUTH_WINDOW_LABEL, WebviewUrl::External(url))
         .title("SoundCloud — вход")
         .inner_size(800.0, 700.0)
         .min_inner_size(600.0, 500.0)
-        .visible(true)
-        .incognito(false) // keep the embedded webview's cookies between launches
+        .visible(false)
+        .incognito(false)
         .initialization_script(AUTH_INIT_SCRIPT)
         .build()
-        .map(|_| ())
-        .map_err(|error| format!("не удалось открыть окно входа SoundCloud: {error}"))
+        .map_err(|error| format!("не удалось открыть окно входа SoundCloud: {error}"))?;
+
+    let win_clone = window.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            let _ = win_clone.hide();
+        }
+    });
+
+    Ok(window)
+}
+
+/// Opens the sign-in webview. A visible window avoids a permanently hidden
+/// flow when the SoundCloud page changes or only part of a session is present.
+#[tauri::command]
+async fn start_auth_flow(app: AppHandle) -> Result<(), String> {
+    let window = ensure_session_window(&app)?;
+    show_window(&window)
 }
 
 /// Opens the SoundCloud anti-bot challenge in an interactive in-app webview.
@@ -327,13 +465,14 @@ async fn poll_captcha_challenge(app: AppHandle) -> Result<CaptchaChallengeStatus
         .challenge_passed
         .lock()
         .map_err(|_| "не удалось проверить состояние капчи".to_owned())?;
-    let cookie_changed = current_cookie
-        .as_deref()
-        .is_some_and(|cookie| baseline_cookie.as_deref() != Some(cookie));
+    let cookie_changed = match (&current_cookie, &baseline_cookie) {
+        (Some(current), Some(baseline)) => current != baseline,
+        (Some(_), None) => true,
+        _ => false,
+    };
+
     if challenge_passed || cookie_changed {
-        window
-            .close()
-            .map_err(|error| format!("не удалось закрыть проверку SoundCloud: {error}"))?;
+        let _ = window.hide();
         return Ok(CaptchaChallengeStatus {
             completed: true,
             closed: false,
@@ -341,21 +480,27 @@ async fn poll_captcha_challenge(app: AppHandle) -> Result<CaptchaChallengeStatus
         });
     }
 
+    let is_visible = window
+        .is_visible()
+        .map_err(|error| format!("не удалось проверить окно проверки: {error}"))?;
+    if !is_visible {
+        return Ok(CaptchaChallengeStatus {
+            completed: false,
+            closed: true,
+            datadome_cookie: None,
+        });
+    }
+
     Ok(CaptchaChallengeStatus {
         completed: false,
         closed: false,
-        datadome_cookie: None,
+        datadome_cookie: current_cookie,
     })
 }
 
 #[tauri::command]
-fn mark_captcha_challenge_completed(
-    window: WebviewWindow,
-    state: State<'_, CaptchaState>,
-) -> Result<(), String> {
-    if window.label() != CAPTCHA_WINDOW_LABEL {
-        return Err("сигнал проверки получен не из окна капчи".to_owned());
-    }
+fn mark_captcha_challenge_completed(app: AppHandle) -> Result<(), String> {
+    let state = app.state::<CaptchaState>();
     *state
         .challenge_passed
         .lock()
@@ -379,10 +524,7 @@ fn datadome_cookie_for(window: &WebviewWindow) -> Result<Option<String>, String>
 /// Makes the auth window visible when manual sign-in is required.
 #[tauri::command]
 fn show_auth_window(app: AppHandle) -> Result<(), String> {
-    let window = app
-        .get_webview_window(AUTH_WINDOW_LABEL)
-        .ok_or_else(|| "окно входа SoundCloud ещё не создано".to_owned())?;
-
+    let window = ensure_session_window(&app)?;
     show_window(&window)
 }
 
@@ -390,23 +532,11 @@ fn show_auth_window(app: AppHandle) -> Result<(), String> {
 /// the Go backend confirms that the token actually belongs to a user.
 #[tauri::command]
 fn save_credentials(app: AppHandle, token: String, client_id: String) -> Result<(), String> {
-    let token = token.trim().to_owned();
-    let client_id = client_id.trim().to_owned();
+    let auth_state = app.state::<AuthState>();
+    *auth_state.token.lock().unwrap() = Some(token.clone());
+    *auth_state.client_id.lock().unwrap() = Some(client_id.clone());
 
-    if token.is_empty()
-        || token.len() > 4096
-        || token.chars().any(char::is_control)
-        || client_id.len() < 8
-        || client_id.len() > 128
-        || !client_id
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-    {
-        return Err("SoundCloud вернул некорректные учётные данные".to_owned());
-    }
-
-    app.emit_to(
-        "main",
+    app.emit(
         CREDENTIALS_EVENT,
         SoundCloudCredentials { token, client_id },
     )
@@ -418,10 +548,152 @@ fn save_credentials(app: AppHandle, token: String, client_id: String) -> Result<
 fn finish_auth_flow(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(AUTH_WINDOW_LABEL) {
         window
-            .close()
-            .map_err(|error| format!("не удалось закрыть окно входа: {error}"))?;
+            .hide()
+            .map_err(|error| format!("не удалось скрыть окно входа: {error}"))?;
     }
     Ok(())
+}
+
+#[tauri::command]
+fn report_session_ready(app: AppHandle) -> Result<(), String> {
+    let auth_state = app.state::<AuthState>();
+    *auth_state.session_ready.lock().unwrap() = true;
+    Ok(())
+}
+
+#[tauri::command]
+fn sync_session_window(
+    app: AppHandle,
+    user_id: Option<i64>,
+    client_id: Option<String>,
+) -> Result<(), String> {
+    let auth_state = app.state::<AuthState>();
+    if let Some(id) = user_id {
+        *auth_state.user_id.lock().unwrap() = Some(id);
+    }
+    if let Some(cid) = client_id {
+        *auth_state.client_id.lock().unwrap() = Some(cid);
+    }
+    let _ = ensure_session_window(&app);
+    Ok(())
+}
+
+#[tauri::command]
+fn report_like_result(app: AppHandle, result: LikeResultReport) -> Result<(), String> {
+    let like_state = app.state::<LikeState>();
+    let mut pending = like_state
+        .pending
+        .lock()
+        .map_err(|_| "like state lock error".to_owned())?;
+    if let Some(tx) = pending.remove(&result.req_id) {
+        let _ = tx.send(TrackLikeResult {
+            liked: result.liked,
+            captcha_url: result.captcha_url,
+        });
+    }
+    Ok(())
+}
+
+/// Performs track like/unlike requests directly within the authenticated soundcloud.com webview context.
+#[tauri::command]
+async fn like_track_webview(
+    app: AppHandle,
+    track_id: i64,
+    user_id: Option<i64>,
+    client_id: Option<String>,
+    liked: bool,
+) -> Result<TrackLikeResult, String> {
+    let window = ensure_session_window(&app)?;
+
+    let (saved_token, saved_client_id, saved_user_id) = resolve_credentials(&app);
+    let resolved_user_id = user_id.or(saved_user_id).unwrap_or(0);
+    if resolved_user_id <= 0 {
+        return Err("не удалось определить ID пользователя для изменения лайка".to_owned());
+    }
+    let resolved_client_id = client_id
+        .or(saved_client_id)
+        .unwrap_or_else(|| "pmagYZKQF6mRtNmtRzPkXSQJ76jYHLN8".to_owned());
+    let resolved_token = saved_token.unwrap_or_default();
+
+    let like_state = app.state::<LikeState>();
+    let req_id = like_state.next_req_id.fetch_add(1, Ordering::SeqCst);
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    {
+        let mut pending = like_state
+            .pending
+            .lock()
+            .map_err(|_| "like state lock error".to_owned())?;
+        pending.insert(req_id, tx);
+    }
+
+    let script = format!(
+        r#"
+        if (typeof window.__bscLikeTrack === 'function') {{
+            window.__bscLikeTrack({}, {}, {}, "{}", "{}", {});
+        }} else {{
+            (async () => {{
+                try {{
+                    const m = {} ? 'PUT' : 'DELETE';
+                    const u = 'https://api-v2.soundcloud.com/users/{}/track_likes/{}?client_id=' + encodeURIComponent('{}');
+                    const r = await window.fetch(u, {{
+                        method: m,
+                        headers: {{
+                            'Authorization': 'OAuth {}',
+                            'Accept': 'application/json, text/javascript, */*; q=0.01'
+                        }},
+                        credentials: 'include'
+                    }});
+                    let cUrl = null;
+                    if (r.status === 403) {{
+                        try {{ const d = await r.json(); cUrl = d.url || d.blockScript || null; }} catch(_) {{}}
+                    }}
+                    const s = r.status >= 200 && r.status < 300;
+                    const err = s ? null : ('HTTP ' + r.status);
+                    if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke) {{
+                        window.__TAURI_INTERNALS__.invoke('report_like_result', {{
+                            reqId: {},
+                            liked: s ? {} : !{},
+                            success: s,
+                            captchaUrl: cUrl,
+                            error: err
+                        }});
+                    }}
+                }} catch(e) {{
+                    if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke) {{
+                        window.__TAURI_INTERNALS__.invoke('report_like_result', {{
+                            reqId: {},
+                            liked: !{},
+                            success: false,
+                            captchaUrl: null,
+                            error: String(e)
+                        }});
+                    }}
+                }}
+            }})();
+        }}
+        "#,
+        req_id, resolved_user_id, track_id, resolved_client_id, resolved_token, liked,
+        liked, resolved_user_id, track_id, resolved_client_id, resolved_token,
+        req_id, liked, liked,
+        req_id, liked
+    );
+
+    window
+        .eval(&script)
+        .map_err(|error| format!("не удалось выполнить запрос лайка в окне SoundCloud: {error}"))?;
+
+    match tokio::time::timeout(tokio::time::Duration::from_secs(20), rx).await {
+        Ok(Ok(res)) => Ok(res),
+        Ok(Err(_)) => Err("канал ответа SoundCloud закрыт".to_owned()),
+        Err(_) => {
+            let mut pending = like_state
+                .pending
+                .lock()
+                .map_err(|_| "like state lock error".to_owned())?;
+            pending.remove(&req_id);
+            Err("таймаут ожидания ответа SoundCloud (20c)".to_owned())
+        }
+    }
 }
 
 fn show_window(window: &WebviewWindow) -> Result<(), String> {
@@ -435,6 +707,12 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(CaptchaState::default())
+        .manage(AuthState::default())
+        .manage(LikeState::default())
+        .setup(|app| {
+            let _ = ensure_session_window(&app.handle());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             start_auth_flow,
             show_auth_window,
@@ -442,7 +720,11 @@ fn main() {
             poll_captcha_challenge,
             mark_captcha_challenge_completed,
             save_credentials,
-            finish_auth_flow
+            finish_auth_flow,
+            report_session_ready,
+            sync_session_window,
+            report_like_result,
+            like_track_webview
         ])
         .run(tauri::generate_context!())
         .expect("error while running BetterSoundCloud");

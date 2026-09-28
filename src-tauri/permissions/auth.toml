@@ -35,3 +35,23 @@ commands.allow = ["show_auth_window"]
 identifier = "allow-save-credentials"
 description = "Allows the SoundCloud webview to hand the captured OAuth token and client id back to the app."
 commands.allow = ["save_credentials"]
+
+[[permission]]
+identifier = "allow-like-track-webview"
+description = "Allows the main window to request liking a track directly inside the soundcloud webview context."
+commands.allow = ["like_track_webview"]
+
+[[permission]]
+identifier = "allow-sync-session"
+description = "Allows the main window to synchronize profile and pre-warm the soundcloud session webview."
+commands.allow = ["sync_session_window"]
+
+[[permission]]
+identifier = "allow-report-like-result"
+description = "Allows the soundcloud webview to report like/unlike execution results back to the application core."
+commands.allow = ["report_like_result"]
+
+[[permission]]
+identifier = "allow-report-session-ready"
+description = "Allows the soundcloud webview to report that it has initialized and is ready to process requests."
+commands.allow = ["report_session_ready"]
