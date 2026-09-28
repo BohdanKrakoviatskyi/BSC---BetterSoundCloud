@@ -1,14 +1,10 @@
-import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import type { Track, TrackLyrics } from '../../domain/models';
 import type { LyricsPanelPhase } from '../types';
 import { measureElementRect, playArtworkFlight, type ElementRect } from '../lib/artworkFlight';
 import './LyricsSidebar.css';
 import { ResizeHandle } from './ResizeHandle';
-
-// three is a large dependency and the surface only exists in focus mode, so the module is
-// fetched the first time the fullscreen lyrics are opened instead of on every app start.
-const LazyDottedSurface = lazy(() => import('./DottedSurface'));
 
 type Props = {
   phase: LyricsPanelPhase;
@@ -369,7 +365,17 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
           onWheel={() => { manuallyScrolledAtRef.current = Date.now(); }}
           onPointerDown={() => { manuallyScrolledAtRef.current = Date.now(); }}
         >
-          {loading && <div className="lyrics-state lyrics-state-loading"><span className="player-spinner" />Загружаю текст…</div>}
+          {loading && (
+            <div className="lyrics-skeleton" role="status" aria-label="Загружаю текст песни">
+              <span className="lyrics-skeleton-caption" />
+              <span />
+              <span className="is-short" />
+              <span />
+              <span className="is-medium" />
+              <span />
+              <span className="is-short" />
+            </div>
+          )}
           {!loading && error && <div className="lyrics-state lyrics-state-error">{error}</div>}
           {!loading && !error && !hasLines && <div className="lyrics-state">Текст для этого трека не найден.</div>}
           {!loading && !error && hasLines && (
@@ -405,14 +411,19 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
 
         {focusMode && (
           <div className="lyrics-focus-layer">
-            <Suspense fallback={null}>
-              <LazyDottedSurface className="lyrics-dotted-surface" />
-            </Suspense>
+            {track.artwork && <div className="lyrics-focus-backdrop" style={{ backgroundImage: `url("${track.artwork.replaceAll('"', '%22')}")` }} aria-hidden="true" />}
             <div className="lyrics-focus-head">
-              <button className="lyrics-icon-button lyrics-focus-exit" type="button" onClick={handleExitFocus} aria-label="Вернуться к карточке трека" title="Вернуться к карточке трека">
+              <button className="lyrics-icon-button lyrics-focus-exit" type="button" onClick={handleExitFocus} aria-label="Назад" title="Назад">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6M9 12h11M4 5v14" /></svg>
-                <span>К карточке песни</span>
+                <span>Назад</span>
               </button>
+            </div>
+            <div className="lyrics-focus-artwork-card">
+              {track.artwork
+                ? <img src={track.artwork} alt={`Обложка: ${track.title}`} />
+                : <span className="lyrics-focus-track-art-fallback" aria-hidden="true">♫</span>}
+              <h2 title={track.title}>{track.title}</h2>
+              <p>{track.artist.name || 'SoundCloud'}</p>
             </div>
             <div
               className="lyrics-focus-body"
@@ -429,6 +440,7 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
                   key={line.id}
                   ref={(element) => { focusLineRefs.current[index] = element; }}
                   className={`lyrics-line lyrics-line-lg${index === activeIndex && isCurrentTrack ? ' is-active' : ''}${index < activeIndex && isCurrentTrack ? ' is-past' : ''}${index > activeIndex && isCurrentTrack ? ' is-upcoming' : ''}`}
+                  aria-current={index === activeIndex && isCurrentTrack ? 'true' : undefined}
                   style={{ '--lyrics-distance': Math.min(distance, 5) } as CSSProperties}
                 >
                   {line.text}
@@ -436,7 +448,36 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
               })}
             </div>
             {isCurrentTrack && (
-              <div className="lyrics-focus-transport">
+              <div className="lyrics-focus-controls">
+                {durationSeconds > 0 && (
+                  <div className={`lyrics-focus-seek${scrubSeconds !== null ? ' is-scrubbing' : ''}`} style={{ '--fill': seekFraction } as CSSProperties}>
+                    <span>{formatClock(scrubSecond)}</span>
+                    <div className="lyrics-focus-rail">
+                      <div className="lyrics-focus-track" aria-hidden="true"><div className="lyrics-focus-track-fill" /></div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={seekMax}
+                        step={1}
+                        value={Math.min(Math.round(scrubSecond), seekMax)}
+                        onChange={(event) => {
+                          const next = Number(event.target.value);
+                          setScrubSeconds(next);
+                          seekRef.current(next * 1000);
+                        }}
+                        onPointerUp={() => setScrubSeconds(null)}
+                        onPointerCancel={() => setScrubSeconds(null)}
+                        onBlur={() => setScrubSeconds(null)}
+                        aria-label="Перемотка трека"
+                      />
+                    </div>
+                    <span>{formatClock(durationSeconds)}</span>
+                  </div>
+                )}
+                <div className="lyrics-focus-transport">
+                <button className="lyrics-focus-skip" type="button" onClick={() => seekRef.current(Math.max(0, playbackPositionMs - 10000))} aria-label="Назад на 10 секунд" title="Назад на 10 секунд">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5v5h5M20 19v-5h-5"/><path d="M5.5 9a7.5 7.5 0 0 1 12-2L20 10M18.5 15a7.5 7.5 0 0 1-12 2L4 14"/></svg>
+                </button>
                 <button
                   className="lyrics-focus-play"
                   type="button"
@@ -448,6 +489,9 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
                     ? <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v14M15 5v14" /></svg>
                     : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" /></svg>}
                 </button>
+                <button className="lyrics-focus-skip" type="button" onClick={() => seekRef.current(Math.min(track.durationMs || Infinity, playbackPositionMs + 10000))} aria-label="Вперёд на 10 секунд" title="Вперёд на 10 секунд">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 5v5h-5M4 19v-5h5"/><path d="M18.5 9a7.5 7.5 0 0 0-12-2L4 10M5.5 15a7.5 7.5 0 0 0 12 2L20 14"/></svg>
+                </button>
                 <button
                   className={`lyrics-focus-repeat${repeatOne ? ' is-on' : ''}`}
                   type="button"
@@ -456,96 +500,27 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
                   aria-label={repeatOne ? 'Выключить повтор' : 'Повторять трек'}
                   title={repeatOne ? 'Повтор выключен' : 'Повторять трек'}
                 >
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M17 2l4 4-4 4" />
-                    <path d="M3 11V9a3 3 0 0 1 3-3h15" />
-                    <path d="M7 22l-4-4 4-4" />
-                    <path d="M21 13v2a3 3 0 0 1-3 3H3" />
-                  </svg>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 2l4 4-4 4" /><path d="M3 11V9a3 3 0 0 1 3-3h15" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v2a3 3 0 0 1-3 3H3" /></svg>
                   <span>1</span>
                 </button>
-              </div>
-            )}
-
-            <div className="lyrics-focus-left">
-            <div className="lyrics-focus-seek-group">
-              <div className="lyrics-focus-track-meta">
-                {track.artwork
-                  ? <img src={track.artwork} alt={`Обложка: ${track.title}`} />
-                  : <span className="lyrics-focus-track-art-fallback" aria-hidden="true">♫</span>}
-                <span title={track.title}>{track.title}</span>
-              </div>
-            {isCurrentTrack && durationSeconds > 0 && (
-              <div
-                className={`lyrics-focus-seek${scrubSeconds !== null ? ' is-scrubbing' : ''}`}
-                style={{ '--fill': seekFraction } as CSSProperties}
-              >
-                {/* The rail is painted here so it can carry the gradient and the moving
-                    highlight; the range input above it stays transparent and only handles
-                    the pointer and the keyboard. */}
-                <div className="lyrics-focus-rail">
-                  <div className="lyrics-focus-track" aria-hidden="true">
-                    <div className="lyrics-focus-track-fill" />
+                <div className="lyrics-focus-volume">
+                  <button
+                    className={`lyrics-focus-volume-btn${volume === 0 ? ' is-muted' : ''}`}
+                    type="button"
+                    onClick={handleToggleMute}
+                    aria-label={volume === 0 ? 'Включить звук' : 'Выключить звук'}
+                    title={volume === 0 ? 'Включить звук' : 'Выключить звук'}
+                  >
+                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 6v4h3l4 3V3L4 6H1z" fill="currentColor" />{volume > 0 && <><path d="M10 5.2a4 4 0 0 1 0 5.6M12 3a7 7 0 0 1 0 10" fill="none" stroke="currentColor" strokeWidth="1.3" /></>}</svg>
+                  </button>
+                  <div className="lyrics-focus-volume-range" style={{ '--volume-fill': `${volume}%` } as CSSProperties}>
+                    <input type="range" min={0} max={100} step={1} value={volume} onChange={(event) => volumeChangeRef.current(Number(event.target.value))} aria-label="Громкость" aria-valuetext={`${volume}%`} />
                   </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={seekMax}
-                    step={1}
-                    value={Math.min(Math.round(scrubSecond), seekMax)}
-                    onChange={(event) => {
-                      const next = Number(event.target.value);
-                      setScrubSeconds(next);
-                      seekRef.current(next * 1000);
-                    }}
-                    onPointerUp={() => setScrubSeconds(null)}
-                    onPointerCancel={() => setScrubSeconds(null)}
-                    onBlur={() => setScrubSeconds(null)}
-                    aria-label="Перемотка трека"
-                  />
+                  <span className="lyrics-focus-volume-value">{volume}%</span>
                 </div>
-                <span className="lyrics-focus-clock">
-                  {formatClock(scrubSecond)} / {formatClock(durationSeconds)}
-                </span>
-              </div>
-            )}
-            </div>
-
-            {isCurrentTrack && (
-              <div className="lyrics-focus-volume">
-                <button
-                  className={`lyrics-focus-volume-btn${volume === 0 ? ' is-muted' : ''}`}
-                  type="button"
-                  onClick={handleToggleMute}
-                  aria-label={volume === 0 ? 'Включить звук' : 'Выключить звук'}
-                  title={volume === 0 ? 'Включить звук' : 'Выключить звук'}
-                >
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    {volume === 0
-                      ? <><path d="M11 5 6 9H3v6h3l5 4z" /><path d="m16 9 5 6m0-6-5 6" /></>
-                      : <><path d="M11 5 6 9H3v6h3l5 4z" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M18.5 5.5a9 9 0 0 1 0 13" /></>}
-                  </svg>
-                </button>
-                <div className="lyrics-focus-volume-slider" style={{ '--fill': volume / 100 } as CSSProperties}>
-                  <div className="lyrics-focus-rail">
-                    <div className="lyrics-focus-track" aria-hidden="true">
-                      <div className="lyrics-focus-track-fill" />
-                    </div>
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      step={1}
-                      value={volume}
-                      onChange={(event) => volumeChangeRef.current(Number(event.target.value))}
-                      aria-label="Громкость"
-                    />
-                  </div>
-                  <span className="lyrics-focus-clock">{volume}</span>
                 </div>
               </div>
             )}
-            </div>
             {isCurrentTrack && hasTimedLyrics && activeIndex >= 0 && (
               <button
                 ref={syncButtonRef}

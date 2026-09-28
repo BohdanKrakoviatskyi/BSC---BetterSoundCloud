@@ -37,6 +37,7 @@ type Props = {
   onVolumeChange: (volume: number) => void;
   /** Whether the lyrics sidebar currently owns the track artwork. */
   lyricsOpen: boolean;
+  hasLyrics: boolean;
   onToggleLyrics: (artworkRect: ElementRect | null) => void;
 };
 
@@ -250,7 +251,7 @@ function TrackCoverflow({ contextTracks, activeTrackId, playingTrackId, isPlayin
   );
 }
 
-export function TrackDetailsPage({ track, loading, error, isCurrent, isPlaying, playbackLoading, playbackPositionMs, contextTracks, relatedTracks, relatedLoading, relatedError, currentTrackId, isPlayingNow, onPlayRelated, onOpenRelated, onOpenContextTrack, onOpenArtist, onBack, onPlay, onToggleRepeat, repeatOne, shuffleLiked, onToggleShuffle, liked, likeBusy, onToggleLike, onSeek, volume, onVolumeChange, lyricsOpen, onToggleLyrics }: Props) {
+export function TrackDetailsPage({ track, loading, error, isCurrent, isPlaying, playbackLoading, playbackPositionMs, contextTracks, relatedTracks, relatedLoading, relatedError, currentTrackId, isPlayingNow, onPlayRelated, onOpenRelated, onOpenContextTrack, onOpenArtist, onBack, onPlay, onToggleRepeat, repeatOne, shuffleLiked, onToggleShuffle, liked, likeBusy, onToggleLike, onSeek, volume, onVolumeChange, lyricsOpen, hasLyrics, onToggleLyrics }: Props) {
   const [expandedDescriptionTrackId, setExpandedDescriptionTrackId] = useState<number | null>(null);
   const artworkRef = useRef<HTMLDivElement>(null);
 
@@ -356,7 +357,7 @@ export function TrackDetailsPage({ track, loading, error, isCurrent, isPlaying, 
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z" /></svg>
               </button>
-              <button
+              {hasLyrics && <button
                 className={`track-detail-lyrics${lyricsOpen ? ' is-active' : ''}`}
                 type="button"
                 onClick={toggleLyrics}
@@ -366,7 +367,7 @@ export function TrackDetailsPage({ track, loading, error, isCurrent, isPlaying, 
                 title={lyricsOpen ? 'Скрыть текст песни' : 'Показать текст песни'}
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h11M4 10h11M4 15h7" /><path d="M18 14v6M15 17h6" /></svg>
-              </button>
+              </button>}
               <div className="track-detail-copy">
                 <h1>{track.title}</h1>
                 {artistId

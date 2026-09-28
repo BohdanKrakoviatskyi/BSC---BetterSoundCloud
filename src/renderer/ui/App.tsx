@@ -1311,6 +1311,7 @@ export function App() {
                 volume={settings.volume}
                 onVolumeChange={(volume) => void updateSettings({ volume })}
                 lyricsOpen={lyricsPanelActive}
+                hasLyrics={Boolean(lyrics?.lines.length)}
                 onToggleLyrics={toggleLyrics}
               />}
         {tracksError && page !== 'likes' && <ErrorMessage message={tracksError} className="app-track-error" />}
