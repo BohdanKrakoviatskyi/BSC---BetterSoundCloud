@@ -133,8 +133,10 @@ export function App() {
   const [artistTracksLoading, setArtistTracksLoading] = useState(false);
   const [artistTracksError, setArtistTracksError] = useState('');
   const [artistLikedTracks, setArtistLikedTracks] = useState<Track[]>([]);
+  const [artistLikedTracksNext, setArtistLikedTracksNext] = useState('');
   const [artistLikedTracksLoading, setArtistLikedTracksLoading] = useState(false);
   const [artistLikedTracksError, setArtistLikedTracksError] = useState('');
+  const artistLikesLoadingRef = useRef(false);
   const [artistPlaylists, setArtistPlaylists] = useState<Playlist[]>([]);
   const [artistPlaylistsLoading, setArtistPlaylistsLoading] = useState(false);
   const [artistPlaylistsError, setArtistPlaylistsError] = useState('');
@@ -613,7 +615,11 @@ export function App() {
       console.error('[ui.artist.tracks] failed', { artistId, error: message });
       setArtistTracksError(message);
     }
-    if (likesResult.status === 'fulfilled') setArtistLikedTracks(likesResult.value);
+    if (likesResult.status === 'fulfilled') {
+      setArtistLikedTracks(likesResult.value.tracks);
+      setArtistLikedTracksNext(likesResult.value.next);
+      console.info('[ui.artist.likes] loaded', { artistId, count: likesResult.value.tracks.length, hasNext: Boolean(likesResult.value.next) });
+    }
     else {
       setArtistLikedTracks([]);
       setArtistLikedTracksError(reasonText(likesResult.reason, 'Лайки автора недоступны'));
@@ -647,6 +653,28 @@ export function App() {
       setArtistSocialError(reasonText(reason, 'Не удалось загрузить список пользователей'));
     } finally {
       if (requestId === artistSocialRequestId.current) setArtistSocialLoading(false);
+    }
+  }
+
+  async function loadMoreArtistLikes() {
+    if (!artistProfile || !artistLikedTracksNext || artistLikedTracksLoading || artistLikesLoadingRef.current) return;
+    const artistId = artistProfile.id;
+    const requestId = artistRequestId.current;
+    artistLikesLoadingRef.current = true;
+    setArtistLikedTracksLoading(true);
+    setArtistLikedTracksError('');
+    try {
+      const result = await appGateway.artistLikes(artistId, artistLikedTracksNext);
+      if (requestId !== artistRequestId.current || artistProfile?.id !== artistId) return;
+      setArtistLikedTracks((current) => [...current, ...result.tracks.filter((track) => !current.some((item) => item.id === track.id))]);
+      setArtistLikedTracksNext(result.next);
+      console.info('[ui.artist.likes] appended', { artistId, count: result.tracks.length, total: artistLikedTracks.length + result.tracks.length, hasNext: Boolean(result.next) });
+    } catch (reason) {
+      if (requestId !== artistRequestId.current) return;
+      setArtistLikedTracksError(reasonText(reason, 'Не удалось загрузить следующие лайки автора'));
+    } finally {
+      artistLikesLoadingRef.current = false;
+      if (requestId === artistRequestId.current) setArtistLikedTracksLoading(false);
     }
   }
 
@@ -693,6 +721,7 @@ export function App() {
     setArtistTracksLoading(true);
     setArtistTracksError('');
     setArtistLikedTracks([]);
+    setArtistLikedTracksNext('');
     setArtistLikedTracksLoading(true);
     setArtistLikedTracksError('');
     setArtistPlaylists([]);
@@ -721,6 +750,7 @@ export function App() {
     setArtistTracksLoading(true);
     setArtistTracksError('');
     setArtistLikedTracks([]);
+    setArtistLikedTracksNext('');
     setArtistLikedTracksLoading(true);
     setArtistLikedTracksError('');
     setArtistPlaylists([]);
@@ -1282,6 +1312,11 @@ export function App() {
                 title={page === 'artist-tracks-all' ? 'Все треки' : 'Понравившиеся треки'}
                 artistName={artistProfile?.fullName || artistProfile?.username || ''}
                 tracks={page === 'artist-tracks-all' ? artistTracks : artistLikedTracks}
+                totalCount={page === 'artist-likes-all' ? artistProfile?.likesCount : undefined}
+                loading={page === 'artist-likes-all' && artistLikedTracksLoading}
+                error={page === 'artist-likes-all' ? artistLikedTracksError : ''}
+                hasMore={page === 'artist-likes-all' && Boolean(artistLikedTracksNext)}
+                onLoadMore={page === 'artist-likes-all' ? loadMoreArtistLikes : undefined}
                 currentTrackId={currentTrack?.id ?? null}
                 isPlaying={shouldPlay}
                 playbackLoading={playbackLoading}

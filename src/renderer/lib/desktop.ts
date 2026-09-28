@@ -32,6 +32,7 @@ export type SoundCloudTrack = {
   likesCount?: number;
   user: { username: string };
 };
+export type SoundCloudTrackPage = { tracks: SoundCloudTrack[]; nextHref?: string };
 export type SoundCloudTrackDetails = SoundCloudTrack & {
   description?: string;
   genre?: string;
@@ -61,6 +62,7 @@ export type SoundCloudUserProfile = {
   followersCount?: number;
   followingsCount?: number;
   trackCount?: number;
+  likesCount?: number;
   verified?: boolean;
 };
 export type SoundCloudSocialUser = {
@@ -227,8 +229,8 @@ class LocalBackend {
     return this.request<SoundCloudTrack[]>('user.tracks', { userId }, 120_000);
   }
 
-  async userLikes(userId: number): Promise<SoundCloudTrack[]> {
-    return this.request<SoundCloudTrack[]>('user.likes', { userId }, 30_000);
+  async userLikes(userId: number, next?: string): Promise<SoundCloudTrackPage> {
+    return this.request<SoundCloudTrackPage>('user.likes', { userId, next }, 30_000);
   }
 
   async userFollowers(userId: number, next?: string): Promise<SoundCloudSocialPage> {
@@ -350,7 +352,7 @@ export const desktop = {
   mixedSelections: () => backend.mixedSelections(),
   userProfile: (userId: number) => backend.userProfile(userId),
   userTracks: (userId: number) => backend.userTracks(userId),
-  userLikes: (userId: number) => backend.userLikes(userId),
+  userLikes: (userId: number, next?: string) => backend.userLikes(userId, next),
   userFollowers: (userId: number, next?: string) => backend.userFollowers(userId, next),
   userFollowings: (userId: number, next?: string) => backend.userFollowings(userId, next),
   userPlaylists: (userId: number) => backend.userPlaylists(userId),
