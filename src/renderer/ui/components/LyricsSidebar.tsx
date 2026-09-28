@@ -5,6 +5,7 @@ import type { LyricsPanelPhase } from '../types';
 import { measureElementRect, playArtworkFlight, type ElementRect } from '../lib/artworkFlight';
 import './LyricsSidebar.css';
 import { ResizeHandle } from './ResizeHandle';
+import { RibbonGlow } from './RibbonGlow';
 
 type Props = {
   phase: LyricsPanelPhase;
@@ -417,7 +418,9 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
 
         {focusMode && (
           <div className="lyrics-focus-layer">
-            {track.artwork && <div className="lyrics-focus-backdrop" style={{ backgroundImage: `url("${track.artwork.replaceAll('"', '%22')}")` }} aria-hidden="true" />}
+            {track.artwork
+              ? <div className="lyrics-focus-backdrop" style={{ backgroundImage: `url("${track.artwork.replaceAll('"', '%22')}")` }} aria-hidden="true" />
+              : <RibbonGlow className="lyrics-focus-glow" />}
             <div className="lyrics-focus-head">
               <button className="lyrics-icon-button lyrics-focus-exit" type="button" onClick={handleExitFocus} aria-label="Назад" title="Назад">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6M9 12h11M4 5v14" /></svg>

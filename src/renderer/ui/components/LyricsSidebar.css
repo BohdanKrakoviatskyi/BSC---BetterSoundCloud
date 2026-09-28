@@ -590,6 +590,17 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
   pointer-events: none;
 }
 
+/*
+ * Shown in place of the artwork backdrop when a track has no cover. Sits at the same z-index as
+ * the photo version so the layer's scrim still dims it and the lyrics stay readable; the
+ * photo filter is deliberately absent, since the field is already soft and `brightness(.48)`
+ * would crush the palette to black.
+ */
+.lyrics-focus-glow {
+  z-index: -2;
+  opacity: .8;
+}
+
 .lyrics-focus-layer::after {
   position: absolute;
   z-index: -1;
