@@ -17,6 +17,10 @@ type Props = {
   /** Whether the track is actually playing right now, so the transport button shows the right glyph. */
   isPlaying: boolean;
   onTogglePlayback: () => void;
+  onPreviousTrack: () => void;
+  onNextTrack: () => void;
+  canPreviousTrack: boolean;
+  canNextTrack: boolean;
   /** Seeks the playing track; the owner also starts playback first when needed. */
   onSeek: (positionMs: number) => void;
   repeatOne: boolean;
@@ -55,7 +59,7 @@ function findActiveLineIndex(lines: TrackLyrics['lines'], positionMs: number): n
   return active;
 }
 
-export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentTrack, isPlaying, onTogglePlayback, onSeek, repeatOne, onToggleRepeat, volume, onVolumeChange, playbackPositionMs, originRect, onClose, onSettled, onResize }: Props) {
+export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentTrack, isPlaying, onTogglePlayback, onPreviousTrack, onNextTrack, canPreviousTrack, canNextTrack, onSeek, repeatOne, onToggleRepeat, volume, onVolumeChange, playbackPositionMs, originRect, onClose, onSettled, onResize }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const [slotRect, setSlotRect] = useState<ElementRect | null>(null);
@@ -138,10 +142,11 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
     const lineRect = line.getBoundingClientRect();
     const lineCenter = lineRect.top + lineRect.height / 2;
     const bodyCenter = bodyRect.top + bodyRect.height / 2;
-    const safeTop = bodyRect.top + bodyRect.height * 0.27;
-    const safeBottom = bodyRect.bottom - bodyRect.height * 0.27;
     setCurrentLineDirection(lineCenter < bodyCenter ? 'up' : 'down');
-    setActiveLineCentered(lineCenter >= safeTop && lineCenter <= safeBottom);
+    const focusTop = bodyRect.top + 58;
+    const focusBottom = Math.min(bodyRect.bottom - 24, window.innerHeight - 170);
+    const lineIsInFocus = lineRect.bottom > focusTop && lineRect.top < focusBottom;
+    setActiveLineCentered(lineIsInFocus);
   }, [activeIndex, isCurrentTrack]);
 
   const syncToCurrentLine = useCallback(() => {
@@ -268,12 +273,21 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
     };
   }, [activeIndex, focusMode, isCurrentTrack, updateActiveLinePosition]);
 
-  // A track change or a reset of the reader's view must not leave stale toggles behind.
+  // A track change resets the reader's scroll position while keeping fullscreen lyrics open.
   useEffect(() => {
     setExpanded(false);
-    setFocusMode(false);
     manuallyScrolledAtRef.current = 0;
+    if (focusBodyRef.current) focusBodyRef.current.scrollTop = 0;
   }, [track.id]);
+
+  // Keep the lyric view while the next song loads, then smoothly return to its track page if
+  // that song has no lyrics.
+  useEffect(() => {
+    if (!focusMode || !isCurrentTrack || loading || hasLines) return;
+    setFocusMode(false);
+    const timeout = window.setTimeout(() => onCloseRef.current(), 260);
+    return () => window.clearTimeout(timeout);
+  }, [focusMode, hasLines, isCurrentTrack, loading, track.id]);
 
   useEffect(() => {
     if (!isFlying) return;
@@ -393,14 +407,6 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
               ))}
             </div>
           )}
-          {!loading && !error && Boolean(lyrics?.logs?.length) && (
-            <details className="lyrics-search-log" open={!hasLines}>
-              <summary>Лог поиска текста</summary>
-              <ol>
-                {lyrics?.logs?.map((entry, index) => <li key={`${index}-${entry}`}>{entry}</li>)}
-              </ol>
-            </details>
-          )}
         </div>
 
         {canCollapse && !focusMode && (
@@ -475,8 +481,8 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
                   </div>
                 )}
                 <div className="lyrics-focus-transport">
-                <button className="lyrics-focus-skip" type="button" onClick={() => seekRef.current(Math.max(0, playbackPositionMs - 10000))} aria-label="Назад на 10 секунд" title="Назад на 10 секунд">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5v5h5M20 19v-5h-5"/><path d="M5.5 9a7.5 7.5 0 0 1 12-2L20 10M18.5 15a7.5 7.5 0 0 1-12 2L4 14"/></svg>
+                <button className="lyrics-focus-skip" type="button" onClick={onPreviousTrack} aria-label="Предыдущий трек" title="Предыдущий трек" disabled={!canPreviousTrack}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 20 9 12l10-8v16Z"/><path d="M5 19V5"/></svg>
                 </button>
                 <button
                   className="lyrics-focus-play"
@@ -489,8 +495,8 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
                     ? <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v14M15 5v14" /></svg>
                     : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" /></svg>}
                 </button>
-                <button className="lyrics-focus-skip" type="button" onClick={() => seekRef.current(Math.min(track.durationMs || Infinity, playbackPositionMs + 10000))} aria-label="Вперёд на 10 секунд" title="Вперёд на 10 секунд">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 5v5h-5M4 19v-5h5"/><path d="M18.5 9a7.5 7.5 0 0 0-12-2L4 10M5.5 15a7.5 7.5 0 0 0 12 2L20 14"/></svg>
+                <button className="lyrics-focus-skip" type="button" onClick={onNextTrack} aria-label="Следующий трек" title="Следующий трек" disabled={!canNextTrack}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 4 10 8-10 8V4Z"/><path d="M19 5v14"/></svg>
                 </button>
                 <button
                   className={`lyrics-focus-repeat${repeatOne ? ' is-on' : ''}`}

@@ -368,11 +368,12 @@ export function App() {
 
   function playRandomLikedTrack() {
     const liked = tracks.filter((item) => likedTracks[item.id] !== false);
-    if (!liked.length) return;
+    if (!liked.length) return null;
     const candidates = liked.filter((item) => item.id !== currentTrack?.id);
     const pool = candidates.length ? candidates : liked;
     const selected = pool[Math.floor(Math.random() * pool.length)];
     loadTrackAt(liked.findIndex((item) => item.id === selected.id), liked);
+    return selected;
   }
 
   function addCurrentTrackToQueue() {
@@ -416,6 +417,44 @@ export function App() {
       return;
     }
     if (currentTrackIndex + 1 < queueTracks.length) void loadTrackAt(currentTrackIndex + 1);
+  }
+
+  function navigateLyricsTrack(direction: -1 | 1) {
+    if (direction === 1 && manualQueueEnabled) {
+      const nextTrack = manualQueue[1];
+      if (!nextTrack) return;
+      advanceManualQueue();
+      void openTrackDetails(nextTrack, manualQueue);
+      return;
+    }
+    const nextIndex = currentTrackIndex + direction;
+    const nextTrack = queueTracks[nextIndex];
+    if (!nextTrack) return;
+    void loadTrackAt(nextIndex);
+    void openTrackDetails(nextTrack, queueTracks);
+  }
+
+  function handleTrackEnded() {
+    if (manualQueueEnabled) {
+      const nextTrack = manualQueue[1];
+      advanceManualQueue();
+      if (nextTrack && lyricsPanelActive) void openTrackDetails(nextTrack, manualQueue);
+      return;
+    }
+    if (shuffleLiked) {
+      const nextTrack = playRandomLikedTrack();
+      if (nextTrack && lyricsPanelActive) void openTrackDetails(nextTrack, tracks);
+      else if (!nextTrack) setShouldPlay(false);
+      return;
+    }
+    const nextIndex = currentTrackIndex + 1;
+    const nextTrack = queueTracks[nextIndex];
+    if (!nextTrack) {
+      setShouldPlay(false);
+      return;
+    }
+    void loadTrackAt(nextIndex);
+    if (lyricsPanelActive) void openTrackDetails(nextTrack, queueTracks);
   }
 
   function selectTrack(track: Track) {
@@ -1326,6 +1365,12 @@ export function App() {
         isCurrentTrack={currentTrack !== null && detailsTrack !== null && currentTrack.id === detailsTrack.id}
         isPlaying={shouldPlay}
         onTogglePlayback={togglePlayback}
+        onPreviousTrack={() => navigateLyricsTrack(-1)}
+        onNextTrack={() => navigateLyricsTrack(1)}
+        canPreviousTrack={currentTrackIndex > 0 && !manualQueueEnabled}
+        canNextTrack={manualQueueEnabled
+          ? manualQueue.length > 1
+          : currentTrackIndex >= 0 && currentTrackIndex + 1 < queueTracks.length}
         onSeek={(positionMs) => {
           if (!detailsTrack) return;
           if (currentTrack?.id !== detailsTrack.id) playDetailsTrack();
@@ -1378,10 +1423,7 @@ export function App() {
         onNext={playNextTrack}
         hasNext={(manualQueueEnabled && manualQueue.length > 1) || (!manualQueueEnabled && currentTrackIndex >= 0 && currentTrackIndex + 1 < queueTracks.length)}
         onEnded={() => {
-          if (manualQueueEnabled) advanceManualQueue();
-          else if (shuffleLiked) playRandomLikedTrack();
-          else if (currentTrackIndex + 1 < queueTracks.length) void loadTrackAt(currentTrackIndex + 1);
-          else setShouldPlay(false);
+          handleTrackEnded();
         }}
         onReady={() => setPlaybackLoading(false)}
         onProgress={setPlaybackPositionMs}
