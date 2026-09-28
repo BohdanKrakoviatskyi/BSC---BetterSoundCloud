@@ -460,6 +460,35 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
   color: #ffb3a3;
 }
 
+.lyrics-search-log {
+  margin-top: 18px;
+  padding: 12px 13px;
+  border: 1px solid #ffffff12;
+  border-radius: 12px;
+  background: #ffffff05;
+  color: #a4a4ad;
+  font-size: 11px;
+}
+
+.lyrics-search-log summary {
+  color: #d2d2d8;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.lyrics-search-log ol {
+  display: grid;
+  gap: 7px;
+  margin: 10px 0 0;
+  padding-left: 18px;
+}
+
+.lyrics-search-log li {
+  padding-left: 2px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .lyrics-collapse-toggle {
   position: absolute;
   right: 16px;

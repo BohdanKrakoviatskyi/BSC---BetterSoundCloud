@@ -20,7 +20,7 @@ export type AuthStatus = { authorized: boolean; profile?: SoundCloudProfile };
 export type TrackLikeResult = { liked: boolean; captchaUrl?: string };
 export type TrackStreamOption = { url: string; preview: boolean; hls: boolean; quality: string };
 export type TrackStream = TrackStreamOption & { alternatives?: TrackStreamOption[] };
-export type TrackLyricsDTO = { trackId: number; lines: Array<{ id: string; text: string; startMs: number }>; sourceUrl?: string; isSynced?: boolean };
+export type TrackLyricsDTO = { trackId: number; lines: Array<{ id: string; text: string; startMs: number }>; sourceUrl?: string; isSynced?: boolean; logs?: string[] };
 export type SoundCloudTrack = {
   id: number;
   trackUrn: string;

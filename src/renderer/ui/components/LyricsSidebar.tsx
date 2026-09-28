@@ -371,7 +371,7 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
         >
           {loading && <div className="lyrics-state lyrics-state-loading"><span className="player-spinner" />Загружаю текст…</div>}
           {!loading && error && <div className="lyrics-state lyrics-state-error">{error}</div>}
-          {!loading && !error && !hasLines && <div className="lyrics-state">Текст для этого трека не найден на Genius.</div>}
+          {!loading && !error && !hasLines && <div className="lyrics-state">Текст для этого трека не найден.</div>}
           {!loading && !error && hasLines && (
             <div className="lyrics-lines">
               {lines.map((line, index) => (
@@ -386,6 +386,14 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
                 </p>
               ))}
             </div>
+          )}
+          {!loading && !error && Boolean(lyrics?.logs?.length) && (
+            <details className="lyrics-search-log" open={!hasLines}>
+              <summary>Лог поиска текста</summary>
+              <ol>
+                {lyrics?.logs?.map((entry, index) => <li key={`${index}-${entry}`}>{entry}</li>)}
+              </ol>
+            </details>
           )}
         </div>
 

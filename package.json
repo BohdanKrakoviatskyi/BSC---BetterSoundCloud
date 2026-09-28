@@ -8,6 +8,7 @@
     "backend": "node scripts/backend-console.mjs",
     "test:go": "cd backend && go test ./...",
     "test:go:live": "node scripts/test-backend-live.mjs",
+    "test:lyrics": "node scripts/lyrics-coverage.mjs",
     "build:go": "node scripts/build-go.mjs",
     "build:frontend": "tsc --noEmit && vite build",
     "vite": "vite",
@@ -15,7 +16,8 @@
     "build": "npm run build:frontend",
     "package": "npm run build:go && tauri build",
     "package:mac": "npm run build:go && tauri build --bundles app,dmg",
-    "package:win": "npm run build:go && tauri build --bundles nsis,msi"
+    "package:win": "npm run build:go && tauri build --bundles nsis,msi",
+    "release": "node scripts/trigger-release.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.8.0",
