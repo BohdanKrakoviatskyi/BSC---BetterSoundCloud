@@ -1,0 +1,22 @@
+/*
+ * Base styles for the Ribbon Glow background.
+ *
+ * Deliberately no `min-width` / `min-height`: the canvas is sized from the element it fills, and a
+ * floor here would overflow a window narrower than it. The fullscreen lyrics view is the only
+ * consumer, and it places this at `.lyrics-focus-glow`.
+ */
+
+.ribbon-glow {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ribbon-glow-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}

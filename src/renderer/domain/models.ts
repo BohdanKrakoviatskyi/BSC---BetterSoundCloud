@@ -53,6 +53,7 @@ export type TrackLyrics = {
   lines: LyricsLine[];
   sourceUrl?: string;
   isSynced?: boolean;
+  logs?: string[];
   /**
    * Marks lyrics that are not the real words of the track. The demo provider sets it, and the UI
    * labels the panel so placeholder text is never mistaken for the actual song.
@@ -73,6 +74,7 @@ export type ArtistProfile = {
   followersCount?: number;
   followingsCount?: number;
   trackCount?: number;
+  likesCount?: number;
   verified?: boolean;
 };
 

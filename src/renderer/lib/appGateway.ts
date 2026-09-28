@@ -52,6 +52,7 @@ function mapArtistProfile(source: SoundCloudUserProfile): ArtistProfile {
     followersCount: source.followersCount,
     followingsCount: source.followingsCount,
     trackCount: source.trackCount,
+    likesCount: source.likesCount,
     verified: source.verified,
   };
 }
@@ -154,7 +155,10 @@ export const appGateway = {
   mixedSelections: async () => (await window.desktop.mixedSelections()).map(mapCollection),
   artistProfile: async (userId: number) => mapArtistProfile(await window.desktop.userProfile(userId)),
   artistTracks: async (userId: number) => (await window.desktop.userTracks(userId)).map(mapTrack),
-  artistLikes: async (userId: number) => (await window.desktop.userLikes(userId)).map(mapTrack),
+  artistLikes: async (userId: number, next?: string) => {
+    const page = await window.desktop.userLikes(userId, next);
+    return { tracks: page.tracks.map(mapTrack), next: page.nextHref || '' };
+  },
   artistFollowers: async (userId: number, next?: string) => mapSocialPage(await window.desktop.userFollowers(userId, next)),
   artistFollowings: async (userId: number, next?: string) => mapSocialPage(await window.desktop.userFollowings(userId, next)),
   artistPlaylists: async (userId: number): Promise<Playlist[]> => (await window.desktop.userPlaylists(userId)).map(mapPlaylist),

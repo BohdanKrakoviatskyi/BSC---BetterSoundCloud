@@ -21,7 +21,7 @@ export type AuthStatus = { authorized: boolean; profile?: SoundCloudProfile };
 export type TrackLikeResult = { liked: boolean; captchaUrl?: string };
 export type TrackStreamOption = { url: string; preview: boolean; hls: boolean; quality: string };
 export type TrackStream = TrackStreamOption & { alternatives?: TrackStreamOption[] };
-export type TrackLyricsDTO = { trackId: number; lines: Array<{ id: string; text: string; startMs: number }>; sourceUrl?: string; isSynced?: boolean };
+export type TrackLyricsDTO = { trackId: number; lines: Array<{ id: string; text: string; startMs: number }>; sourceUrl?: string; isSynced?: boolean; logs?: string[] };
 export type SoundCloudTrack = {
   id: number;
   trackUrn: string;
@@ -33,6 +33,7 @@ export type SoundCloudTrack = {
   likesCount?: number;
   user: { username: string };
 };
+export type SoundCloudTrackPage = { tracks: SoundCloudTrack[]; nextHref?: string };
 export type SoundCloudTrackDetails = SoundCloudTrack & {
   description?: string;
   genre?: string;
@@ -62,6 +63,7 @@ export type SoundCloudUserProfile = {
   followersCount?: number;
   followingsCount?: number;
   trackCount?: number;
+  likesCount?: number;
   verified?: boolean;
 };
 export type SoundCloudSocialUser = {
@@ -228,8 +230,8 @@ class LocalBackend {
     return this.request<SoundCloudTrack[]>('user.tracks', { userId }, 120_000);
   }
 
-  async userLikes(userId: number): Promise<SoundCloudTrack[]> {
-    return this.request<SoundCloudTrack[]>('user.likes', { userId }, 30_000);
+  async userLikes(userId: number, next?: string): Promise<SoundCloudTrackPage> {
+    return this.request<SoundCloudTrackPage>('user.likes', { userId, next }, 30_000);
   }
 
   async userFollowers(userId: number, next?: string): Promise<SoundCloudSocialPage> {
@@ -363,7 +365,7 @@ export const desktop = {
   mixedSelections: () => backend.mixedSelections(),
   userProfile: (userId: number) => backend.userProfile(userId),
   userTracks: (userId: number) => backend.userTracks(userId),
-  userLikes: (userId: number) => backend.userLikes(userId),
+  userLikes: (userId: number, next?: string) => backend.userLikes(userId, next),
   userFollowers: (userId: number, next?: string) => backend.userFollowers(userId, next),
   userFollowings: (userId: number, next?: string) => backend.userFollowings(userId, next),
   userPlaylists: (userId: number) => backend.userPlaylists(userId),

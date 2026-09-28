@@ -460,6 +460,63 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
   color: #ffb3a3;
 }
 
+.lyrics-skeleton {
+  display: grid;
+  gap: 13px;
+  padding: 16px 2px;
+}
+
+.lyrics-skeleton > span {
+  display: block;
+  width: 94%;
+  height: 13px;
+  border-radius: 999px;
+  background: linear-gradient(100deg, #ffffff09 20%, #ffffff1c 38%, #ffffff09 56%);
+  background-size: 220% 100%;
+  animation: lyrics-skeleton-shimmer 1.35s ease-in-out infinite;
+}
+
+.lyrics-skeleton > span.is-short { width: 58%; }
+.lyrics-skeleton > span.is-medium { width: 76%; }
+.lyrics-skeleton > .lyrics-skeleton-caption { width: 36%; height: 9px; margin-bottom: 7px; opacity: .7; }
+
+@keyframes lyrics-skeleton-shimmer {
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lyrics-skeleton > span { animation: none; }
+}
+
+.lyrics-search-log {
+  margin-top: 18px;
+  padding: 12px 13px;
+  border: 1px solid #ffffff12;
+  border-radius: 12px;
+  background: #ffffff05;
+  color: #a4a4ad;
+  font-size: 11px;
+}
+
+.lyrics-search-log summary {
+  color: #d2d2d8;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.lyrics-search-log ol {
+  display: grid;
+  gap: 7px;
+  margin: 10px 0 0;
+  padding-left: 18px;
+}
+
+.lyrics-search-log li {
+  padding-left: 2px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .lyrics-collapse-toggle {
   position: absolute;
   right: 16px;
@@ -494,7 +551,7 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
   padding: 0;
   border: 0;
   border-radius: 0;
-  background: #080a0e;
+  background: #08090c;
   opacity: 1;
 }
 
@@ -510,53 +567,65 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
 }
 
 .lyrics-focus-layer {
+  --lyrics-column: min(760px, 62vw);
   position: absolute;
   inset: 0;
-  --lyrics-column: min(520px, 34vw);
   display: flex;
   min-height: 0;
   flex-direction: column;
   overflow: hidden;
   isolation: isolate;
-  background:
-    radial-gradient(ellipse at 50% 110%, #171a20 0%, #0c0e12 48%, #080a0e 78%),
-    #080a0e;
+  background: linear-gradient(110deg, #08090ce8, #08090c9c 46%, #08090cba), #08090c;
 }
 
-.app-shell.has-custom-background .lyrics-sidebar.is-focus .lyrics-focus-layer {
-  background: radial-gradient(ellipse at 50% 110%, #171a20d9 0%, #0c0e12e8 48%, #080a0ef2 78%);
-  backdrop-filter: none;
+.lyrics-focus-backdrop {
+  position: absolute;
+  z-index: -2;
+  inset: -38px;
+  background-position: center;
+  background-size: cover;
+  filter: blur(10px) saturate(.76) brightness(.48);
+  opacity: 1;
+  transform: scale(1.1);
+  pointer-events: none;
 }
 
-.lyrics-dotted-surface {
+/*
+ * Shown in place of the artwork backdrop when a track has no cover. Sits at the same z-index as
+ * the photo version so the layer's scrim still dims it and the lyrics stay readable; the
+ * photo filter is deliberately absent, since the field is already soft and `brightness(.48)`
+ * would crush the palette to black.
+ */
+.lyrics-focus-glow {
+  z-index: -2;
+  opacity: .8;
+}
+
+.lyrics-focus-layer::after {
   position: absolute;
   z-index: -1;
   inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
+  content: '';
+  background:
+    linear-gradient(90deg, #08090c77 0%, #08090c20 50%, #08090c66 100%),
+    linear-gradient(0deg, #08090cbb 0%, transparent 23%, #08090c33 100%);
   pointer-events: none;
-  mask-image: linear-gradient(to bottom, transparent 43%, #000 64%, #000 100%);
-}
-
-.lyrics-dotted-surface canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
 }
 
 .lyrics-focus-head {
   position: fixed;
-  top: 16px;
-  right: 24px;
+  top: 12px;
+  left: 16px;
   z-index: 20;
   display: flex;
   min-width: 0;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
+  align-items: center;
+  padding: 0;
   margin: 0;
+  pointer-events: none;
 }
+
+.lyrics-focus-head .lyrics-focus-exit { pointer-events: auto; }
 
 /* Give fullscreen lyrics the whole window and ease the global header out and back in. */
 .app-shell > .topbar {
@@ -575,24 +644,72 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
 .lyrics-focus-exit {
   display: inline-flex;
   width: auto;
-  height: 38px;
+  height: 34px;
   flex: 0 0 auto;
   align-items: center;
-  gap: 8px;
-  padding: 0 13px;
-  border: 1px solid #ffffff24;
-  border-radius: 999px;
-  background: #191a1de8;
+  gap: 7px;
+  padding: 0 8px 0 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
   color: #f2f2f4;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  backdrop-filter: blur(12px);
+  backdrop-filter: none;
 }
 
 .lyrics-focus-exit:hover {
-  border-color: #ffffff48;
-  background: #292a2eeF;
+  background: #ffffff12;
+}
+
+.lyrics-focus-exit svg { width: 20px; height: 20px; }
+
+.lyrics-focus-artwork-card {
+  position: absolute;
+  top: 50%;
+  left: clamp(30px, 4vw, 64px);
+  z-index: 2;
+  width: clamp(190px, 21vw, 270px);
+  transform: translateY(-50%);
+  color: #fff;
+  text-shadow: 0 2px 18px #000b;
+}
+
+.lyrics-focus-artwork-card > img,
+.lyrics-focus-artwork-card > .lyrics-focus-track-art-fallback {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 13px;
+  object-fit: cover;
+  box-shadow: 0 22px 60px #0008, 0 1px 0 #ffffff1a inset;
+}
+
+.lyrics-focus-artwork-card > .lyrics-focus-track-art-fallback {
+  display: grid;
+  place-items: center;
+  background: #292a2e;
+  font-size: 64px;
+}
+
+.lyrics-focus-artwork-card h2 {
+  display: -webkit-box;
+  margin: 17px 0 0;
+  overflow: hidden;
+  font-size: clamp(16px, 1.45vw, 20px);
+  font-weight: 800;
+  letter-spacing: -.35px;
+  line-height: 1.28;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.lyrics-focus-artwork-card p {
+  margin: 7px 0 0;
+  color: #ffffffb3;
+  font-size: 13px;
 }
 
 .lyrics-focus-copy {
@@ -625,15 +742,22 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
   justify-content: flex-start;
   min-height: 0;
   flex: 1;
-  width: 100%;
+  width: min(760px, 58vw);
+  max-width: calc(100vw - 48px);
+  position: fixed;
+  top: 0;
+  bottom: 112px;
+  left: 50vw;
+  margin: 0;
+  transform: translateX(-50%);
   /* Centred column, no vertical padding and no fade: the first line has to sit at the very
      top and the last one has to be readable. */
-  align-items: center;
-  padding: clamp(24px, 5.5vh, 72px) 0 0;
+  align-items: stretch;
+  padding: 8px 0 32px;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
-  mask-image: none;
+  mask-image: linear-gradient(to bottom, transparent 0, #000 10%, #000 87%, transparent 100%);
 }
 
 .lyrics-focus-body::-webkit-scrollbar { display: none; }
@@ -649,10 +773,11 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
   max-height: 14em;
   overflow: hidden;
   padding: 5px 0;
-  color: #aaa9aa;
-  font-size: clamp(21px, 2.25vw, 30px);
-  letter-spacing: -.7px;
-  line-height: 1.26;
+  color: #ffffffad;
+  font-size: clamp(17px, 1.65vw, 22px);
+  font-weight: 550;
+  letter-spacing: -.28px;
+  line-height: 1.42;
   opacity: calc(1 - var(--lyrics-distance, 0) * .13);
   text-decoration: none;
   transform-origin: center;
@@ -672,20 +797,21 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
   max-height: 14em;
   padding: 5px 0;
   opacity: calc(1 - var(--lyrics-distance, 0) * .13);
-  filter: blur(calc(var(--lyrics-distance, 0) * .28px));
+  filter: blur(calc(var(--lyrics-distance, 0) * .16px));
   transform: none;
   transition: color .48s ease, opacity .5s ease, filter .5s ease;
 }
 
 /* Not reached yet: parked below the line so becoming active reads as a rise. */
 .lyrics-line-lg.is-upcoming {
-  opacity: .3;
-  transform: translateY(34px);
-  filter: blur(1.4px);
+  opacity: .57;
+  transform: translateY(12px);
+  filter: blur(.35px);
 }
 
 .lyrics-line-lg.is-active {
-  color: #f1f0f0;
+  color: #fff;
+  font-weight: 800;
   opacity: 1;
   filter: blur(0);
   transform: translateY(0) scale(1);
@@ -697,16 +823,32 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
     filter .58s ease;
 }
 
-/* Half the centred column, plus the breathing room the reader asked for. */
-.lyrics-focus-transport {
-  position: absolute;
-  top: 50%;
-  left: calc(50% + var(--lyrics-column) / 2 + 56px);
+/* Playback controls sit in one compact dock; the seek rail floats directly above it. */
+.lyrics-focus-controls {
+  position: fixed;
+  bottom: 12px;
+  left: 50%;
   z-index: 3;
+  display: flex;
+  width: min(520px, calc(100vw - 32px));
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  transform: translateX(-50%);
+}
+
+.lyrics-focus-transport {
   display: inline-flex;
+  min-height: 66px;
   align-items: center;
-  gap: 14px;
-  transform: translateY(-50%);
+  justify-content: center;
+  gap: 16px;
+  padding: 0 18px;
+  border: 1px solid #ffffff3a;
+  border-radius: 999px;
+  background: #08090c70;
+  box-shadow: 0 14px 48px #0008, inset 0 1px #ffffff12;
+  backdrop-filter: blur(20px);
 }
 
 .lyrics-focus-play,
@@ -726,11 +868,43 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
   transition: transform .18s ease, background .18s ease, border-color .18s ease, color .18s ease;
 }
 
+.lyrics-focus-repeat {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  /* Off: dimmed, so a disabled control stops looking armed next to the play button. It used to
+     inherit the transport near-white from the shared rule above. */
+  color: #56565f;
+}
+
+.lyrics-focus-skip {
+  display: grid;
+  width: 34px;
+  height: 42px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #f4f4f5;
+  cursor: pointer;
+  transition: color .18s ease, transform .18s ease;
+}
+
+.lyrics-focus-skip:hover { color: #fff; transform: scale(1.08); }
+.lyrics-focus-skip svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.lyrics-focus-skip svg path:first-child { fill: currentColor; stroke: none; }
+.lyrics-focus-skip:disabled { opacity: .34; cursor: default; }
+.lyrics-focus-skip:disabled:hover { color: #f4f4f5; transform: none; }
+
 .lyrics-focus-play,
 .lyrics-focus-repeat {
-  width: 64px;
-  height: 64px;
+  width: 42px;
+  height: 42px;
 }
+
+.lyrics-focus-play { background: #fff; color: #131416; border-color: #fff; }
+.lyrics-focus-play:hover { background: #fffffff0; color: #131416; }
 
 .lyrics-focus-repeat svg {
   width: 24px;
@@ -742,28 +916,25 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
   stroke-linejoin: round;
 }
 
-/* The "1" badge, placed on the arrow like it is in the player bar. */
-.lyrics-focus-repeat span {
-  position: absolute;
-  right: 15px;
-  bottom: 12px;
-  font-size: 10px;
-  font-weight: 800;
-  line-height: 1;
-}
-
+/* On: brighter, nothing else. */
 .lyrics-focus-repeat.is-on {
-  background: #f2f2f3;
-  color: #171719;
-  border-color: #ffffff66;
+  background: transparent;
+  color: #fff;
 }
 
-.lyrics-focus-play:hover,
-.lyrics-focus-repeat:hover {
+.lyrics-focus-play:hover {
   transform: scale(1.06);
   background: #f2f2f32e;
   border-color: #ffffff45;
 }
+
+.lyrics-focus-repeat:hover {
+  transform: scale(1.08);
+  background: transparent;
+  color: #8a8a93;
+}
+
+.lyrics-focus-repeat.is-on:hover { color: #fff; }
 
 .lyrics-focus-play:active,
 .lyrics-focus-repeat:active {
@@ -786,77 +957,15 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
   stroke: none;
 }
 
-/* The left-hand controls: scrubbing, then the volume that unfolds on hover. */
-.lyrics-focus-left {
-  position: absolute;
-  top: 50%;
-  left: 56px;
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  gap: 30px;
-  width: max-content;
-  /* Half the column plus a margin, so the open volume control cannot reach the text. */
-  max-width: calc(100vw - 112px);
-  transform: translateY(-50%);
-}
-
-.lyrics-focus-track-meta {
-  display: flex;
-  width: max-content;
-  max-width: min(38vw, 460px);
-  align-items: center;
-  gap: 11px;
-  color: #f2f1f3;
-  font-size: 14px;
-  font-weight: 700;
-  text-shadow: 0 2px 12px #000a;
-}
-
-.lyrics-focus-seek-group {
-  display: flex;
-  width: max-content;
-  min-width: 200px;
-  max-width: 100%;
-  flex: 0 1 auto;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 20px;
-}
-
-.lyrics-focus-track-meta img,
-.lyrics-focus-track-art-fallback {
-  width: 42px;
-  height: 42px;
-  flex: 0 0 42px;
-  border-radius: 6px;
-  object-fit: cover;
-  box-shadow: 0 4px 14px #0008;
-}
-
-.lyrics-focus-track-art-fallback {
-  display: grid;
-  place-items: center;
-  background: #292a2e;
-  color: #aaa;
-  font-size: 20px;
-}
-
-.lyrics-focus-track-meta > span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .lyrics-focus-seek {
-  position: relative;
   display: flex;
-  width: 100%;
-  max-width: 100%;
-  min-width: 150px;
-  min-width: 0;
-  flex: 0 1 auto;
+  min-height: 24px;
   align-items: center;
+  gap: 10px;
+  padding: 0 13px;
+  color: #ffffffb5;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* The rail and the range input share this box, so the thumb rides the painted
@@ -870,13 +979,14 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
   display: flex;
   align-items: center;
   width: 100%;
-  height: 26px;
+  height: 22px;
+  flex: 1;
 }
 
 /* The rail sits under a transparent range input that only handles the pointer. */
 .lyrics-focus-track {
   position: relative;
-  height: 6px;
+  height: 3px;
   flex: 1 1 auto;
   min-width: 0;
   margin: 0 calc(var(--thumb) / 2);
@@ -887,16 +997,14 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
 }
 
 .lyrics-focus-seek:hover .lyrics-focus-track,
-.lyrics-focus-volume:hover .lyrics-focus-track,
 .lyrics-focus-seek.is-scrubbing .lyrics-focus-track {
-  height: 8px;
+  height: 4px;
   box-shadow: inset 0 0 0 1px #ffffff1f, 0 0 18px -6px var(--accent);
 }
 
 .lyrics-focus-seek:hover .lyrics-focus-rail,
-.lyrics-focus-volume:hover .lyrics-focus-rail,
 .lyrics-focus-seek.is-scrubbing .lyrics-focus-rail {
-  --thumb: 20px;
+  --thumb: 15px;
 }
 
 .lyrics-focus-track-fill {
@@ -905,11 +1013,8 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
   height: 100%;
   overflow: hidden;
   border-radius: 999px;
-  background: linear-gradient(90deg,
-    color-mix(in srgb, var(--accent) 78%, #000) 0%,
-    var(--accent) 62%,
-    color-mix(in srgb, var(--accent) 42%, #fff) 100%);
-  box-shadow: 0 0 14px -3px var(--accent);
+  background: linear-gradient(90deg, #e95b19 0%, #ff741f 62%, #ff9a55 100%);
+  box-shadow: 0 0 14px -3px #ff741f;
   /* Deliberately no width transition. The thumb moves natively on the same input event,
      so easing the fill made the bar visibly trail the handle while dragging. */
 }
@@ -953,8 +1058,7 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
 .lyrics-focus-rail input[type="range"]::-webkit-slider-thumb {
   width: var(--thumb);
   height: var(--thumb);
-  /* Keeps the thumb centred on the 26px runnable track at any size. */
-  margin-top: calc((26px - var(--thumb)) / 2);
+  margin-top: calc((22px - var(--thumb)) / 2);
   appearance: none;
   border: 0;
   border-radius: 50%;
@@ -964,7 +1068,6 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
 }
 
 .lyrics-focus-seek:hover .lyrics-focus-rail input[type="range"]::-webkit-slider-thumb,
-.lyrics-focus-volume:hover .lyrics-focus-rail input[type="range"]::-webkit-slider-thumb,
 .lyrics-focus-seek.is-scrubbing .lyrics-focus-rail input[type="range"]::-webkit-slider-thumb {
   box-shadow: 0 0 0 7px color-mix(in srgb, var(--accent) 26%, transparent), 0 3px 14px #000c;
 }
@@ -973,49 +1076,43 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
   outline: none;
 }
 
-.lyrics-focus-seek:focus-within .lyrics-focus-track,
-.lyrics-focus-volume:focus-within .lyrics-focus-track {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 70%, transparent), 0 0 18px -6px var(--accent);
+.lyrics-focus-seek:focus-within .lyrics-focus-track {
+  box-shadow: inset 0 0 0 1px #ff741f99, 0 0 18px -6px #ff741f;
 }
 
-/* Collapsed it is just the speaker; hovering or tabbing into it slides the rail out. */
 .lyrics-focus-volume {
-  display: flex;
-  /* Matches the rail so the box being centred is the line both sides share. The taller
-     button hangs out of it, which is fine: nothing clips here. */
-  height: 26px;
+  display: inline-flex;
   flex: 0 0 auto;
-  align-items: flex-start;
-  /* Pin the control to the top of the cluster so its rail lines up with the scrubber's.
-     Centring it here would aim at the middle of the seek block, clock label included. */
-  align-self: flex-end;
+  align-items: center;
+  gap: 7px;
+  margin-left: 8px;
 }
 
 .lyrics-focus-volume-btn {
   position: relative;
   z-index: 1;
   display: inline-flex;
-  width: 34px;
-  height: 34px;
-  /* Centres the taller button on the 26px rail. */
-  margin-top: -4px;
-  flex: 0 0 34px;
+  width: 42px;
+  height: 42px;
+  margin-top: 0;
+  flex: 0 0 42px;
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1px solid #ffffff2e;
+  border: 0;
   border-radius: 50%;
-  background: #f2f2f31a;
+  background: transparent;
   color: #f4f4f5;
   cursor: pointer;
-  backdrop-filter: blur(6px);
-  box-shadow: 0 10px 28px #0008;
-  transition: background .18s ease, color .18s ease, border-color .18s ease;
+  backdrop-filter: none;
+  box-shadow: none;
+  transition: color .18s ease, transform .18s ease;
 }
 
 .lyrics-focus-volume-btn:hover {
-  background: #f2f2f32e;
-  border-color: #ffffff45;
+  background: transparent;
+  color: #fff;
+  transform: scale(1.08);
 }
 
 .lyrics-focus-volume-btn.is-muted {
@@ -1023,36 +1120,98 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
 }
 
 .lyrics-focus-volume-btn svg {
-  width: 20px;
-  height: 20px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.9;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  width: 18px;
+  height: 18px;
 }
 
-.lyrics-focus-volume-slider {
+.lyrics-focus-volume-range {
   position: relative;
-  display: flex;
-  width: 0;
-  flex-direction: column;
-  /* No overflow clip here: it would cut the glow off the thumb. The collapsed state is
-     carried by the opacity and the zero width instead. */
-  opacity: 0;
-  transition: width .26s cubic-bezier(.2, .8, .2, 1), margin .26s cubic-bezier(.2, .8, .2, 1), opacity .2s ease;
+  width: clamp(72px, 7vw, 96px);
+  height: 22px;
+  flex: 0 1 auto;
+  --volume-fill: 0%;
 }
 
-.lyrics-focus-volume:hover .lyrics-focus-volume-slider,
-.lyrics-focus-volume:focus-within .lyrics-focus-volume-slider {
-  width: clamp(72px, 7vw, 120px);
-  margin-left: 12px;
-  opacity: 1;
+.lyrics-focus-volume-range::before,
+.lyrics-focus-volume-range::after {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  height: 3px;
+  border-radius: 999px;
+  content: '';
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 
-.lyrics-focus-volume-slider .lyrics-focus-clock {
-  text-align: center;
+.lyrics-focus-volume-range::before {
+  right: 0;
+  background: #ffffff35;
 }
+
+.lyrics-focus-volume-range::after {
+  width: var(--volume-fill);
+  background: linear-gradient(90deg, #e95b19, #ff7a24);
+  box-shadow: 0 0 12px -4px #ff741f;
+}
+
+.lyrics-focus-volume-range input[type="range"] {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.lyrics-focus-volume-range input[type="range"]::-webkit-slider-runnable-track {
+  height: 22px;
+  background: transparent;
+}
+
+.lyrics-focus-volume-range input[type="range"]::-webkit-slider-thumb {
+  width: 11px;
+  height: 11px;
+  margin-top: 5.5px;
+  appearance: none;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #ff741f;
+  box-shadow: 0 1px 7px #000b, 0 0 0 3px #ff741f33;
+  transition: transform .16s ease, box-shadow .16s ease;
+}
+
+.lyrics-focus-volume-range input[type="range"]:hover::-webkit-slider-thumb,
+.lyrics-focus-volume-range input[type="range"]:focus-visible::-webkit-slider-thumb {
+  transform: scale(1.18);
+  box-shadow: 0 1px 8px #000c, 0 0 0 5px #ff741f42;
+}
+
+.lyrics-focus-volume-range input[type="range"]::-moz-range-track {
+  height: 3px;
+  border-radius: 999px;
+  background: #ffffff35;
+}
+
+.lyrics-focus-volume-range input[type="range"]::-moz-range-progress {
+  height: 3px;
+  border-radius: 999px;
+  background: #ff741f;
+}
+
+.lyrics-focus-volume-range input[type="range"]::-moz-range-thumb {
+  width: 8px;
+  height: 8px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #ff741f;
+  box-shadow: 0 1px 7px #000b;
+}
+
+.lyrics-focus-volume-value { min-width: 30px; text-align: right; }
 
 /* Taken out of the flow so it cannot influence the vertical centring of the rails. */
 .lyrics-focus-clock {
@@ -1071,7 +1230,7 @@ body.is-resizing-sidebar, body.is-resizing-sidebar * { cursor: ew-resize !import
 
 .lyrics-sync-button {
   position: absolute;
-  bottom: 28px;
+  bottom: 112px;
   left: 50%;
   z-index: 3;
   display: inline-flex;

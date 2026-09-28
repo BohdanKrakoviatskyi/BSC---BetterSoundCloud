@@ -439,6 +439,45 @@ func TestPlaylistTracksHydrateStubsInOriginalOrder(t *testing.T) {
 	}
 }
 
+func TestUserLikesReadsTracksAcrossPages(t *testing.T) {
+	requests := 0
+	svc := newTestService(t, "")
+	svc.auth.Token = "likes-token"
+	svc.httpClient = &http.Client{Transport: testRoundTripper(func(r *http.Request) (*http.Response, error) {
+		if r.Header.Get("Authorization") != "OAuth likes-token" {
+			return nil, errors.New("missing auth")
+		}
+		requests++
+		if requests == 1 {
+			if r.URL.Path != "/users/42/likes" {
+				t.Errorf("first page path = %q, want /users/42/likes", r.URL.Path)
+			}
+			if r.URL.Query().Get("limit") != "20" {
+				t.Errorf("limit = %q, want 20", r.URL.Query().Get("limit"))
+			}
+			return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"collection":[{"track":{"id":1,"title":"First","urn":"soundcloud:tracks:1"}}],"next_href":"https://api-v2.soundcloud.com/users/42/likes?cursor=next"}`))}, nil
+		}
+		if r.URL.Query().Get("cursor") != "next" {
+			t.Errorf("second page query = %q, want cursor=next", r.URL.RawQuery)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"collection":[{"id":2,"title":"Second","urn":"soundcloud:tracks:2"}]}`))}, nil
+	})}
+	firstPage, err := svc.RPCUserLikes(userLikesParams{UserID: 42})
+	if err != nil {
+		t.Fatalf("user.likes: %v", err)
+	}
+	if requests != 1 || len(firstPage.Tracks) != 1 || firstPage.Tracks[0].Title != "First" || firstPage.NextHref == "" {
+		t.Fatalf("first page = %#v requests=%d, want one track and next href", firstPage, requests)
+	}
+	secondPage, err := svc.RPCUserLikes(userLikesParams{UserID: 42, Next: firstPage.NextHref})
+	if err != nil {
+		t.Fatalf("user.likes next page: %v", err)
+	}
+	if requests != 2 || len(secondPage.Tracks) != 1 || secondPage.Tracks[0].Title != "Second" || secondPage.NextHref != "" {
+		t.Fatalf("second page = %#v requests=%d, want final track page", secondPage, requests)
+	}
+}
+
 func TestPlaylistsFallbackToFirstTrackArtwork(t *testing.T) {
 	playlistDetailRequests := 0
 	trackHydrationRequests := 0

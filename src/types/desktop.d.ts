@@ -1,4 +1,4 @@
-import type { AuthStatus, SoundCloudMixedSelection, SoundCloudPlaylist, SoundCloudSearchTrack, SoundCloudSocialPage, SoundCloudTrack, SoundCloudTrackDetails, SoundCloudUserProfile, TrackLikeResult, TrackLyricsDTO, TrackStream } from '../renderer/lib/desktop';
+import type { AuthStatus, SoundCloudMixedSelection, SoundCloudPlaylist, SoundCloudSearchTrack, SoundCloudSocialPage, SoundCloudTrack, SoundCloudTrackDetails, SoundCloudTrackPage, SoundCloudUserProfile, TrackLikeResult, TrackLyricsDTO, TrackStream } from '../renderer/lib/desktop';
 
 export {};
 
@@ -36,7 +36,7 @@ declare global {
       mixedSelections(): Promise<SoundCloudMixedSelection[]>;
       userProfile(userId: number): Promise<SoundCloudUserProfile>;
       userTracks(userId: number): Promise<SoundCloudTrack[]>;
-      userLikes(userId: number): Promise<SoundCloudTrack[]>;
+      userLikes(userId: number, next?: string): Promise<SoundCloudTrackPage>;
       userFollowers(userId: number, next?: string): Promise<SoundCloudSocialPage>;
       userFollowings(userId: number, next?: string): Promise<SoundCloudSocialPage>;
       userPlaylists(userId: number): Promise<SoundCloudPlaylist[]>;
