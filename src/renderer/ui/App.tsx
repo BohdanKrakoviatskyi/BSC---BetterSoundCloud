@@ -435,26 +435,16 @@ export function App() {
   }
 
   function handleTrackEnded() {
-    if (manualQueueEnabled) {
-      const nextTrack = manualQueue[1];
-      advanceManualQueue();
-      if (nextTrack && lyricsPanelActive) void openTrackDetails(nextTrack, manualQueue);
-      return;
-    }
     if (shuffleLiked) {
       const nextTrack = playRandomLikedTrack();
       if (nextTrack && lyricsPanelActive) void openTrackDetails(nextTrack, tracks);
       else if (!nextTrack) setShouldPlay(false);
       return;
     }
-    const nextIndex = currentTrackIndex + 1;
-    const nextTrack = queueTracks[nextIndex];
-    if (!nextTrack) {
-      setShouldPlay(false);
-      return;
-    }
-    void loadTrackAt(nextIndex);
-    if (lyricsPanelActive) void openTrackDetails(nextTrack, queueTracks);
+    // Ни шафла, ни репита: песня просто встаёт на паузу с начала. Следующий трек запускается
+    // вручную — кнопкой «вперёд» или кликом; автопереход на соседний трек из очереди убран.
+    setShouldPlay(false);
+    if (lyricsPanelActive) setPlaybackPositionMs(0);
   }
 
   function selectTrack(track: Track) {

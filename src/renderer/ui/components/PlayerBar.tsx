@@ -44,7 +44,8 @@ export function PlayerBar({ track, seekRequest, onSeekRequestHandled, repeatOne,
   const [widgetControls, setWidgetControls] = useState<SoundCloudWidgetControls | null>(null);
   const [playbackMode, setPlaybackMode] = useState<'widget' | 'direct'>('widget');
 
-  const [directRetryKey, setDirectRetryKey] = useState(0);
+  // Bumped to rebuild the audio engine from scratch; also retries a track that never started.
+  const [engineKey, setEngineKey] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(track ? track.durationMs / 1000 : 0);
   const [volumeValue, setVolumeValue] = useState(volume);
@@ -66,7 +67,7 @@ export function PlayerBar({ track, seekRequest, onSeekRequestHandled, repeatOne,
 
   useEffect(() => {
     setPlaybackMode('widget');
-    setDirectRetryKey(0);
+    setEngineKey(0);
     setWidgetControls(null);
     playbackObservedRef.current = false;
     endedRef.current = false;
@@ -102,19 +103,38 @@ export function PlayerBar({ track, seekRequest, onSeekRequestHandled, repeatOne,
     widgetControls?.setVolume(Math.max(0, Math.min(100, volumeValue)));
   }, [volumeValue, widgetControls]);
 
+  /* Repeat-one already proved this shape: the SoundCloud widget applies seekTo asynchronously,
+     so calling play() in the same tick races the seek and gets swallowed. */
+  function restartFromBeginning() {
+    if (!widgetControls) return;
+    endedRef.current = false;
+    setCurrentTime(0);
+    widgetControls.seekTo(0);
+    window.setTimeout(() => widgetControls.play(), 80);
+  }
+
+  /* A stream that ran to its end sits in a terminal state it never leaves: play() is answered
+     with silence and no event follows, so the player looks stuck and only picking another track
+     brings it back — loading is the one thing that does rebuild the engine. So do exactly that
+     here. The rebuild also re-fires onReady, which is what clears the loading spinner. */
+  function replayEndedTrack() {
+    endedRef.current = false;
+    playbackObservedRef.current = false;
+    setCurrentTime(0);
+    setDuration(track ? track.durationMs / 1000 : 0);
+    setWidgetControls(null);
+    setEngineKey((key) => key + 1);
+  }
+
   useEffect(() => {
     if (!widgetControls) return;
     if (!shouldPlay) {
       widgetControls.pause();
       return;
     }
-    // A track that already ran to its end sits in the stream's terminal state, where play() is
-    // silently ignored — that is what made a finished song unreplayable until another track was
-    // picked first. Rewind to the start before resuming, the same move repeat-one already makes.
     if (endedRef.current) {
-      endedRef.current = false;
-      setCurrentTime(0);
-      widgetControls.seekTo(0);
+      replayEndedTrack();
+      return;
     }
     widgetControls.play();
   }, [shouldPlay, widgetControls]);
@@ -170,23 +190,23 @@ export function PlayerBar({ track, seekRequest, onSeekRequestHandled, repeatOne,
 
   function handleTrackEnded() {
     if (!repeatOne || !widgetControls) {
-      // Remember the terminal state so the next play rewinds instead of pressing play on a
-      // finished stream, which the widget answers with silence.
+      // The stream is now in its terminal state. Remember that, so the next play rewinds and
+      // replays instead of asking a finished widget to play itself, and park the bar at 0 so the
+      // track looks ready to start again rather than stuck at the end.
       endedRef.current = true;
+      setCurrentTime(0);
       onEnded();
       return;
     }
-    endedRef.current = false;
     onPlaybackStateChange(true);
-    setCurrentTime(0);
-    widgetControls.seekTo(0);
-    window.setTimeout(() => widgetControls.play(), 80);
+    restartFromBeginning();
   }
 
   return (
     <footer className="player-bar" aria-label="Аудиоплеер">
       {track && playbackMode === 'widget' && (
         <SoundCloudWidget
+          key={engineKey}
           track={track}
           volume={volumeValue}
           onControlsReady={setWidgetControls}
@@ -205,7 +225,7 @@ export function PlayerBar({ track, seekRequest, onSeekRequestHandled, repeatOne,
       )}
       {track && playbackMode === 'direct' && (
         <DirectStreamPlayer
-          key={`${track.id}:${directRetryKey}`}
+          key={`${track.id}:${engineKey}`}
           track={track}
           volume={volumeValue}
           shouldPlay={shouldPlay}

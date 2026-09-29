@@ -503,7 +503,7 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
                   onClick={handleToggleRepeat}
                   aria-pressed={repeatOne}
                   aria-label={repeatOne ? 'Выключить повтор' : 'Повторять трек'}
-                  title={repeatOne ? 'Повтор выключен' : 'Повторять трек'}
+                  title={repeatOne ? 'Повтор песни включён' : 'Повторять трек'}
                 >
                   <FaRepeat aria-hidden="true" />
                 </button>
