@@ -359,24 +359,6 @@
   color: #89888f;
   font-size: 10px;
 }
-
-.my-profile-social { margin: 0 0 26px; padding: 18px; border: 1px solid #ffffff16; border-radius: 12px; background: #101014a8; }
-.my-profile-social .my-profile-section-heading { align-items: center; justify-content: space-between; flex-wrap: wrap; }
-.my-profile-social-tabs { display: flex; gap: 5px; }
-.my-profile-social-tabs button { padding: 7px 10px; border: 1px solid #ffffff16; border-radius: 7px; color: #aaa9b0; background: #ffffff06; font-size: 10px; }
-.my-profile-social-tabs button.is-active { border-color: color-mix(in srgb, var(--accent) 60%, transparent); color: #fff; background: color-mix(in srgb, var(--accent) 16%, transparent); }
-.my-profile-social-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
-.my-profile-social-user { display: flex; min-width: 0; align-items: center; gap: 10px; padding: 10px; border: 1px solid #ffffff12; border-radius: 9px; background: #ffffff05; text-align: left; }
-.my-profile-social-user:hover { border-color: #ffffff35; background: #ffffff0b; }
-.my-profile-social-user img, .my-profile-social-fallback { width: 42px; height: 42px; flex: 0 0 42px; border-radius: 50%; object-fit: cover; }
-.my-profile-social-fallback { display: grid; place-items: center; color: #f2f1f3; background: #25252a; font-size: 17px; }
-.my-profile-social-user > span:nth-child(2) { display: grid; min-width: 0; gap: 3px; }
-.my-profile-social-user b, .my-profile-social-user small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.my-profile-social-user b { color: #f2f1f3; font-size: 11px; }
-.my-profile-social-user small { color: #99989f; font-size: 9px; }
-.my-profile-social-user i { margin-left: auto; color: #828188; font-style: normal; }
-.my-profile-social-more { display: block; margin: 14px auto 0; }
-
 .my-profile-playlist small {
   margin-top: -4px;
 }

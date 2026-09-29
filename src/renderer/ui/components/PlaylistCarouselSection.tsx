@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Playlist } from '../../domain/models';
 import { ErrorMessage } from './ErrorMessage';
+import { FaMusic, FaPlay, FaChevronLeft, FaChevronRight } from '../lib/icons';
 
 type Props = {
   playlists: Playlist[];
@@ -31,20 +32,20 @@ export function PlaylistCarouselSection({ playlists, title = 'Мои плейл�
   return (
     <section className="shelf" aria-label={title}>
       <div className="section-heading">
-        <div><div className="eyebrow">SOUNDCLOUD</div><h2>{title} <span className="track-count">{playlists.length}</span></h2></div>
-        {hasOverflow && <div className="carousel-controls" aria-label="Прокрутка плейлистов"><button type="button" aria-label="Прокрутить влево" onClick={() => scroll(-1)}>‹</button><button type="button" aria-label="Прокрутить вправо" onClick={() => scroll(1)}>›</button></div>}
+        <div><h2>{title} <span className="track-count">{playlists.length}</span></h2></div>
+        {hasOverflow && <div className="carousel-controls" aria-label="Прокрутка плейлистов"><button type="button" aria-label="Прокрутить влево" onClick={() => scroll(-1)}><FaChevronLeft /></button><button type="button" aria-label="Прокрутить вправо" onClick={() => scroll(1)}><FaChevronRight /></button></div>}
       </div>
       {error && <ErrorMessage message={error} />}
       {loading && playlists.length === 0
         ? <p className="tracks-empty">Загружаю плейлисты…</p>
         : playlists.length === 0
           ? <p className="tracks-empty">Плейлистов пока нет.</p>
-          : <div ref={ref} className={`card-row playlist-carousel ${hasOverflow ? 'has-overflow' : ''}`}>
+          : <div ref={ref} className="card-row playlist-carousel">
               {playlists.map((playlist) => (
                 <article className="playlist-card" key={playlist.id}>
                   <button className="playlist-art" type="button" onClick={() => onOpenPlaylist(playlist)} aria-label={`Открыть плейлист ${playlist.title}`}>
-                    {playlist.artwork ? <img src={playlist.artwork} alt="" loading="lazy" /> : <span aria-hidden="true">♫</span>}
-                    <span className="playlist-art-play" aria-hidden="true">▶</span>
+                    {playlist.artwork ? <img src={playlist.artwork} alt="" loading="lazy" /> : <span aria-hidden="true"><FaMusic /></span>}
+                    <span className="playlist-art-play" aria-hidden="true"><FaPlay /></span>
                   </button>
                   <button className="playlist-title-button" type="button" title={playlist.title} onClick={() => onOpenPlaylist(playlist)}>{playlist.title}</button>
                   <small>{playlist.trackCount} треков{playlist.artist ? ` · ${playlist.artist}` : ''}</small>

@@ -4,6 +4,11 @@ import { TrackCarouselSection } from './TrackCarouselSection';
 import { ErrorMessage } from './ErrorMessage';
 import { createWaveform } from '../lib/waveform';
 import { measureElementRect, type ElementRect } from '../lib/artworkFlight';
+import {
+  FaAlignLeft, FaArrowLeft, FaArrowUpRightFromSquare, FaChevronLeft, FaChevronRight, FaCommentDots,
+  FaHeadphones, FaHeart, FaMusic, FaPause, FaPlay, FaRepeat, FaShuffle, FaVolumeHigh, FaVolumeXmark,
+} from '../lib/icons';
+import { formatCount, formatDuration } from '../lib/format';
 
 type Props = {
   track: TrackDetails | null;
@@ -41,25 +46,14 @@ type Props = {
   onToggleLyrics: (artworkRect: ElementRect | null) => void;
 };
 
-function formatDuration(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')}`;
-}
-
-
 function Stat({ icon, label, value }: { icon: 'headphones' | 'heart' | 'repost' | 'comments'; label: string; value: number }) {
   return (
     <div className="track-detail-stat">
-      <svg className="track-detail-stat-icon" viewBox="0 0 24 24" aria-hidden="true">
-        {icon === 'headphones'
-          ? <><path d="M3 14v-3a9 9 0 0 1 18 0v3" /><rect x="3" y="13" width="4" height="7" rx="2" /><rect x="17" y="13" width="4" height="7" rx="2" /></>
-          : icon === 'heart'
-            ? <path d="M20.8 8.7c0 5.1-8.8 10-8.8 10S3.2 13.8 3.2 8.7a4.7 4.7 0 0 1 8.8-2.3 4.7 4.7 0 0 1 8.8 2.3Z" />
-            : icon === 'repost'
-              ? <><path d="M17 2l4 4-4 4" /><path d="M3 11V9a3 3 0 0 1 3-3h15" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v2a3 3 0 0 1-3 3H3" /></>
-              : <path d="M21 11.5a8 8 0 0 1-8 8H5l-2 2v-6a8 8 0 1 1 18-4Z" />}
-      </svg>
-      <span className="track-detail-stat-copy"><strong>{Number(value || 0).toLocaleString('ru-RU')}</strong><small>{label}</small></span>
+      {(() => {
+        const ICON = { headphones: FaHeadphones, heart: FaHeart, repost: FaRepeat, comments: FaCommentDots }[icon];
+        return <ICON className="track-detail-stat-icon" aria-hidden="true" />;
+      })()}
+      <span className="track-detail-stat-copy"><strong>{formatCount(value)}</strong><small>{label}</small></span>
     </div>
   );
 }
@@ -216,7 +210,7 @@ function TrackCoverflow({ contextTracks, activeTrackId, playingTrackId, isPlayin
         <span className="track-coverflow-position">{index + 1} из {list.length}</span>
       </div>
       <div className={`track-coverflow-stage${interactionLocked ? ' is-interaction-locked' : ''}`}>
-        <button type="button" className="coverflow-nav prev" aria-label="Предыдущий трек раздела" onClick={() => onOpenTrack(list[(index - 1 + list.length) % list.length])}>‹</button>
+        <button type="button" className="coverflow-nav prev" aria-label="Предыдущий трек раздела" onClick={() => onOpenTrack(list[(index - 1 + list.length) % list.length])}><FaChevronLeft /></button>
         <div className="coverflow-track">
           {visible.map(({ track, offset }) => {
             const isCenter = offset === 0;
@@ -236,16 +230,16 @@ function TrackCoverflow({ contextTracks, activeTrackId, playingTrackId, isPlayin
                 onClick={() => isCenter ? onPlayCenter() : onOpenTrack(track)}
               >
                 <span className="coverflow-card-inner">
-                  {track.artwork ? <img src={track.artwork} alt="" loading="lazy" /> : <span className="coverflow-art-fallback" aria-hidden="true">♫</span>}
+                  {track.artwork ? <img src={track.artwork} alt="" loading="lazy" /> : <span className="coverflow-art-fallback" aria-hidden="true"><FaMusic /></span>}
                   {isCenter && track.artwork && <img className="coverflow-reflection" src={track.artwork} alt="" aria-hidden="true" />}
-                  {isNowPlaying && <span className={`coverflow-live${isPlayingNow ? ' is-playing' : ''}`}>{playbackLoading ? <span className="player-spinner" /> : isPlayingNow ? <span className="coverflow-playing-dots" aria-label="Играет"><i /><i /><i /></span> : '❚❚ Пауза'}</span>}
+                  {isNowPlaying && <span className={`coverflow-live${isPlayingNow ? ' is-playing' : ''}`}>{playbackLoading ? <span className="player-spinner" /> : isPlayingNow ? <span className="coverflow-playing-dots" aria-label="Играет"><i /><i /><i /></span> : <><FaPause /> Пауза</>}</span>}
                 </span>
                 <span className="coverflow-meta"><b>{track.title}</b><small>{track.artist.name || 'SoundCloud'}</small></span>
               </button>
             );
           })}
         </div>
-        <button type="button" className="coverflow-nav next" aria-label="Следующий трек раздела" onClick={() => onOpenTrack(list[(index + 1) % list.length])}>›</button>
+        <button type="button" className="coverflow-nav next" aria-label="Следующий трек раздела" onClick={() => onOpenTrack(list[(index + 1) % list.length])}><FaChevronRight /></button>
       </div>
     </section>
   );
@@ -268,7 +262,7 @@ export function TrackDetailsPage({ track, loading, error, isCurrent, isPlaying, 
   // details are loading. Only show the full-page skeleton on the first open.
   if (loading && !track) return (
     <article className="track-detail-page track-detail-page-loading" aria-busy="true" aria-label="Загрузка страницы трека">
-      <button className="track-detail-back" type="button" onClick={onBack}><span aria-hidden="true">←</span> Мои лайки</button>
+      <button className="track-detail-back" type="button" onClick={onBack}><FaArrowLeft aria-hidden="true" /> Мои лайки</button>
       <section className="track-detail-hero track-detail-skeleton" aria-hidden="true">
         <div className="track-detail-artwork-wrap"><span className="track-skeleton-art" /></div>
         <div className="track-detail-content">
@@ -305,9 +299,9 @@ export function TrackDetailsPage({ track, loading, error, isCurrent, isPlaying, 
   const descriptionExpanded = expandedDescriptionTrackId === track.id;
   const artistName = track.artist.name || 'SoundCloud';
   const artistId = track.artist.id;
-  const artistFollowers = Number(track.artist.followerCount || 0).toLocaleString('ru-RU');
+  const artistFollowers = formatCount(track.artist.followerCount);
   const artistDetails = <>
-    {track.artist.avatar ? <img src={track.artist.avatar} alt="" /> : <span className="track-detail-artist-avatar-fallback" aria-hidden="true">♫</span>}
+    {track.artist.avatar ? <img src={track.artist.avatar} alt="" /> : <span className="track-detail-artist-avatar-fallback" aria-hidden="true"><FaMusic /></span>}
     <span className="track-detail-artist-copy">
       <span className="track-detail-artist-name">{artistName}</span>
       <small className="track-detail-artist-followers">{artistFollowers} подписчиков</small>
@@ -316,10 +310,10 @@ export function TrackDetailsPage({ track, loading, error, isCurrent, isPlaying, 
 
   return (
     <article className="track-detail-page">
-      <button className="track-detail-back" type="button" onClick={onBack}><span aria-hidden="true">←</span> Мои лайки</button>
+      <button className="track-detail-back" type="button" onClick={onBack}><FaArrowLeft aria-hidden="true" /> Мои лайки</button>
       <section className="track-detail-hero">
         <div className="track-detail-artwork-wrap" ref={artworkRef} data-track-artwork="">
-          {track.artwork ? <img className="track-detail-artwork" src={track.artwork} alt={`Обложка: ${track.title}`} /> : <div className="track-detail-artwork track-detail-artwork-fallback">♫</div>}
+          {track.artwork ? <img className="track-detail-artwork" src={track.artwork} alt={`Обложка: ${track.title}`} /> : <div className="track-detail-artwork track-detail-artwork-fallback"><FaMusic /></div>}
         </div>
         <div className="track-detail-content">
           <div className="track-detail-info">
@@ -335,15 +329,15 @@ export function TrackDetailsPage({ track, loading, error, isCurrent, isPlaying, 
                 {playbackLoading
                   ? <span className="player-spinner" />
                   : isCurrent && isPlaying
-                    ? <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="5" width="4.5" height="14" rx="1.4" /><rect x="13" y="5" width="4.5" height="14" rx="1.4" /></svg>
-                    : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 12 7-12 7z" /></svg>}
+                    ? <FaPause aria-hidden="true" />
+                    : <FaPlay aria-hidden="true" />}
               </button>
               <button className={`track-detail-repeat${repeatOne ? ' is-active' : ''}`} type="button" onClick={onToggleRepeat} aria-pressed={repeatOne} aria-label={repeatOne ? 'Выключить повтор трека' : 'Повторять трек'} title={repeatOne ? 'Повтор трека включён' : 'Повторять трек'}>
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 2l4 4-4 4" /><path d="M3 11V9a3 3 0 0 1 3-3h15" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v2a3 3 0 0 1-3 3H3" /></svg>
+                <FaRepeat aria-hidden="true" />
 
               </button>
               <button className={`track-detail-shuffle${shuffleLiked ? ' is-active' : ''}`} type="button" onClick={onToggleShuffle} aria-pressed={shuffleLiked} aria-label={shuffleLiked ? 'Выключить случайное воспроизведение лайкнутых треков' : 'Случайное воспроизведение лайкнутых треков'} title={shuffleLiked ? 'Случайный выбор из лайкнутых включён' : 'Случайный выбор из лайкнутых'}>
-                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.03 7.03 15.56 4.5l-2.53-2.53-1.06 1.06.72.72h-.45c-1.32 0-2.58.55-3.48 1.52L7.25 6.9 5.74 5.27a4.5 4.5 0 0 0-3.48-1.52H1v1.5h1.26c.9 0 1.76.38 2.38 1.04L6.23 8l-1.59 1.71a3.2 3.2 0 0 1-2.38 1.04H1v1.5h1.26a4.5 4.5 0 0 0 3.48-1.52L7.25 9.1l1.51 1.63a4.5 4.5 0 0 0 3.48 1.52h.45l-.72.72 1.06 1.06 2.53-2.53-2.53-2.53-1.06 1.06.72.72h-.45c-.9 0-1.76-.38-2.38-1.04L8.27 8l1.59-1.71a3.2 3.2 0 0 1 2.38-1.04h.45l-.72.72z" /></svg>
+                <FaShuffle aria-hidden="true" />
               </button>
               <button
                 className={`track-detail-like${liked ? ' is-liked' : ''}`}
@@ -355,7 +349,7 @@ export function TrackDetailsPage({ track, loading, error, isCurrent, isPlaying, 
                 aria-label={liked ? 'Убрать из любимых' : 'Добавить в любимые'}
                 title={liked ? 'В любимых' : 'Добавить в любимые'}
               >
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z" /></svg>
+                <FaHeart aria-hidden="true" />
               </button>
               {hasLyrics && <button
                 className={`track-detail-lyrics${lyricsOpen ? ' is-active' : ''}`}
@@ -366,22 +360,18 @@ export function TrackDetailsPage({ track, loading, error, isCurrent, isPlaying, 
                 aria-label={lyricsOpen ? 'Скрыть текст песни' : 'Показать текст песни'}
                 title={lyricsOpen ? 'Скрыть текст песни' : 'Показать текст песни'}
               >
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h11M4 10h11M4 15h7" /><path d="M18 14v6M15 17h6" /></svg>
+                <FaAlignLeft aria-hidden="true" />
               </button>}
               <div className="track-detail-copy">
                 <h1>{track.title}</h1>
                 {artistId
                   ? <button className="track-detail-artist" type="button" onClick={() => onOpenArtist(artistId)}>{artistDetails}</button>
                   : track.artist.permalink
-                    ? <a className="track-detail-artist" href={track.artist.permalink} target="_blank" rel="noreferrer">{artistDetails}<span className="track-detail-artist-external" aria-hidden="true">↗</span></a>
+                    ? <a className="track-detail-artist" href={track.artist.permalink} target="_blank" rel="noreferrer">{artistDetails}<FaArrowUpRightFromSquare className="track-detail-artist-external" aria-hidden="true" /></a>
                     : <div className="track-detail-artist">{artistDetails}</div>}
               </div>
               <label className="track-detail-volume-control" title="Громкость" style={{ '--volume-level': `${volume}%`, '--volume-depth': `${(volume / 100) * 7}deg`, '--volume-glow': `rgba(255, 118, 93, ${volume / 100})` } as CSSProperties}>
-                <svg className="track-detail-volume-icon" viewBox="0 0 24 24" aria-hidden="true">
-                  {volume === 0
-                    ? <><path d="M11 5 6 9H3v6h3l5 4z" /><path d="m16 9 5 6m0-6-5 6" /></>
-                    : <><path d="M11 5 6 9H3v6h3l5 4z" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M18.5 5.5a9 9 0 0 1 0 13" /></>}
-                </svg>
+                {volume === 0 ? <FaVolumeXmark className="track-detail-volume-icon" aria-hidden="true" /> : <FaVolumeHigh className="track-detail-volume-icon" aria-hidden="true" />}
                 <input className="track-detail-volume-slider" type="range" min={0} max={100} value={volume} aria-label="Громкость" aria-valuetext={`${volume}%`} onChange={(event) => onVolumeChange(Number(event.currentTarget.value))} />
               </label>
 

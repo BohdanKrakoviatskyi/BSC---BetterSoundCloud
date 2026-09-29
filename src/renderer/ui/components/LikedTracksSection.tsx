@@ -2,6 +2,7 @@ import type { Track } from '../../domain/models';
 import { TrackCard } from './TrackCard';
 import { useEffect, useRef, useState } from 'react';
 import { ErrorMessage } from './ErrorMessage';
+import { formatCount } from '../lib/format';
 import './LikedTracksSection.css';
 
 type Props = {
@@ -44,7 +45,7 @@ export function LikedTracksSection({ tracks, likedTracks, likeBusy, loading, err
       <div className="section-heading">
         <div>
           <div className="eyebrow">МЕДИАТЕКА SOUNDCLOUD</div>
-          <h2>Треки из моих лайков <span className="track-count">{uniqueTracks.length}</span></h2>
+          <h2>Треки из моих лайков <span className="track-count">{formatCount(uniqueTracks.length)}</span></h2>
         </div>
         <div className="tracks-actions">
           <button className="text-action" type="button" onClick={onRefresh} disabled={loading}>

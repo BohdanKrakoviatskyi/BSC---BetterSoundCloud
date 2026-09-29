@@ -3,6 +3,7 @@ import type { SoundCloudCredentials } from '../../lib/useSoundCloudAuth';
 import { useSoundCloudAuth } from '../../lib/useSoundCloudAuth';
 import { ChevronGlyph, CloudGlyph } from './AuthIcons';
 import { ErrorMessage } from './ErrorMessage';
+import { normalizeToken } from '../lib/format';
 import './AuthScreen.css';
 
 const BACKGROUND_VIDEO = '/auth_bg.mp4';
@@ -59,6 +60,8 @@ export function AuthScreen({ error, busy, clientId, onLogin, onSilentLogin }: Pr
       document.head.appendChild(theme);
     }
     theme.setAttribute('content', '#000000');
+    // This screen is the first thing a user sees; the app shell owns the title once it takes over.
+    return () => { document.title = 'BetterSoundCloud'; };
   }, []);
 
   useEffect(() => {
@@ -88,7 +91,7 @@ export function AuthScreen({ error, busy, clientId, onLogin, onSilentLogin }: Pr
 
   function handleManualConnect(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const accessToken = token.trim();
+    const accessToken = normalizeToken(token);
     const id = manualClientId.trim();
     if (!accessToken || !id) return;
     setManualPending(true);

@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import type { Track } from '../../domain/models';
 import { TrackCard } from './TrackCard';
+import { FaArrowLeft } from '../lib/icons';
+import { formatCount } from '../lib/format';
 import './ArtistTrackListPage.css';
 
 type Props = {
@@ -33,8 +35,8 @@ export function ArtistTrackListPage({ title, artistName, tracks, totalCount, loa
   }, [hasMore, loading, onLoadMore]);
 
   return <article className="page-content artist-track-list-page">
-    <button className="track-detail-back" type="button" onClick={onBack}><span aria-hidden="true">←</span> Профиль автора</button>
-    <header className="artist-track-list-header"><h1>{title}</h1><p>{artistName} · {(totalCount ?? tracks.length).toLocaleString('ru-RU')} треков</p></header>
+    <button className="track-detail-back" type="button" onClick={onBack}><FaArrowLeft aria-hidden="true" /> Профиль автора</button>
+    <header className="artist-track-list-header"><h1>{title}</h1><p>{artistName} · {formatCount(totalCount ?? tracks.length)} треков</p></header>
     {tracks.length === 0 && loading
       ? <p className="tracks-empty">Загружаю лайки…</p>
       : tracks.length === 0

@@ -6,7 +6,11 @@ import { measureElementRect, playArtworkFlight, type ElementRect } from '../lib/
 import './LyricsSidebar.css';
 import { ResizeHandle } from './ResizeHandle';
 import { RibbonGlow } from './RibbonGlow';
-
+import {
+  FaArrowDown, FaArrowLeft, FaArrowUp, FaBackwardStep, FaForwardStep, FaMaximize, FaMinimize,
+  FaMusic, FaPause, FaPlay, FaRepeat, FaVolumeHigh, FaVolumeXmark, FaXmark,
+} from '../lib/icons';
+import { formatDuration } from '../lib/format';
 type Props = {
   phase: LyricsPanelPhase;
   track: Track;
@@ -43,13 +47,6 @@ type Props = {
 
 /** How long a manual scroll suppresses the automatic "follow the active line" behaviour. */
 const FOLLOW_RESUME_MS = 5000;
-
-/** m:ss, the format the player bar already uses. */
-function formatClock(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
-  const minutes = Math.floor(seconds / 60);
-  return `${minutes}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
-}
 
 function findActiveLineIndex(lines: TrackLyrics['lines'], positionMs: number): number {
   let active = 0;
@@ -321,7 +318,7 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
       style={{ left: destination.left, top: destination.top, width: destination.width, height: destination.height }}
       aria-hidden="true"
     >
-      {track.artwork ? <img src={track.artwork} alt="" /> : <span className="lyrics-artwork-fallback">♫</span>}
+      {track.artwork ? <img src={track.artwork} alt="" /> : <span className="lyrics-artwork-fallback"><FaMusic /></span>}
     </div>,
     document.body,
   ) : null;
@@ -338,14 +335,14 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
           {/* Reserves the artwork slot. The travelling artwork is painted on top of it, and because
               the two are pixel-identical the hand-off is invisible. */}
           <div className="lyrics-artwork-slot" ref={slotRef}>
-            {track.artwork ? <img src={track.artwork} alt={`Обложка: ${track.title}`} /> : <span className="lyrics-artwork-fallback" aria-hidden="true">♫</span>}
+            {track.artwork ? <img src={track.artwork} alt={`Обложка: ${track.title}`} /> : <span className="lyrics-artwork-fallback" aria-hidden="true"><FaMusic /></span>}
           </div>
           <div className="lyrics-sidebar-copy">
             <h2>{track.title}</h2>
             <p>{track.artist.name || 'SoundCloud'}</p>
           </div>
           <button className="lyrics-icon-button lyrics-close" type="button" onClick={handleClose} aria-label="Закрыть текст песни" title="Закрыть">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+            <FaXmark aria-hidden="true" />
           </button>
         </header>
 
@@ -369,8 +366,8 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
               title={focusMode ? 'Обычный вид' : 'Во весь экран'}
             >
               {focusMode
-                ? <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3v6H3M15 3v6h6M9 21v-6H3M15 21v-6h6" /></svg>
-                : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>}
+                ? <FaMinimize aria-hidden="true" />
+                : <FaMaximize aria-hidden="true" />}
             </button>
           </div>
         </div>
@@ -423,14 +420,14 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
               : <RibbonGlow className="lyrics-focus-glow" />}
             <div className="lyrics-focus-head">
               <button className="lyrics-icon-button lyrics-focus-exit" type="button" onClick={handleExitFocus} aria-label="Назад" title="Назад">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6M9 12h11M4 5v14" /></svg>
+                <FaArrowLeft aria-hidden="true" />
                 <span>Назад</span>
               </button>
             </div>
             <div className="lyrics-focus-artwork-card">
               {track.artwork
                 ? <img src={track.artwork} alt={`Обложка: ${track.title}`} />
-                : <span className="lyrics-focus-track-art-fallback" aria-hidden="true">♫</span>}
+                : <span className="lyrics-focus-track-art-fallback" aria-hidden="true"><FaMusic /></span>}
               <h2 title={track.title}>{track.title}</h2>
               <p>{track.artist.name || 'SoundCloud'}</p>
             </div>
@@ -456,11 +453,10 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
                 </p>;
               })}
             </div>
-            {isCurrentTrack && (
-              <div className="lyrics-focus-controls">
-                {durationSeconds > 0 && (
+            <div className="lyrics-focus-controls">
+                {isCurrentTrack && durationSeconds > 0 && (
                   <div className={`lyrics-focus-seek${scrubSeconds !== null ? ' is-scrubbing' : ''}`} style={{ '--fill': seekFraction } as CSSProperties}>
-                    <span>{formatClock(scrubSecond)}</span>
+                    <span>{formatDuration(scrubSecond * 1000)}</span>
                     <div className="lyrics-focus-rail">
                       <div className="lyrics-focus-track" aria-hidden="true"><div className="lyrics-focus-track-fill" /></div>
                       <input
@@ -480,12 +476,12 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
                         aria-label="Перемотка трека"
                       />
                     </div>
-                    <span>{formatClock(durationSeconds)}</span>
+                    <span>{formatDuration(durationSeconds * 1000)}</span>
                   </div>
                 )}
                 <div className="lyrics-focus-transport">
                 <button className="lyrics-focus-skip" type="button" onClick={onPreviousTrack} aria-label="Предыдущий трек" title="Предыдущий трек" disabled={!canPreviousTrack}>
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 20 9 12l10-8v16Z"/><path d="M5 19V5"/></svg>
+                  <FaBackwardStep aria-hidden="true" />
                 </button>
                 <button
                   className="lyrics-focus-play"
@@ -495,11 +491,11 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
                   title={isPlaying ? 'Пауза' : 'Продолжить'}
                 >
                   {isPlaying
-                    ? <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v14M15 5v14" /></svg>
-                    : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" /></svg>}
+                    ? <FaPause aria-hidden="true" />
+                    : <FaPlay aria-hidden="true" />}
                 </button>
                 <button className="lyrics-focus-skip" type="button" onClick={onNextTrack} aria-label="Следующий трек" title="Следующий трек" disabled={!canNextTrack}>
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 4 10 8-10 8V4Z"/><path d="M19 5v14"/></svg>
+                  <FaForwardStep aria-hidden="true" />
                 </button>
                 <button
                   className={`lyrics-focus-repeat${repeatOne ? ' is-on' : ''}`}
@@ -509,7 +505,7 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
                   aria-label={repeatOne ? 'Выключить повтор' : 'Повторять трек'}
                   title={repeatOne ? 'Повтор выключен' : 'Повторять трек'}
                 >
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 2l4 4-4 4" /><path d="M3 11V9a3 3 0 0 1 3-3h15" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v2a3 3 0 0 1-3 3H3" /></svg>
+                  <FaRepeat aria-hidden="true" />
                 </button>
                 <div className="lyrics-focus-volume">
                   <button
@@ -519,7 +515,7 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
                     aria-label={volume === 0 ? 'Включить звук' : 'Выключить звук'}
                     title={volume === 0 ? 'Включить звук' : 'Выключить звук'}
                   >
-                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 6v4h3l4 3V3L4 6H1z" fill="currentColor" />{volume > 0 && <><path d="M10 5.2a4 4 0 0 1 0 5.6M12 3a7 7 0 0 1 0 10" fill="none" stroke="currentColor" strokeWidth="1.3" /></>}</svg>
+                    {volume === 0 ? <FaVolumeXmark aria-hidden="true" /> : <FaVolumeHigh aria-hidden="true" />}
                   </button>
                   <div className="lyrics-focus-volume-range" style={{ '--volume-fill': `${volume}%` } as CSSProperties}>
                     <input type="range" min={0} max={100} step={1} value={volume} onChange={(event) => volumeChangeRef.current(Number(event.target.value))} aria-label="Громкость" aria-valuetext={`${volume}%`} />
@@ -528,7 +524,6 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
                 </div>
                 </div>
               </div>
-            )}
             {isCurrentTrack && hasTimedLyrics && activeIndex >= 0 && (
               <button
                 ref={syncButtonRef}
@@ -538,7 +533,7 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
                 aria-hidden={activeLineCentered}
                 tabIndex={activeLineCentered ? -1 : 0}
               >
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d={currentLineDirection === 'up' ? 'M12 19V5M5 12l7-7 7 7' : 'M12 5v14M5 12l7 7 7-7'} /></svg>
+                {currentLineDirection === 'up' ? <FaArrowUp aria-hidden="true" /> : <FaArrowDown aria-hidden="true" />}
                 К текущей строке
               </button>
             )}

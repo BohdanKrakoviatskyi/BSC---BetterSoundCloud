@@ -3,6 +3,8 @@ import type { ArtistProfile, Playlist, Track } from '../../domain/models';
 import { TrackCarouselSection } from './TrackCarouselSection';
 import { ErrorMessage } from './ErrorMessage';
 import { PlaylistCarouselSection } from './PlaylistCarouselSection';
+import { FaArrowLeft, FaPlay } from '../lib/icons';
+import { formatCount, initials } from '../lib/format';
 
 type Props = {
   profile: ArtistProfile | null;
@@ -28,10 +30,6 @@ type Props = {
   onViewLikes: () => void;
   onBack: () => void;
 };
-
-function formatCount(value?: number): string {
-  return Number(value || 0).toLocaleString('ru-RU');
-}
 
 function ArtistProfileSkeleton() {
   return <article className="page-content artist-profile-page artist-profile-skeleton" aria-label="Загружаю профиль автора" aria-busy="true">
@@ -63,7 +61,7 @@ export function ArtistProfilePage({ profile, loading, error, tracks, tracksLoadi
   return (
     <article className="page-content artist-profile-page" key={profile.id}>
       <section className="artist-hero" style={heroStyle}>
-        <button className="track-detail-back artist-profile-back" type="button" onClick={onBack}><span aria-hidden="true">←</span> Назад</button>
+        <button className="track-detail-back artist-profile-back" type="button" onClick={onBack}><FaArrowLeft aria-hidden="true" /> Назад</button>
         <div className="artist-hero-copy">
           <span aria-hidden="false">
             {profile.verified && <span className="artist-verified-badge" title="Подтверждённый аккаунт">✓</span>}
@@ -75,13 +73,13 @@ export function ArtistProfilePage({ profile, loading, error, tracks, tracksLoadi
             {formatCount(profile.trackCount)} треков · {formatCount(profile.followersCount)} подписчиков
           </p>
           <div className="detail-buttons">
-            <button className="play-button large" type="button" disabled={!tracks.length} onClick={() => tracks[0] && onPlayTrack(tracks[0])} aria-label="Слушать топ трек автора">▶</button>
+            <button className="play-button large" type="button" disabled={!tracks.length} onClick={() => tracks[0] && onPlayTrack(tracks[0])} aria-label="Слушать топ трек автора"><FaPlay /></button>
           </div>
         </div>
       </section>
 
       <section className="profile-overview artist-profile-overview">
-        {profile.avatar ? <img className="big-profile round-art" src={profile.avatar} alt="" /> : <span className="big-profile round-art profile-fallback">{displayName.slice(0, 2).toUpperCase()}</span>}
+        {profile.avatar ? <img className="big-profile round-art" src={profile.avatar} alt="" /> : <span className="big-profile round-art profile-fallback">{initials(displayName)}</span>}
         <div>
           <h2>{profile.username}</h2>
           <p>{profile.description || 'Автор пока не добавил описание профиля.'}</p>

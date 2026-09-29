@@ -26,7 +26,7 @@ Tauri webview не получает Node.js доступ. Frontend запуск�
 - `backend/cmd/local-api/main_test.go` — тесты авторизации на подставном SoundCloud-сервере.
 - `scripts/build-go.mjs` — кросс-компилирует Go sidecar и именует бинарник по Tauri target triple.
 - `scripts/backend-console.mjs` — интерактивная JSON-RPC консоль sidecar для ручной проверки методов без Tauri.
-- `backend/cmd/local-api/main.go` — при `BSC_SWAGGER=1` дополнительно поднимает Swagger UI и loopback HTTP bridge для ручной отладки JSON-RPC.
+- `backend/cmd/local-api/main.go` — обслуживает построчный JSON-RPC по stdin/stdout; для ручной отладки — REPL-консоль `npm run backend`.
 - `scripts/test-backend-live.mjs` — запускает живой тест SoundCloud с токеном из `.env`.
 
 ## Локальный API
@@ -74,7 +74,7 @@ flowchart LR
 5. Для новых backend-данных добавляется отдельный RPC и DTO, затем mapping в gateway. Существующий контракт не меняется несовместимо без необходимости.
 6. Renderer передаёт только узкие параметры, например ID трека или поисковый запрос. Токен, произвольные URL и команды остаются на стороне sidecar.
 
-В режиме разработки `BSC_SWAGGER=1 npm run dev` sidecar дополнительно слушает только `127.0.0.1` на случайном порту, печатает URL Swagger UI в stderr и публикует `/openapi.json` и `POST /rpc`. Генератор автоматически находит экспортированные методы `RPC...` на `service`; имена методов, типы параметров и результатов берутся из сигнатур Go, а поля моделей — из Go-типов и JSON-тегов. Добавление метода не требует отдельной записи в реестре. Этот HTTP bridge выключен по умолчанию; desktop-приложение продолжает использовать stdin/stdout. Swagger UI раздаётся через unpkg CDN.
+Диспетчер JSON-RPC находит экспортированные методы `RPC...` на `service` рефлексией: имена методов, типы параметров и результатов берутся из сигнатур Go. Добавление метода не требует отдельной записи в реестре. Протокол удобно гонять вручную через `npm run backend` — REPL поверх stdin/stdout sidecar без Tauri и без UI.
 
 ## Авторизация (текущая реализация)
 

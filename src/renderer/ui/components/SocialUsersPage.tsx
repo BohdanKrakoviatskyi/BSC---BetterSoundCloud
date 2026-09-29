@@ -1,5 +1,7 @@
 import type { SocialUser } from '../../domain/models';
 import { ErrorMessage } from './ErrorMessage';
+import { FaArrowLeft, FaArrowUpRightFromSquare } from '../lib/icons';
+import { formatCount, initials } from '../lib/format';
 
 type Props = {
   kind: 'followers' | 'followings';
@@ -16,7 +18,7 @@ type Props = {
 export function SocialUsersPage({ kind, users, loading, error, hasMore, onBack, onSwitch, onLoadMore, onOpenProfile }: Props) {
   const title = kind === 'followers' ? 'Подписчики' : 'Подписки';
   return <article className="page-content social-users-page">
-    <button className="track-detail-back" type="button" onClick={onBack}><span aria-hidden="true">←</span> Назад</button>
+    <button className="track-detail-back" type="button" onClick={onBack}><FaArrowLeft aria-hidden="true" /> Назад</button>
     <header className="social-users-header">
       <div><h1>{title}</h1></div>
       <nav className="social-users-tabs" aria-label="Списки профиля">
@@ -32,9 +34,9 @@ export function SocialUsersPage({ kind, users, loading, error, hasMore, onBack, 
         : <div className="social-users-grid">{users.map((user) => {
             const name = user.fullName || user.username;
             return <button className="social-users-card" key={user.id} type="button" onClick={() => onOpenProfile(user.id)}>
-              {user.avatar ? <img src={user.avatar} alt="" loading="lazy" /> : <span className="social-users-avatar-fallback">{name.slice(0, 1).toUpperCase()}</span>}
-              <span className="social-users-copy"><b>{name}</b><small>@{user.username}</small><small>{Number(user.followersCount || 0).toLocaleString('ru-RU')} подписчиков · {Number(user.followingsCount || 0).toLocaleString('ru-RU')} подписок</small><small>{Number(user.trackCount || 0).toLocaleString('ru-RU')} треков</small></span>
-              <span className="social-users-open" aria-hidden="true">↗</span>
+              {user.avatar ? <img src={user.avatar} alt="" loading="lazy" /> : <span className="social-users-avatar-fallback">{initials(name)}</span>}
+              <span className="social-users-copy"><b>{name}</b><small>@{user.username}</small><small>{formatCount(user.followersCount)} подписчиков · {formatCount(user.followingsCount)} подписок</small><small>{formatCount(user.trackCount)} треков</small></span>
+              <span className="social-users-open" aria-hidden="true"><FaArrowUpRightFromSquare /></span>
             </button>;
           })}</div>}
     {hasMore && <button className="outline-button social-users-more" type="button" disabled={loading} onClick={onLoadMore}>{loading ? 'Загружаю…' : 'Показать ещё'}</button>}

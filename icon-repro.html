@@ -1,0 +1,43 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="src/renderer/ui/new-ui.css">
+<link rel="stylesheet" href="src/renderer/ui/components/LyricsSidebar.css">
+<style>
+ body{background:#0e0e10;font-family:'Google Sans',Arial,sans-serif;color:#f5f5f7;padding:24px}
+ h3{font-size:11px;color:#888;margin:0 0 8px;letter-spacing:.5px}
+ .row{display:flex;gap:40px;align-items:flex-start;margin-bottom:36px}
+ .lyrics-focus-head{position:static}
+ .lyrics-focus-layer{position:static;padding:24px;width:520px;background:#16161a;border-radius:12px;display:flex;gap:20px;align-items:center}
+ .ctrls{display:flex;gap:14px;align-items:center}
+ .card{width:190px}
+</style></head><body>
+
+<div class="row">
+  <div><h3>A. TRACKCARD — "недавние" (.cover-play)</h3>
+    <div class="card music-card"><div class="music-cover-wrap">
+      <button class="cover-button"><div class="cover" style="background:#2a2a30"></div>
+        <button class="cover-play"><svg class="" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" width="1em" height="1em" aria-hidden="true"><path fill="currentColor" d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80L0 432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></button>
+      </button>
+    </div></div>
+  </div>
+  <div><h3>B. PLAYLIST CARD — "спец. для вас" (.playlist-art-play)</h3>
+    <div class="card playlist-card"><button class="playlist-art">
+      <span><svg class="" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="1em" height="1em" aria-hidden="true"><path fill="currentColor" d="M499.1 6.3c8.1 6 12.9 15.6 12.9 25.7l0 72 0 264c0 44.2-43 80-96 80s-96-35.8-96-80s43-80 96-80c11.2 0 22 1.6 32 4.6L448 147 192 223.8 192 432c0 44.2-43 80-96 80s-96-35.8-96-80s43-80 96-80c11.2 0 22 1.6 32 4.6L128 200l0-72c0-14.1 9.3-26.6 22.8-30.7l320-96c9.7-2.9 20.2-1.1 28.3 5z"/></svg></span>
+      <svg class="playlist-art-play" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" width="1em" height="1em" aria-hidden="true"><path fill="currentColor" d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80L0 432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg>
+    </button></div>
+  </div>
+</div>
+
+<div class="row">
+  <div><h3>C. FULLSCREEN LYRICS — back button (.lyrics-focus-exit)</h3>
+    <div class="lyrics-focus-layer"><div class="lyrics-focus-head">
+      <button class="lyrics-icon-button lyrics-focus-exit"><svg class="" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" width="1em" height="1em" aria-hidden="true"><path fill="currentColor" d="M9.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.2 288 416 288c17.7 0 32-14.3 32-32s-14.3-32-32-32l-306.7 0L214.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg><span>Назад</span></button>
+    </div></div>
+  </div>
+  <div><h3>D. FOCUS CONTROLS (reference)</h3>
+    <div class="ctrls">
+      <button class="lyrics-focus-skip"><svg class="" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" width="1em" height="1em" aria-hidden="true"><path fill="currentColor" d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80L0 432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></button>
+      <button class="lyrics-focus-play"><svg class="" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" width="1em" height="1em" aria-hidden="true"><path fill="currentColor" d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80L0 432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></button>
+    </div>
+  </div>
+</div>
+</body></html>

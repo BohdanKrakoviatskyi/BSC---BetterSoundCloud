@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import './ConfirmDialog.css';
+import { FaArrowUpRightFromSquare, FaXmark } from '../lib/icons';
 
 type Props = {
   eyebrow: string;
@@ -67,9 +68,9 @@ export function ConfirmDialog({ eyebrow, title, description, confirmLabel, busyL
         aria-describedby={`${id}-description`}
       >
         <div className="confirm-dialog-heading">
-          <span className="confirm-dialog-icon" aria-hidden="true">{variant === 'danger' ? '!' : '↗'}</span>
+          <span className="confirm-dialog-icon" aria-hidden="true">{variant === 'danger' ? '!' : <FaArrowUpRightFromSquare />}</span>
           <span className="eyebrow">{eyebrow}</span>
-          <button className="confirm-dialog-close" type="button" aria-label="Закрыть диалог" disabled={busy} onClick={onClose}>×</button>
+          <button className="confirm-dialog-close" type="button" aria-label="Закрыть диалог" disabled={busy} onClick={onClose}><FaXmark /></button>
         </div>
         <h2 id={`${id}-title`}>{title}</h2>
         <p id={`${id}-description`}>{description}</p>

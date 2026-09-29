@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type { ArtistProfile, Playlist, Profile, Track } from '../../domain/models';
 import { ErrorMessage } from './ErrorMessage';
+import { FaArrowLeft, FaHeart, FaHeadphones, FaMusic, FaPause, FaPlay } from '../lib/icons';
+import { formatCount, initials } from '../lib/format';
 import './MyProfilePage.css';
 
 type Props = {
@@ -34,15 +36,15 @@ export function MyProfilePage({ account, details, tracks, history, historyLoadin
     const isCurrent = track.id === currentTrackId;
     return <article className="my-profile-track" key={track.id}>
       <button className="my-profile-track-art" type="button" onClick={() => onOpenTrack(track, context)} aria-label={`Открыть ${track.title}`}>
-        {track.artwork ? <img src={track.artwork} alt="" loading="lazy" /> : <span aria-hidden="true">♫</span>}
+        {track.artwork ? <img src={track.artwork} alt="" loading="lazy" /> : <span aria-hidden="true"><FaMusic /></span>}
       </button>
       <div className="my-profile-track-copy">
         <button className="my-profile-track-title" type="button" onClick={() => onOpenTrack(track, context)}>{track.title}</button>
         <span>{track.artist.name || account.username}</span>
-        <small>▶ {Number(track.playCount ?? 0).toLocaleString('ru-RU')}　♥ {Number(track.likeCount ?? 0).toLocaleString('ru-RU')}</small>
+        <small><FaHeadphones /> {formatCount(track.playCount)}　<FaHeart /> {formatCount(track.likeCount)}</small>
       </div>
       <button className={`my-profile-play${isCurrent && isPlaying ? ' is-playing' : ''}`} type="button" onClick={() => onPlayTrack(track)} disabled={isCurrent && playbackLoading} aria-label={isCurrent && isPlaying ? `Пауза: ${track.title}` : `Воспроизвести: ${track.title}`}>
-        {isCurrent && playbackLoading ? '…' : isCurrent && isPlaying ? 'Ⅱ' : '▶'}
+        {isCurrent && playbackLoading ? '…' : isCurrent && isPlaying ? <FaPause /> : <FaPlay />}
       </button>
     </article>;
   }
@@ -55,16 +57,16 @@ export function MyProfilePage({ account, details, tracks, history, historyLoadin
         <div className="my-profile-identity">
           {avatar
             ? <img className="my-profile-avatar" src={avatar} alt="" />
-            : <span className="my-profile-avatar my-profile-avatar-fallback" aria-hidden="true">{displayName.slice(0, 1).toUpperCase()}</span>}
+            : <span className="my-profile-avatar my-profile-avatar-fallback" aria-hidden="true">{initials(displayName)}</span>}
           <div className="my-profile-name-block">
             <h1 id="my-profile-name">{displayName}</h1>
             <p>@{details?.username || account.username}</p>
           </div>
         </div>
         <div className="my-profile-stats" aria-label="Статистика профиля">
-          {followers !== undefined && <button className="my-profile-stat-button" type="button" onClick={() => onOpenSocial('followers')}><b>{followers.toLocaleString('ru-RU')}</b><span>подписчиков</span></button>}
-          {details?.followingsCount !== undefined && <button className="my-profile-stat-button" type="button" onClick={() => onOpenSocial('followings')}><b>{details.followingsCount.toLocaleString('ru-RU')}</b><span>подписок</span></button>}
-          {trackCount !== undefined && <div><b>{trackCount.toLocaleString('ru-RU')}</b><span>треков</span></div>}
+          {followers !== undefined && <button className="my-profile-stat-button" type="button" onClick={() => onOpenSocial('followers')}><b>{formatCount(followers)}</b><span>подписчиков</span></button>}
+          {details?.followingsCount !== undefined && <button className="my-profile-stat-button" type="button" onClick={() => onOpenSocial('followings')}><b>{formatCount(details.followingsCount)}</b><span>подписок</span></button>}
+          {trackCount !== undefined && <div><b>{formatCount(trackCount)}</b><span>треков</span></div>}
         </div>
       </header>
 
@@ -100,7 +102,7 @@ export function MyProfilePage({ account, details, tracks, history, historyLoadin
                   ? <p className="my-profile-state">Плейлисты пока не найдены.</p>
                   : <div className="my-profile-playlist-grid">
                       {playlists.map((playlist) => <button className="my-profile-playlist" type="button" key={playlist.id} onClick={() => onOpenPlaylist(playlist)}>
-                        {playlist.artwork ? <img src={playlist.artwork} alt="" loading="lazy" /> : <span className="my-profile-playlist-fallback" aria-hidden="true">♫</span>}
+                        {playlist.artwork ? <img src={playlist.artwork} alt="" loading="lazy" /> : <span className="my-profile-playlist-fallback" aria-hidden="true"><FaMusic /></span>}
                         <b>{playlist.title}</b>
                         <small>{playlist.trackCount} треков</small>
                       </button>)}

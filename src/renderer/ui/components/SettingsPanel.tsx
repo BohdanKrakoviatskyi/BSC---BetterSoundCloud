@@ -1,8 +1,8 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import type { Profile, Settings } from '../types';
-import { ConfirmDialog } from './ConfirmDialog';
 import { ErrorMessage } from './ErrorMessage';
 import { createUserBackgroundPreset, deleteUserBackgroundPreset, loadUserBackgroundPresets, type UserBackgroundPreset } from '../lib/backgroundPresets';
+import { describeError, normalizeToken } from '../lib/format';
 import './SettingsPanel.css';
 
 const MAX_BACKGROUND_DATA_URL_LENGTH = 700_000;
@@ -54,15 +54,12 @@ type Props = {
   tokenError: string;
   tokenBusy: boolean;
   onSaveToken: (token: string) => Promise<boolean>;
-  onClearData: () => Promise<boolean>;
 };
 
-export function SettingsPanel({ settings, saved, error, profile, tokenError, tokenBusy, onUpdate, onSaveToken, onClearData }: Props) {
+export function SettingsPanel({ settings, saved, error, profile, tokenError, tokenBusy, onUpdate, onSaveToken }: Props) {
   const [clientId, setClientId] = useState(settings.clientId);
   const [token, setToken] = useState('');
   const [showToken, setShowToken] = useState(false);
-  const [clearDialogOpen, setClearDialogOpen] = useState(false);
-  const [clearBusy, setClearBusy] = useState(false);
   const [backgroundBusy, setBackgroundBusy] = useState(false);
   const [backgroundError, setBackgroundError] = useState('');
   const [userBackgroundPresets, setUserBackgroundPresets] = useState<UserBackgroundPreset[]>([]);
@@ -76,14 +73,15 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
     let active = true;
     void loadUserBackgroundPresets()
       .then((presets) => { if (active) setUserBackgroundPresets(presets); })
-      .catch((reason: unknown) => { if (active) setBackgroundError(reason instanceof Error ? reason.message : 'Не удалось загрузить сохранённые пресеты.'); });
+      .catch((reason: unknown) => { if (active) setBackgroundError(describeError(reason, 'Не удалось загрузить сохранённые пресеты.')); });
     return () => { active = false; };
   }, []);
 
   async function submitToken(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!token.trim()) return;
-    const saved = await onSaveToken(token.trim());
+    const accessToken = normalizeToken(token);
+    if (!accessToken) return;
+    const saved = await onSaveToken(accessToken);
     if (saved) {
       setToken('');
       setShowToken(false);
@@ -101,7 +99,7 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
       const backgroundImage = await encodeBackgroundImage(file);
       onUpdate({ backgroundImage });
     } catch (reason) {
-      setBackgroundError(reason instanceof Error ? reason.message : 'Не удалось загрузить изображение.');
+      setBackgroundError(describeError(reason, 'Не удалось загрузить изображение.'));
     } finally {
       setBackgroundBusy(false);
     }
@@ -118,7 +116,7 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
       const backgroundImage = await encodeBackgroundImage(file);
       onUpdate({ backgroundImage });
     } catch (reason) {
-      setBackgroundError(reason instanceof Error ? reason.message : 'Не удалось применить пресет.');
+      setBackgroundError(describeError(reason, 'Не удалось применить пресет.'));
     } finally {
       setBackgroundBusy(false);
     }
@@ -135,7 +133,7 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
       setUserBackgroundPresets((current) => [preset, ...current]);
       setBackgroundPresetName('');
     } catch (reason) {
-      setBackgroundError(reason instanceof Error ? reason.message : 'Не удалось сохранить пресет.');
+      setBackgroundError(describeError(reason, 'Не удалось сохранить пресет.'));
     } finally {
       setBackgroundBusy(false);
     }
@@ -148,23 +146,9 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
       await deleteUserBackgroundPreset(preset.id);
       setUserBackgroundPresets((current) => current.filter(({ id }) => id !== preset.id));
     } catch (reason) {
-      setBackgroundError(reason instanceof Error ? reason.message : 'Не удалось удалить пресет.');
+      setBackgroundError(describeError(reason, 'Не удалось удалить пресет.'));
     } finally {
       setBackgroundBusy(false);
-    }
-  }
-
-  async function confirmClearData() {
-    setClearBusy(true);
-    try {
-      const cleared = await onClearData();
-      if (cleared) {
-        setToken('');
-        setShowToken(false);
-        setClearDialogOpen(false);
-      }
-    } finally {
-      setClearBusy(false);
     }
   }
 
@@ -186,7 +170,7 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
             <div>
               <h2 id="personalization-title">Интерфейс</h2>
             </div>
-            <button className="settings-reset-button" type="button" disabled={backgroundBusy} onClick={() => { setBackgroundError(''); onUpdate({ accent: '#ff765d', compact: false, backgroundImage: '', backgroundBlur: 0 }); }}>
+            <button className="settings-reset-button" type="button" disabled={backgroundBusy} onClick={() => { setBackgroundError(''); onUpdate({ accent: '#ff765d', backgroundImage: '', backgroundBlur: 0 }); }}>
               Сбросить оформление
             </button>
           </div>
@@ -194,10 +178,6 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
             <label className="setting-row color-setting">
               <span><b>Цвет акцента</b></span>
               <input aria-label="Цвет акцента" type="color" value={settings.accent} onChange={(event) => onUpdate({ accent: event.target.value })} />
-            </label>
-            <label className="setting-row compact-setting">
-              <span><b>Компактный интерфейс</b></span>
-              <span className="switch"><input type="checkbox" checked={settings.compact} onChange={(event) => onUpdate({ compact: event.target.checked })} /><i /></span>
             </label>
             <label className="setting-row volume-setting">
               <span><b>Начальная громкость</b></span>
@@ -239,13 +219,6 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
               <div className="credential-actions"><button className="primary-button" type="submit" disabled={!token.trim() || tokenBusy}>{tokenBusy ? 'Проверяю токен…' : 'Проверить и сохранить'}</button></div>
             </div>
           </form>
-        </section>
-
-        <section className="settings-card settings-danger-zone" aria-labelledby="clear-data-heading">
-          <div>
-            <h2 id="clear-data-heading">Начать с чистого листа</h2>
-          </div>
-          <button className="danger-button" type="button" onClick={() => setClearDialogOpen(true)}>Очистить данные</button>
         </section>
         </div>
         <div className="settings-column settings-column-background">
@@ -310,20 +283,7 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
 
         </div>
       </div>
-      {error && !clearDialogOpen && <ErrorMessage message={error} className="settings-page-error" />}
-      {clearDialogOpen && <ConfirmDialog
-        eyebrow="СБРОС ПРИЛОЖЕНИЯ"
-        title="Очистить все данные?"
-        description="Сохранённый токен будет удалён, а Client ID и настройки сбросятся к значениям по умолчанию. Приложение выйдет из аккаунта SoundCloud. Это действие нельзя отменить."
-        confirmLabel="Да, очистить"
-        busyLabel="Очищаю…"
-        busy={clearBusy}
-        variant="danger"
-        onClose={() => setClearDialogOpen(false)}
-        onConfirm={() => void confirmClearData()}
-      >
-        {error && <ErrorMessage message={error} />}
-      </ConfirmDialog>}
+      {error && <ErrorMessage message={error} className="settings-page-error" />}
     </section>
   );
 }

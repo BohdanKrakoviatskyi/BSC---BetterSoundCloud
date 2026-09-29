@@ -1,4 +1,5 @@
 import type { AuthStatus, SoundCloudMixedSelection, SoundCloudPlaylist, SoundCloudSearchTrack, SoundCloudSocialPage, SoundCloudTrack, SoundCloudTrackDetails, SoundCloudTrackPage, SoundCloudUserProfile, TrackLikeResult, TrackLyricsDTO, TrackStream } from '../renderer/lib/desktop';
+import type { Settings } from '../renderer/domain/models';
 
 export {};
 
@@ -7,17 +8,9 @@ declare global {
     desktop: {
       start(): Promise<void>;
       stop(): Promise<void>;
-      getInfo(): Promise<{ name: string; version: string; backend: string }>;
-      getSettings(): Promise<{ accent: string; compact: boolean; volume: number; clientId: string; backgroundImage: string; backgroundBlur: number }>;
-      updateSettings(patch: Partial<{ accent: string; compact: boolean; volume: number; clientId: string; backgroundImage: string; backgroundBlur: number }>): Promise<{
-        accent: string;
-        compact: boolean;
-        volume: number;
-        clientId: string;
-        backgroundImage: string;
-        backgroundBlur: number;
-      }>;
-      clearAppData(): Promise<{ accent: string; compact: boolean; volume: number; clientId: string; backgroundImage: string; backgroundBlur: number }>;
+      getSettings(): Promise<Settings>;
+      updateSettings(patch: Partial<Settings>): Promise<Settings>;
+      clearAppData(): Promise<Settings>;
       historyList(): Promise<SoundCloudTrack[]>;
       historyRecord(track: SoundCloudTrack): Promise<SoundCloudTrack[]>;
       historyClear(): Promise<SoundCloudTrack[]>;

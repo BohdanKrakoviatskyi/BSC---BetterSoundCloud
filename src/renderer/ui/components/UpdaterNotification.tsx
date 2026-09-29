@@ -3,6 +3,7 @@ import { isTauri } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { check, type Update } from '@tauri-apps/plugin-updater';
+import { FaBell, FaDownload } from '../lib/icons';
 
 export function UpdaterNotification() {
   const [update, setUpdate] = useState<Update | null>(null);
@@ -115,7 +116,7 @@ export function UpdaterNotification() {
 
   return <div className="updater-actions" ref={rootRef}>
     <button className={`icon-button updater-bell${update ? ' has-update' : ''}`} type="button" aria-label="Уведомления об обновлениях" aria-expanded={open} aria-haspopup="dialog" title="Уведомления" onClick={() => setOpen((value) => !value)}>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>
+      <FaBell aria-hidden="true" />
       {update && <i className="updater-badge" aria-label="Доступно обновление" />}
     </button>
     {open && <section className="updater-popover" role="dialog" aria-label="Обновление приложения">
@@ -125,7 +126,7 @@ export function UpdaterNotification() {
       {update
         ? <button className="updater-button has-update" type="button" onClick={() => void installUpdate()} disabled={updating}>{updating ? 'Установка…' : 'Обновить'}</button>
         : <button className="updater-button updater-check-button" type="button" onClick={() => void checkForUpdate()} disabled={checking} aria-label={checking ? 'Проверка обновлений' : 'Проверить обновления'} title={checking ? 'Проверка обновлений…' : 'Проверить обновления'}>
-            <svg className={checking ? 'is-checking' : ''} viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3m0 0L7.5 7.5M12 3l4.5 4.5M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" /></svg>
+            <FaDownload className={checking ? 'is-checking' : ''} aria-hidden="true" />
           </button>}
       {import.meta.env.DEV && <details className="updater-log-details" open>
         <summary>Журнал обновления ({logs.length})</summary>

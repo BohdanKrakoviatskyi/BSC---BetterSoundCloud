@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { FaXmark } from '../lib/icons';
 
 type Props = {
   message: string;
@@ -28,9 +29,7 @@ export function ErrorMessage({ message, onRetry, className = '' }: Props) {
         aria-label="Закрыть"
         onClick={() => setDismissed(true)}
       >
-        <svg viewBox="0 0 16 16" aria-hidden="true">
-          <path d="m4 4 8 8M12 4l-8 8" />
-        </svg>
+        <FaXmark aria-hidden="true" />
       </button>
     </div>
   );

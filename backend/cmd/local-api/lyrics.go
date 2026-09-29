@@ -187,7 +187,7 @@ func scoreDeezerCandidate(params trackLyricsParams, candidate deezerTrack, title
 
 	artistScore := 0.0
 	for _, artist := range artists {
-		artistScore = maxFloat(artistScore, lyricsTokenOverlap(artist, candidate.Artist.Name))
+		artistScore = math.Max(artistScore, lyricsTokenOverlap(artist, candidate.Artist.Name))
 	}
 	shortTitle := lyricsTitleSpecificity(bestTitle) < 3
 	// For titles such as "Crush" or "Fever", matching title words is not enough. The catalog
@@ -634,11 +634,4 @@ func uniqueStrings(values []string) []string {
 		result = appendUniqueFold(result, value)
 	}
 	return result
-}
-
-func maxFloat(a, b float64) float64 {
-	if a > b {
-		return a
-	}
-	return b
 }

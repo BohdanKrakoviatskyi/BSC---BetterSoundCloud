@@ -1,7 +1,7 @@
 import { appConfigDir } from '@tauri-apps/api/path';
 import { Command, type Child } from '@tauri-apps/plugin-shell';
+import type { Settings } from '../domain/models';
 
-export type Settings = { accent: string; compact: boolean; volume: number; clientId: string; backgroundImage: string; backgroundBlur: number };
 type AppInfo = { name: string; version: string; backend: string };
 export type SoundCloudProfile = {
   id: number;
@@ -140,10 +140,6 @@ class LocalBackend {
     }
   }
 
-  async getInfo(): Promise<AppInfo> {
-    return this.request<AppInfo>('app.info');
-  }
-
   async getSettings(): Promise<Settings> {
     return this.request<Settings>('settings.get');
   }
@@ -253,7 +249,7 @@ class LocalBackend {
     return this.request<TrackLikeResult>('track.unlike', { trackId, trackUrn, datadomeCookie }, 30_000);
   }
 
-  private async request<T>(method: string, params: object = {}, timeoutMs = 5000): Promise<T> {
+  private async request<T>(method: string, params: Record<string, unknown> = {}, timeoutMs = 5000): Promise<T> {
     if (!this.child) {
       const error = new Error('Локальный backend не запущен');
       console.error('[local-backend] request rejected', { method, error: error.message });
@@ -325,37 +321,4 @@ class LocalBackend {
   }
 }
 
-const backend = new LocalBackend();
-
-export const desktop = {
-  start: () => backend.start(),
-  stop: () => backend.stop(),
-  getInfo: () => backend.getInfo(),
-  getSettings: () => backend.getSettings(),
-  updateSettings: (patch: Partial<Settings>) => backend.updateSettings(patch),
-  historyList: () => backend.historyList(),
-  historyRecord: (track: SoundCloudTrack) => backend.historyRecord(track),
-  historyClear: () => backend.historyClear(),
-  clearAppData: () => backend.clearAppData(),
-  authStatus: () => backend.authStatus(),
-  authLogin: (token: string) => backend.authLogin(token),
-  authRefresh: () => backend.authRefresh(),
-  authLogout: () => backend.authLogout(),
-  myTracks: () => backend.myTracks(),
-  myPlaylists: () => backend.myPlaylists(),
-  playlistTracks: (playlistUrn: string) => backend.playlistTracks(playlistUrn),
-  trackDetails: (trackId: number) => backend.trackDetails(trackId),
-  trackLyrics: (trackId: number, title: string, artist: string, durationMs: number) => backend.trackLyrics(trackId, title, artist, durationMs),
-  trackStream: (trackUrn: string) => backend.trackStream(trackUrn),
-  searchTracks: (query: string) => backend.searchTracks(query),
-  relatedTracks: (trackId: number) => backend.relatedTracks(trackId),
-  mixedSelections: () => backend.mixedSelections(),
-  userProfile: (userId: number) => backend.userProfile(userId),
-  userTracks: (userId: number) => backend.userTracks(userId),
-  userLikes: (userId: number, next?: string) => backend.userLikes(userId, next),
-  userFollowers: (userId: number, next?: string) => backend.userFollowers(userId, next),
-  userFollowings: (userId: number, next?: string) => backend.userFollowings(userId, next),
-  userPlaylists: (userId: number) => backend.userPlaylists(userId),
-  likeTrack: (trackId: number, trackUrn: string, datadomeCookie?: string) => backend.likeTrack(trackId, trackUrn, datadomeCookie),
-  unlikeTrack: (trackId: number, trackUrn: string, datadomeCookie?: string) => backend.unlikeTrack(trackId, trackUrn, datadomeCookie),
-};
+export const desktop = new LocalBackend();

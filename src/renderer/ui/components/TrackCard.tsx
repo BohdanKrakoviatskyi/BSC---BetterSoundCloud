@@ -1,4 +1,6 @@
 import type { Track } from '../../domain/models';
+import { FaHeart, FaMusic, FaPause, FaPlay, FaHeadphones } from '../lib/icons';
+import { formatCount } from '../lib/format';
 
 type Props = {
   track: Track;
@@ -19,7 +21,7 @@ export function TrackCard({ track, artistFallback, isCurrent, isPlaying, isLoadi
     <article className="music-card">
       <div className="music-cover-wrap">
         <button className="cover-button" type="button" onClick={onOpenDetails} aria-label={`Подробнее о треке ${track.title}`}>
-          {track.artwork ? <img className="cover" src={track.artwork} alt="" loading="lazy" /> : <div className="cover cover-fallback" aria-hidden="true">♫</div>}
+          {track.artwork ? <img className="cover" src={track.artwork} alt="" loading="lazy" /> : <div className="cover cover-fallback" aria-hidden="true"><FaMusic /></div>}
         </button>
         <button
           className={`cover-play ${isCurrent && isPlaying ? 'is-playing' : ''}`}
@@ -30,7 +32,7 @@ export function TrackCard({ track, artistFallback, isCurrent, isPlaying, isLoadi
           disabled={isLoading}
           onClick={onPlay}
         >
-          {isLoading ? <span className="player-spinner" /> : isCurrent && isPlaying ? 'Ⅱ' : '▶'}
+          {isLoading ? <span className="player-spinner" /> : isCurrent && isPlaying ? <FaPause /> : <FaPlay />}
         </button>
         {/* Кнопка лайка временно отключена по запросу; API и обработчик сохранены.
         <button
@@ -51,7 +53,7 @@ export function TrackCard({ track, artistFallback, isCurrent, isPlaying, isLoadi
       </div>
       <button className="card-title" type="button" onClick={onOpenDetails} title={track.title}>{track.title}</button>
       <button className="card-subtitle" type="button" onClick={onOpenArtist} title="Открыть профиль автора" aria-disabled={!onOpenArtist}>{track.artist.name || artistFallback || 'SoundCloud'}</button>
-      <div className="card-stats"><span>▶ {Number(track.playCount ?? 0).toLocaleString('ru-RU')}</span><span>♥ {Number(track.likeCount ?? 0).toLocaleString('ru-RU')}</span></div>
+      <div className="card-stats"><span><FaHeadphones /> {formatCount(track.playCount)}</span><span><FaHeart /> {formatCount(track.likeCount)}</span></div>
     </article>
   );
 }

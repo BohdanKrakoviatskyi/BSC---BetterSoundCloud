@@ -9,13 +9,11 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -62,7 +60,6 @@ type emptyParams struct{}
 
 type settings struct {
 	Accent          string `json:"accent"`
-	Compact         bool   `json:"compact"`
 	Volume          int    `json:"volume"`
 	ClientID        string `json:"clientId"`
 	BackgroundImage string `json:"backgroundImage"`
@@ -71,7 +68,6 @@ type settings struct {
 
 type settingsPatch struct {
 	Accent          *string `json:"accent"`
-	Compact         *bool   `json:"compact"`
 	Volume          *int    `json:"volume"`
 	ClientID        *string `json:"clientId"`
 	BackgroundImage *string `json:"backgroundImage"`
@@ -402,11 +398,6 @@ func run(input io.Reader, output io.Writer) error {
 	if err := svc.loadHistory(); err != nil {
 		fmt.Fprintln(os.Stderr, "local backend: playback history ignored:", err)
 	}
-	if os.Getenv("BSC_SWAGGER") == "1" {
-		if err := startSwaggerServer(svc); err != nil {
-			log.Printf("swagger server unavailable: %v", err)
-		}
-	}
 
 	scanner := bufio.NewScanner(input)
 	scanner.Buffer(make([]byte, 4096), maxLine)
@@ -433,67 +424,38 @@ func run(input io.Reader, output io.Writer) error {
 	return scanner.Err()
 }
 
-const swaggerHTML = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>BetterSoundCloud Go API</title>
-<link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css"></head>
-<body><div id="swagger-ui"></div>
-<script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
-<script>window.onload=()=>SwaggerUIBundle({url:'/openapi.json',dom_id:'#swagger-ui',deepLinking:true});</script>
-</body></html>`
-
-func startSwaggerServer(svc *service) error {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return err
+func (s *service) call(method string, params json.RawMessage) (any, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	startedAt := time.Now()
+	log.Printf("rpc stage=received method=%q params_bytes=%d", method, len(params))
+	spec, ok := rpcMethods()[method]
+	if !ok {
+		log.Printf("rpc stage=dispatch_error method=%q error=%q", method, "unknown method")
+		return nil, errors.New("unknown method")
 	}
-	address := "http://" + listener.Addr().String()
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = io.WriteString(w, swaggerHTML)
-	})
-	mux.HandleFunc("GET /openapi.json", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		_ = json.NewEncoder(w).Encode(buildOpenAPISpec(address))
-	})
-	mux.HandleFunc("POST /rpc", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		defer r.Body.Close()
-		var req request
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxLine)).Decode(&req); err != nil || req.Method == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(response{Error: "invalid request"})
-			return
-		}
-		result, callErr := svc.call(req.Method, req.Params)
-		res := response{ID: req.ID, Result: result}
-		if callErr != nil {
-			res.Result = nil
-			res.Error = callErr.Error()
-			w.WriteHeader(http.StatusBadRequest)
-		}
-		_ = json.NewEncoder(w).Encode(res)
-	})
-	server := &http.Server{Handler: loopbackOnly(mux), ReadHeaderTimeout: 5 * time.Second}
-	go func() {
-		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("swagger server stopped: %v", err)
-		}
-	}()
-	log.Printf("Swagger UI: %s/", address)
-	return nil
-}
-
-func loopbackOnly(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		host, _, err := net.SplitHostPort(r.Host)
-		if err != nil || (host != "127.0.0.1" && host != "localhost") {
-			http.Error(w, "loopback access only", http.StatusForbidden)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+	paramsValue := reflect.New(spec.params)
+	if len(params) == 0 {
+		params = json.RawMessage(`{}`)
+	}
+	if err := json.Unmarshal(params, paramsValue.Interface()); err != nil {
+		wrapped := fmt.Errorf("invalid %s payload: %w", method, err)
+		log.Printf("rpc stage=decode_error method=%q params_type=%s error=%q", method, spec.params, wrapped.Error())
+		return nil, wrapped
+	}
+	methodValue := reflect.ValueOf(s).MethodByName(spec.goName)
+	if !methodValue.IsValid() {
+		log.Printf("rpc stage=dispatch_error method=%q go_method=%q error=%q", method, spec.goName, "method disappeared after discovery")
+		return nil, errors.New("unknown method")
+	}
+	outputs := methodValue.Call([]reflect.Value{paramsValue.Elem()})
+	if !outputs[1].IsNil() {
+		err := outputs[1].Interface().(error)
+		log.Printf("rpc stage=handler_error method=%q go_method=%q elapsed_ms=%d error=%q", method, spec.goName, time.Since(startedAt).Milliseconds(), err.Error())
+		return nil, err
+	}
+	log.Printf("rpc stage=complete method=%q result_type=%s elapsed_ms=%d", method, spec.result, time.Since(startedAt).Milliseconds())
+	return outputs[0].Interface(), nil
 }
 
 type rpcMethodSpec struct {
@@ -533,186 +495,8 @@ func rpcNameFromGo(goName string) string {
 	return result.String()
 }
 
-func buildOpenAPISpec(serverURL string) map[string]any {
-	methods := rpcMethods()
-	names := make([]string, 0, len(methods))
-	for name := range methods {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-
-	schemas := map[string]any{}
-	requestVariants := make([]any, 0, len(names))
-	resultVariants := make([]any, 0, len(names))
-	for _, name := range names {
-		spec := methods[name]
-		methodSchemaName := "RPCRequest_" + strings.ReplaceAll(name, ".", "_")
-		paramsSchema := schemaForGoType(spec.params, schemas)
-		schemas[methodSchemaName] = map[string]any{
-			"type": "object", "required": []string{"method", "params"},
-			"properties": map[string]any{
-				"id":     map[string]any{"type": "integer", "format": "int64", "example": 1},
-				"method": map[string]any{"type": "string", "enum": []string{name}},
-				"params": paramsSchema,
-			},
-		}
-		requestVariants = append(requestVariants, map[string]any{"$ref": "#/components/schemas/" + methodSchemaName})
-		resultVariants = append(resultVariants, schemaForGoType(spec.result, schemas))
-	}
-	schemas["RPCRequest"] = map[string]any{"oneOf": requestVariants}
-	schemas["RPCResult"] = map[string]any{"oneOf": resultVariants, "nullable": true}
-	schemas["RPCResponse"] = map[string]any{
-		"type": "object", "properties": map[string]any{
-			"id":     map[string]any{"type": "integer", "format": "int64"},
-			"result": map[string]any{"$ref": "#/components/schemas/RPCResult"},
-			"error":  map[string]any{"type": "string"},
-		},
-	}
-	return map[string]any{
-		"openapi": "3.0.3",
-		"info": map[string]any{
-			"title": "BetterSoundCloud local Go sidecar", "version": appVersion,
-			"description": "Development-only HTTP bridge for the sidecar JSON-RPC methods. Request and result schemas are generated from Go types.",
-		},
-		"servers": []any{map[string]any{"url": serverURL}},
-		"paths": map[string]any{
-			"/rpc": map[string]any{"post": map[string]any{
-				"operationId": "callSidecarMethod", "summary": "Call a Go sidecar method",
-				"description": "The request model is a oneOf of every registered Go method and its typed params.",
-				"requestBody": map[string]any{"required": true, "content": map[string]any{"application/json": map[string]any{
-					"schema": map[string]any{"$ref": "#/components/schemas/RPCRequest"},
-				}}},
-				"responses": map[string]any{
-					"200": map[string]any{"description": "JSON-RPC response", "content": map[string]any{"application/json": map[string]any{"schema": map[string]any{"$ref": "#/components/schemas/RPCResponse"}}}},
-					"400": map[string]any{"description": "Invalid request or method error", "content": map[string]any{"application/json": map[string]any{"schema": map[string]any{"$ref": "#/components/schemas/RPCResponse"}}}},
-				},
-			}},
-		},
-		"components": map[string]any{"schemas": schemas},
-	}
-}
-
-func schemaForGoType(t reflect.Type, components map[string]any) any {
-	if t == reflect.TypeOf(json.RawMessage{}) {
-		return map[string]any{"type": "object", "additionalProperties": true}
-	}
-	switch t.Kind() {
-	case reflect.Pointer:
-		inner := schemaForGoType(t.Elem(), components)
-		if schema, ok := inner.(map[string]any); ok {
-			copy := make(map[string]any, len(schema)+1)
-			for key, value := range schema {
-				copy[key] = value
-			}
-			copy["nullable"] = true
-			return copy
-		}
-		return inner
-	case reflect.Struct:
-		if t.Name() == "" {
-			return structSchema(t, components)
-		}
-		name := t.Name()
-		if _, exists := components[name]; !exists {
-			components[name] = map[string]any{"type": "object", "properties": map[string]any{}}
-			components[name] = structSchema(t, components)
-		}
-		return map[string]any{"$ref": "#/components/schemas/" + name}
-	case reflect.Slice, reflect.Array:
-		return map[string]any{"type": "array", "items": schemaForGoType(t.Elem(), components)}
-	case reflect.Map:
-		return map[string]any{"type": "object", "additionalProperties": schemaForGoType(t.Elem(), components)}
-	case reflect.String:
-		return map[string]any{"type": "string"}
-	case reflect.Bool:
-		return map[string]any{"type": "boolean"}
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32:
-		return map[string]any{"type": "integer", "format": "int32"}
-	case reflect.Int64:
-		return map[string]any{"type": "integer", "format": "int64"}
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return map[string]any{"type": "integer", "format": "int64", "minimum": 0}
-	case reflect.Float32:
-		return map[string]any{"type": "number", "format": "float"}
-	case reflect.Float64:
-		return map[string]any{"type": "number", "format": "double"}
-	case reflect.Interface:
-		return map[string]any{}
-	default:
-		return map[string]any{}
-	}
-}
-
-func structSchema(t reflect.Type, components map[string]any) map[string]any {
-	properties := map[string]any{}
-	required := []string{}
-	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
-		if !field.IsExported() {
-			continue
-		}
-		parts := strings.Split(field.Tag.Get("json"), ",")
-		name := parts[0]
-		if name == "-" {
-			continue
-		}
-		if name == "" {
-			name = strings.ToLower(field.Name[:1]) + field.Name[1:]
-		}
-		properties[name] = schemaForGoType(field.Type, components)
-		optional := field.Type.Kind() == reflect.Pointer
-		for _, option := range parts[1:] {
-			if option == "omitempty" {
-				optional = true
-			}
-		}
-		if !optional {
-			required = append(required, name)
-		}
-	}
-	schema := map[string]any{"type": "object", "properties": properties}
-	if len(required) > 0 {
-		schema["required"] = required
-	}
-	return schema
-}
-
-func (s *service) call(method string, params json.RawMessage) (any, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	startedAt := time.Now()
-	log.Printf("rpc stage=received method=%q params_bytes=%d", method, len(params))
-	spec, ok := rpcMethods()[method]
-	if !ok {
-		log.Printf("rpc stage=dispatch_error method=%q error=%q", method, "unknown method")
-		return nil, errors.New("unknown method")
-	}
-	paramsValue := reflect.New(spec.params)
-	if len(params) == 0 {
-		params = json.RawMessage(`{}`)
-	}
-	if err := json.Unmarshal(params, paramsValue.Interface()); err != nil {
-		wrapped := fmt.Errorf("invalid %s payload: %w", method, err)
-		log.Printf("rpc stage=decode_error method=%q params_type=%s error=%q", method, spec.params, wrapped.Error())
-		return nil, wrapped
-	}
-	methodValue := reflect.ValueOf(s).MethodByName(spec.goName)
-	if !methodValue.IsValid() {
-		log.Printf("rpc stage=dispatch_error method=%q go_method=%q error=%q", method, spec.goName, "method disappeared after discovery")
-		return nil, errors.New("unknown method")
-	}
-	outputs := methodValue.Call([]reflect.Value{paramsValue.Elem()})
-	if !outputs[1].IsNil() {
-		err := outputs[1].Interface().(error)
-		log.Printf("rpc stage=handler_error method=%q go_method=%q elapsed_ms=%d error=%q", method, spec.goName, time.Since(startedAt).Milliseconds(), err.Error())
-		return nil, err
-	}
-	log.Printf("rpc stage=complete method=%q result_type=%s elapsed_ms=%d", method, spec.result, time.Since(startedAt).Milliseconds())
-	return outputs[0].Interface(), nil
-}
-
 // Exported methods prefixed with RPC are discovered automatically, published
-// by the JSON-RPC dispatcher, and included in the generated OpenAPI schemas.
+// by the JSON-RPC dispatcher.
 func (s *service) RPCAppInfo(_ emptyParams) (appInfo, error) {
 	return appInfo{Name: appName, Version: appVersion, Backend: "go-sidecar"}, nil
 }
@@ -728,9 +512,6 @@ func (s *service) RPCSettingsUpdate(patch settingsPatch) (settings, error) {
 			return settings{}, errors.New("accent must be a six-digit hex color")
 		}
 		updated.Accent = strings.ToLower(*patch.Accent)
-	}
-	if patch.Compact != nil {
-		updated.Compact = *patch.Compact
 	}
 	if patch.Volume != nil {
 		if *patch.Volume < 0 || *patch.Volume > 100 {
@@ -2459,7 +2240,7 @@ func apiBase() string {
 }
 
 func defaultSettings() settings {
-	return settings{Accent: "#ff765d", Compact: false, Volume: 70, BackgroundBlur: 0}
+	return settings{Accent: "#ff765d", Volume: 70, BackgroundBlur: 0}
 }
 
 func validSoundCloudClientID(value string) bool {

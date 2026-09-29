@@ -1,4 +1,4 @@
-export type Settings = { accent: string; compact: boolean; volume: number; clientId: string; backgroundImage: string; backgroundBlur: number };
+export type Settings = { accent: string; volume: number; clientId: string; backgroundImage: string; backgroundBlur: number };
 export type Profile = {
   id: number;
   username: string;

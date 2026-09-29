@@ -2,6 +2,8 @@ import type { Track } from '../../domain/models';
 import { TrackCard } from './TrackCard';
 import { useRef } from 'react';
 import { ErrorMessage } from './ErrorMessage';
+import { FaArrowRight, FaChevronLeft, FaChevronRight } from '../lib/icons';
+import { formatCount } from '../lib/format';
 
 type Props = {
   title: string;
@@ -32,11 +34,11 @@ export function TrackCarouselSection({ title, kicker = 'SOUNDCLOUD', tracks, tot
   return (
     <section className="shelf" aria-label={title}>
       <div className="section-heading">
-        <div><div className="eyebrow">{kicker}</div><h2>{title}<span className="track-count"> {(totalCount ?? uniqueTracks.length).toLocaleString('ru-RU')}</span></h2></div>
+        <div><div className="eyebrow">{kicker}</div><h2>{title}<span className="track-count"> {formatCount(totalCount ?? uniqueTracks.length)}</span></h2></div>
         <div className="tracks-actions">
-          {onViewAll && uniqueTracks.length > 0 && <button className="text-action view-all-tracks" type="button" onClick={onViewAll}>Все <span aria-hidden="true">→</span></button>}
+          {onViewAll && uniqueTracks.length > 0 && <button className="text-action view-all-tracks" type="button" onClick={onViewAll}>Все <FaArrowRight aria-hidden="true" /></button>}
           {/*{onClear && uniqueTracks.length > 0 && <button className="text-action" type="button" onClick={onClear}>Очистить</button>}*/}
-          {uniqueTracks.length > 3 && <div className="carousel-controls" aria-label="Прокрутка треков"><button type="button" aria-label="Прокрутить влево" onClick={() => scroll(-1)}>‹</button><button type="button" aria-label="Прокрутить вправо" onClick={() => scroll(1)}>›</button></div>}
+          {uniqueTracks.length > 3 && <div className="carousel-controls" aria-label="Прокрутка треков"><button type="button" aria-label="Прокрутить влево" onClick={() => scroll(-1)}><FaChevronLeft /></button><button type="button" aria-label="Прокрутить вправо" onClick={() => scroll(1)}><FaChevronRight /></button></div>}
         </div>
       </div>
       {error && <ErrorMessage message={error} />}
