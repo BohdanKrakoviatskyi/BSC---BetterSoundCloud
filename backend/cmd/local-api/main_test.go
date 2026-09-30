@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -647,4 +648,82 @@ func TestTrackLikeReturnsCaptchaURLFromForbiddenResponse(t *testing.T) {
 	if result.Liked || result.CaptchaURL != captchaURL {
 		t.Fatalf("result = %#v, want captcha URL and no like", result)
 	}
+}
+
+// The failing transport must produce an error that mentions the URL with the token in it,
+// which is exactly what *url.Error does.
+type urlLeakingTransport struct {
+	token string
+}
+
+func (t urlLeakingTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	return nil, &url_Error{url: request.URL.String()}
+}
+
+func TestOAuthTokenStaysOutOfErrors(t *testing.T) {
+	const token = "SECRET-TOKEN-VALUE-123"
+
+	// A token-free log line must not be rewritten.
+	if got := scrubToken("connection reset by peer", ""); got != "connection reset by peer" {
+		t.Fatalf("an empty token must not alter the text, got %q", got)
+	}
+
+	// A body that echoes the token must lose it.
+	body := fmt.Sprintf(`{"detail":"bad oauth_token=%s"}`, token)
+	if got := scrubToken(body, token); strings.Contains(got, token) {
+		t.Fatalf("token survived body scrubbing: %q", got)
+	}
+
+	// Transport failure: the real function under test.
+	service := newTestService(t, "")
+	service.auth.Token = token
+	service.httpClient = &http.Client{Transport: urlLeakingTransport{token: token}}
+	err := service.getSoundCloudJSONLimit(
+		"https://api-v2.soundcloud.com/me?client_id=abc&oauth_token="+token,
+		&struct{}{},
+		1024,
+	)
+	if err == nil {
+		t.Fatal("expected a transport error")
+	}
+	if strings.Contains(err.Error(), token) {
+		t.Fatalf("token reached the user-visible error: %q", err.Error())
+	}
+	// The user still learns which host failed.
+	if !strings.Contains(err.Error(), "api-v2.soundcloud.com") {
+		t.Fatalf("expected the host in the message, got %q", err.Error())
+	}
+
+	// Non-200: the body is logged scrubbed, the user gets the status only.
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.WriteHeader(http.StatusForbidden)
+		_, _ = writer.Write([]byte(fmt.Sprintf(`{"detail":"bad oauth_token=%s"}`, token)))
+	}))
+	defer server.Close()
+
+	service.httpClient = server.Client()
+	err = service.getSoundCloudJSONLimit(server.URL+"/me?oauth_token="+token, &struct{}{}, 1024)
+	if err == nil {
+		t.Fatal("expected an HTTP status error")
+	}
+	if strings.Contains(err.Error(), token) {
+		t.Fatalf("token reached the user-visible error: %q", err.Error())
+	}
+	if !strings.Contains(err.Error(), "403") {
+		t.Fatalf("expected the status code in the message, got %q", err.Error())
+	}
+	// The raw body must not be handed to the user.
+	if strings.Contains(err.Error(), "detail") {
+		t.Fatalf("raw response body leaked to the user: %q", err.Error())
+	}
+}
+
+// url_Error reproduces the part of *url.Error that matters here: its message quotes the
+// full request URL, query string and token included.
+type url_Error struct {
+	url string
+}
+
+func (e *url_Error) Error() string {
+	return fmt.Sprintf("Get %q: dial tcp: lookup api-v2.soundcloud.com: no such host", e.url)
 }

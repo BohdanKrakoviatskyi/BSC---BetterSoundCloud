@@ -509,13 +509,13 @@ func (s *service) RPCSettingsUpdate(patch settingsPatch) (settings, error) {
 	updated := s.settings
 	if patch.Accent != nil {
 		if !validAccent(*patch.Accent) {
-			return settings{}, errors.New("accent must be a six-digit hex color")
+			return settings{}, errors.New("акцент должен быть шестизначным цветом в формате hex")
 		}
 		updated.Accent = strings.ToLower(*patch.Accent)
 	}
 	if patch.Volume != nil {
 		if *patch.Volume < 0 || *patch.Volume > 100 {
-			return settings{}, errors.New("volume must be between 0 and 100")
+			return settings{}, errors.New("громкость должна быть от 0 до 100")
 		}
 		updated.Volume = *patch.Volume
 	}
@@ -528,13 +528,13 @@ func (s *service) RPCSettingsUpdate(patch settingsPatch) (settings, error) {
 	}
 	if patch.BackgroundImage != nil {
 		if !validBackgroundImage(*patch.BackgroundImage) {
-			return settings{}, errors.New("background image must be a JPEG data URL under 700 KB")
+			return settings{}, errors.New("фон должен быть изображением JPEG в формате data URL размером до 700 КБ")
 		}
 		updated.BackgroundImage = *patch.BackgroundImage
 	}
 	if patch.BackgroundBlur != nil {
 		if *patch.BackgroundBlur < 0 || *patch.BackgroundBlur > 24 {
-			return settings{}, errors.New("background blur must be between 0 and 24")
+			return settings{}, errors.New("размытие фона должно быть от 0 до 24")
 		}
 		updated.BackgroundBlur = *patch.BackgroundBlur
 	}
@@ -2100,7 +2100,7 @@ func (s *service) loadSettings() error {
 		return fmt.Errorf("parse settings: %w", err)
 	}
 	if !validAccent(loaded.Accent) || loaded.Volume < 0 || loaded.Volume > 100 || (loaded.ClientID != "" && !validSoundCloudClientID(loaded.ClientID)) || !validBackgroundImage(loaded.BackgroundImage) || loaded.BackgroundBlur < 0 || loaded.BackgroundBlur > 24 {
-		return errors.New("saved settings are invalid")
+		return errors.New("сохранённые настройки повреждены")
 	}
 	s.settings = loaded
 	return nil

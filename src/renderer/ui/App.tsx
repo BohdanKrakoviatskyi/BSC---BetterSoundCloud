@@ -1079,6 +1079,13 @@ export function App() {
   async function logout(): Promise<boolean> {
     setLoginError('');
     setError('');
+    // The embedded webview keeps its own SoundCloud session. Without this, a later launch
+    // is signed back in by the auth script with no user action.
+    try {
+      await invoke('end_soundcloud_session');
+    } catch (reason) {
+      console.warn('[ui.auth.logout] could not clear the embedded session', { error: describeError(reason, 'unknown error') });
+    }
     try {
       await appGateway.authLogout();
     } catch (reason) {

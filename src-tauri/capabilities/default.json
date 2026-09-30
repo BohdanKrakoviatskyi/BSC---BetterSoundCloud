@@ -2,7 +2,9 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default desktop capability for BetterSoundCloud",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "updater:default",
@@ -21,7 +23,24 @@
         }
       ]
     },
-    "shell:allow-stdin-write",
-    "shell:allow-kill"
+    {
+      "identifier": "shell:allow-stdin-write",
+      "allow": [
+        {
+          "name": "binaries/local-api",
+          "sidecar": true,
+          "args": false
+        }
+      ]
+    },
+    {
+      "identifier": "shell:allow-kill",
+      "allow": [
+        {
+          "name": "binaries/local-api",
+          "sidecar": true
+        }
+      ]
+    }
   ]
 }

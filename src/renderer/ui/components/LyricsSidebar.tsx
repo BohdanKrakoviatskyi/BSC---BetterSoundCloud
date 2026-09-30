@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import type { Track, TrackLyrics } from '../../domain/models';
 import type { LyricsPanelPhase } from '../types';
@@ -97,10 +97,34 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
   const lines = lyrics?.lines ?? [];
   const hasLines = lines.length > 0;
   // Only timestamped sources can follow playback accurately.
+
+/**
+ * Human-readable name of the provider a lyrics text came from. Users asked where the words
+ * come from; showing a raw host is clearer than showing nothing.
+ */
+function lyricsSourceLabel(sourceUrl: string): string {
+  try {
+    const host = new URL(sourceUrl).hostname.replace(/^www\./, '');
+    return host === 'lrclib.net' ? 'LRCLIB' : host;
+  } catch {
+    return sourceUrl;
+  }
+}
+
   const hasTimedLyrics = Boolean(lyrics?.isSynced || lyrics?.isDemo);
   const activeIndex = hasTimedLyrics ? findActiveLineIndex(lines, isCurrentTrack ? playbackPositionMs : 0) : -1;
   const durationSeconds = (track.durationMs || 0) / 1000;
   const scrubSecond = scrubSeconds ?? playbackPositionMs / 1000;
+  const sourceUrl = lyrics?.sourceUrl;
+  const sourceLabel = useMemo(
+    () => (sourceUrl ? lyricsSourceLabel(sourceUrl) : null),
+    [sourceUrl],
+  );
+  // Why the matcher picked this text: every provider decision it logged.
+  const sourceTrail = useMemo(
+    () => (lyrics?.logs ?? []).filter((entry) => entry.trim().length > 0),
+    [lyrics?.logs],
+  );
 
   const seekMax = Math.max(1, Math.round(durationSeconds));
   const seekFraction = durationSeconds > 0
@@ -351,6 +375,24 @@ export function LyricsSidebar({ phase, track, lyrics, loading, error, isCurrentT
             <span>Текст песни</span>
             {lyrics?.isDemo && (
               <span className="lyrics-demo-badge" title="Демонстрационный текст: подключение настоящего источника ещё не готово">демо</span>
+            )}
+            {hasTimedLyrics ? (
+              <span className="lyrics-sync-badge" title={lyrics?.isDemo
+                ? 'Демонстрационный текст идёт по тайм-кодам, но настоящий тайм-код не проверен'
+                : 'Текст содержит тайм-коды и следует за воспроизведением'}>синхрон</span>
+            ) : (
+              <span className="lyrics-sync-badge is-unsynced" title="Текст без тайм-кодов: строки не подсвечиваются и не листаются за playback">без тайм-кодов</span>
+            )}
+            {sourceLabel && (
+              <a
+                className="lyrics-source-link"
+                href={sourceUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                title={sourceTrail.length > 0 ? `Как выбран этот текст:\n${sourceTrail.join('\n')}` : undefined}
+              >
+                {sourceLabel}
+              </a>
             )}
           </div>
           <div className="lyrics-toolbar-actions">

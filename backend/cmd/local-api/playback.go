@@ -15,6 +15,16 @@ import (
 
 // const soundcloudClientID = "3uJIGBRwdofKn6QKzONvDxUM1Vs4bTv9"
 
+// scrubToken removes the OAuth token from text that is about to be logged or shown.
+// Transport errors quote the full URL, and that URL carries oauth_token, so any err.Error()
+// reaching a log or the renderer is scrubbed here first.
+func scrubToken(text, token string) string {
+	if token == "" {
+		return text
+	}
+	return strings.ReplaceAll(text, token, "<token>")
+}
+
 type trackStreamParams struct {
 	TrackURN string `json:"trackUrn"`
 }
@@ -251,35 +261,47 @@ func (s *service) getSoundCloudJSON(endpoint string, destination any) error {
 func (s *service) getSoundCloudJSONLimit(endpoint string, destination any, maxBytes int64) error {
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
 	if err != nil {
-		return err
+return fmt.Errorf("некорректный адрес SoundCloud: %s", scrubToken(err.Error(), s.auth.Token))
 	}
 	req.Header.Set("Authorization", "OAuth "+s.auth.Token)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Origin", "https://soundcloud.com")
 	req.Header.Set("Referer", "https://soundcloud.com/")
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		log.Printf("track.stream stage=transport_error error=%q", err.Error())
-		return fmt.Errorf("сетевая ошибка: %w", err)
-	}
-	defer resp.Body.Close()
+
+	// Parsed before the request so a transport failure can name the host without ever
+	// formatting the URL, which still holds the token in its query string.
 	parsedEndpoint, _ := url.Parse(endpoint)
 	endpointHost := "unknown"
-	if parsedEndpoint != nil {
+	if parsedEndpoint != nil && parsedEndpoint.Host != "" {
 		endpointHost = parsedEndpoint.Host
 	}
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		// The cause is unwrapped so the log keeps the transport detail, and the token is
+		// scrubbed because that detail can quote the request URL.
+		cause := errors.Unwrap(err)
+		if cause == nil {
+			cause = err
+		}
+		log.Printf("soundcloud.api stage=transport_error host=%s error=%q", endpointHost, scrubToken(cause.Error(), s.auth.Token))
+		return fmt.Errorf("сетевая ошибка при обращении к SoundCloud (%s)", endpointHost)
+	}
+	defer resp.Body.Close()
+
 	log.Printf("soundcloud.api stage=response host=%s status=%d content_type=%q", endpointHost, resp.StatusCode, resp.Header.Get("Content-Type"))
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		detail := strings.TrimSpace(string(body))
 		if detail != "" {
-			return fmt.Errorf("SoundCloud API вернул HTTP %d: %s", resp.StatusCode, detail)
+			// Full body to the log, scrubbed. The user gets the status only.
+			log.Printf("soundcloud.api stage=error_body host=%s body=%q", endpointHost, scrubToken(detail, s.auth.Token))
 		}
-		return fmt.Errorf("SoundCloud API вернул HTTP %d", resp.StatusCode)
+		return fmt.Errorf("SoundCloud вернул ошибку HTTP %d", resp.StatusCode)
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBytes)).Decode(destination); err != nil {
-		return fmt.Errorf("ошибка чтения JSON: %w", err)
+return fmt.Errorf("ошибка чтения JSON: %s", scrubToken(err.Error(), s.auth.Token))
 	}
 	return nil
 }

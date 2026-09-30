@@ -79,7 +79,7 @@ button { color: inherit; }
 .switch:checked { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 36%, #20232b); }
 .switch:checked::after { left: 17px; background: var(--accent); }
 .volume-control { display: flex; align-items: center; gap: 11px; }
-.volume-control input { width: 120px; accent-color: var(--accent); }
+.volume-control input { width: 120px; accent-color: var(--slider-fill); }
 .volume-control output { min-width: 32px; color: #d8dbe2; font-size: 11px; text-align: right; }
 .error-message { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 14px; padding: 9px 11px; border: 1px solid #9b4b5c99; border-radius: 7px; color: #ffc4ce; background: #5c243152; font-size: 11px; }
 .error-message-text { flex: 1; min-width: 0; }
@@ -102,3 +102,8 @@ button { color: inherit; }
 @media (max-width: 1000px) { .player-bar { grid-template-columns: minmax(140px, 1fr) minmax(230px, 1.3fr); gap: 14px; padding: 12px 20px; } }
 @media (max-width: 760px) { .track-detail-hero { grid-template-columns: minmax(150px, 240px) minmax(0, 1fr); gap: 20px; padding: 20px; } .track-detail-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 760px) { .topbar { gap: 12px; } .track-search { width: min(300px, 58%); } }
+
+/* Volume follows the accent through the lightened tokens. The native widget is replaced
+   because accent-color cannot be derived from a color-mix reliably across engines. */
+.volume-control input[type='range']::-webkit-slider-runnable-track { height: 5px; border-radius: 999px; background: var(--slider-track); }
+.volume-control input[type='range']::-moz-range-track { height: 5px; border-radius: 999px; background: var(--slider-track); }

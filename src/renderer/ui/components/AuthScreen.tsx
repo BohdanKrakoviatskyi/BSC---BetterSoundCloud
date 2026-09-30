@@ -150,6 +150,10 @@ export function AuthScreen({ error, busy, clientId, onLogin, onSilentLogin }: Pr
               </p>
             )}
             {silentError && <ErrorMessage message={silentError} className="auth-inline-error" />}
+            {/* A failed sign-in used to render only inside the collapsed manual panel, so the
+                attempt failed silently. While the panel is closed the error belongs here; when
+                it is open the panel shows it, so exactly one copy is on screen at a time. */}
+            {!manualOpen && error && <ErrorMessage message={error} className="auth-inline-error" />}
           </div>
 
           <aside className={`manual-panel${manualOpen ? ' is-open' : ''}`}>

@@ -94,9 +94,18 @@ class LocalBackend {
   private buffer = '';
   private pending = new Map<number, PendingRequest>();
   private starting: Promise<void> | null = null;
+  /** Consecutive failed respawns, used to back off instead of spinning. */
+  private restartAttempts = 0;
+  /** Set once the sidecar is deliberately stopped, so stop() is not undone by a restart. */
+  private stopping = false;
 
   start(): Promise<void> {
-    if (this.child) return Promise.resolve();
+    this.stopping = false;
+    return this.spawnSidecar();
+  }
+
+  private async spawnSidecar(): Promise<void> {
+    if (this.child) return;
     if (this.starting) return this.starting;
 
     this.starting = (async () => {
@@ -114,6 +123,7 @@ class LocalBackend {
         console.error('[local-backend] process closed', { exitCode: code });
         this.child = null;
         this.failAll(new Error(`Локальный Go backend завершился (${code ?? 'signal'})`));
+        if (!this.stopping) void this.restartAfterExit(code ?? 'signal');
       });
       try {
         this.child = await command.spawn();
@@ -123,6 +133,7 @@ class LocalBackend {
       }
       console.info('[local-backend] sidecar started');
       await this.request<AppInfo>('app.info');
+      this.restartAttempts = 0;
     })().finally(() => {
       this.starting = null;
     });
@@ -130,7 +141,40 @@ class LocalBackend {
     return this.starting;
   }
 
+  /**
+   * Brings the sidecar back after an unexpected exit.
+   *
+   * The delay grows with each failure so a sidecar that cannot start does not spin, and the
+   * attempt count is capped: past the cap the app stays down and says so, rather than
+   * restarting forever behind a spinner.
+   */
+  private async restartAfterExit(reason: string | number): Promise<void> {
+    const maxAttempts = 5;
+    if (this.restartAttempts >= maxAttempts) {
+      console.error('[local-backend] giving up after repeated crashes', {
+        attempts: this.restartAttempts,
+        reason,
+      });
+      return;
+    }
+    const delay = Math.min(4000, 250 * 2 ** this.restartAttempts);
+    this.restartAttempts += 1;
+    console.warn('[local-backend] restarting sidecar', {
+      attempt: this.restartAttempts,
+      delayMs: delay,
+      reason,
+    });
+    await new Promise((resolveDelay) => window.setTimeout(resolveDelay, delay));
+    if (this.stopping) return;
+    try {
+      await this.spawnSidecar();
+    } catch (error) {
+      console.error('[local-backend] restart failed', { error });
+    }
+  }
+
   async stop(): Promise<void> {
+    this.stopping = true;
     const child = this.child;
     this.child = null;
     try {
@@ -261,7 +305,7 @@ class LocalBackend {
     const response = new Promise<T>((resolve, reject) => {
       const timer = window.setTimeout(() => {
         this.pending.delete(id);
-        const error = new Error(`Локальный backend не ответил вовремя: ${method}`);
+        const error = new Error(`Локальный backend не ответил вовремя. Попробуйте ещё раз.`);
         console.error('[local-backend] request timed out', { id, method, elapsedMs: Date.now() - startedAt, timeoutMs });
         reject(error);
       }, timeoutMs);

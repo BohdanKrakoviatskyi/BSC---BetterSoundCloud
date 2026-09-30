@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { Track } from '../../domain/models';
 import { SoundCloudWidget, type SoundCloudWidgetControls } from './SoundCloudWidget';
 import { DirectStreamPlayer } from './DirectStreamPlayer';
@@ -270,7 +270,7 @@ export function PlayerBar({ track, seekRequest, onSeekRequestHandled, repeatOne,
           step="any"
           value={Math.min(scrubPosition ?? currentTime, duration || 1)}
           disabled={!widgetControls || !duration}
-          style={{ background: `linear-gradient(to right,var(--accent) 0%,var(--accent) ${Math.min(100, ((scrubPosition ?? currentTime) / (duration || 1)) * 100)}%,#555555 ${Math.min(100, ((scrubPosition ?? currentTime) / (duration || 1)) * 100)}%,#555555 100%)` }}
+          style={{ '--range-fill': `${Math.min(100, ((scrubPosition ?? currentTime) / (duration || 1)) * 100)}%` } as CSSProperties}
           onChange={(event) => {
             if (seekReleaseTimerRef.current !== null) {
               window.clearTimeout(seekReleaseTimerRef.current);

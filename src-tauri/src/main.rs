@@ -264,15 +264,23 @@ async fn show_captcha_window(app: AppHandle, url: String) -> Result<(), String> 
         || host.ends_with(".captcha-delivery.com")
         || host == "soundcloud.com"
         || host.ends_with(".soundcloud.com");
+    // The port is checked too: the host allowlist above says nothing about
+    // `https://soundcloud.com:8443`, which is a different origin serving a different page.
     if url.scheme() != "https"
         || !allowed_host
         || !url.username().is_empty()
         || url.password().is_some()
+        || url.port().is_some_and(|port| port != 443)
     {
         return Err("SoundCloud вернул небезопасную ссылку проверки".to_owned());
     }
 
-    let baseline_cookie = match app.get_webview_window("main") {
+    // The session lives in the auth webview, not in main: main never loads
+    // soundcloud.com, so reading its cookie store always came up empty.
+    let baseline_cookie = match app
+        .get_webview_window(AUTH_WINDOW_LABEL)
+        .or_else(|| app.get_webview_window("main"))
+    {
         Some(window) => datadome_cookie_for(&window)?,
         None => None,
     };
@@ -389,7 +397,17 @@ fn show_auth_window(app: AppHandle) -> Result<(), String> {
 /// Forward captured credentials for validation; do not close the window until
 /// the Go backend confirms that the token actually belongs to a user.
 #[tauri::command]
-fn save_credentials(app: AppHandle, token: String, client_id: String) -> Result<(), String> {
+fn save_credentials(
+    app: AppHandle,
+    window: tauri::Window,
+    token: String,
+    client_id: String,
+) -> Result<(), String> {
+    // `mark_captcha_challenge_completed` right above this already checks its label; this one
+    // did not, so any *.soundcloud.com page the window navigated to could hand over a token.
+    if window.label() != AUTH_WINDOW_LABEL {
+        return Err("сигнал входа получен не из окна авторизации".to_owned());
+    }
     let token = token.trim().to_owned();
     let client_id = client_id.trim().to_owned();
 
@@ -424,6 +442,46 @@ fn finish_auth_flow(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Ends the embedded SoundCloud session on logout.
+///
+/// The auth webview runs with `incognito(false)` so sign-in can persist across launches.
+/// That also means `soundcloud_session` outlives a logout, and the auth init script keeps
+/// polling localStorage, so the next launch is signed back in with no user action. This
+/// closes the window and deletes the cookies for the SoundCloud hosts.
+#[tauri::command]
+fn end_soundcloud_session(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(AUTH_WINDOW_LABEL) {
+        window
+            .close()
+            .map_err(|error| format!("не удалось закрыть окно SoundCloud: {error}"))?;
+    }
+    let Some(window) = app.get_webview_window("main") else {
+        return Ok(());
+    };
+    // The session cookie and the anonymous id are the two that let the auth init script
+    // recognise a signed-in page. Both are set on .soundcloud.com, so both are addressed
+    // by domain rather than by host.
+    //
+    // Failures are logged and ignored on purpose: the Go side already dropped the token, and
+    // refusing to sign out because a cookie could not be removed is the worse outcome.
+    match window.cookies() {
+        Ok(cookies) => {
+            for cookie in cookies {
+                let host = cookie.domain().unwrap_or_default().to_ascii_lowercase();
+                if !(host == "soundcloud.com" || host.ends_with(".soundcloud.com")) {
+                    continue;
+                }
+                let name = cookie.name().to_owned();
+                if let Err(error) = window.delete_cookie(cookie) {
+                    eprintln!("[session] delete {name} failed: {error}");
+                }
+            }
+        }
+        Err(error) => eprintln!("[session] could not read cookies: {error}"),
+    }
+    Ok(())
+}
+
 fn show_window(window: &WebviewWindow) -> Result<(), String> {
     window.show().map_err(|error| error.to_string())?;
     window.set_focus().map_err(|error| error.to_string())
@@ -442,7 +500,8 @@ fn main() {
             poll_captcha_challenge,
             mark_captcha_challenge_completed,
             save_credentials,
-            finish_auth_flow
+            finish_auth_flow,
+            end_soundcloud_session,
         ])
         .run(tauri::generate_context!())
         .expect("error while running BetterSoundCloud");

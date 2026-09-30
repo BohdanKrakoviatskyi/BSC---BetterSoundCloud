@@ -85,7 +85,7 @@ func (s *service) RPCTrackLyrics(params trackLyricsParams) (trackLyrics, error) 
 		return trackLyrics{}, errors.New("некорректные данные трека")
 	}
 	if s.httpClient == nil {
-		return trackLyrics{}, errors.New("lyrics HTTP client is not configured")
+		return trackLyrics{}, errors.New("сервис поиска текста песни недоступен")
 	}
 
 	logs := []string{"Старт поиска текста: " + params.Title + " — " + params.Artist}
@@ -401,7 +401,7 @@ func (s *service) getLyricsJSON(endpoint string, target any) error {
 				}
 				lastErr = err
 			} else {
-				lastErr = fmt.Errorf("lyrics provider returned HTTP %d", response.StatusCode)
+				lastErr = fmt.Errorf("источник текста вернул ошибку HTTP %d", response.StatusCode)
 				response.Body.Close()
 				if response.StatusCode < 500 {
 					return lastErr
