@@ -141,6 +141,25 @@ jobs:
             -s -k "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN"
           security list-keychain -d user -s "$KEYCHAIN" login.keychain-db
           rm -f "$RUNNER_TEMP/cert.p12"
+      - name: TEMP diagnostic - Apple env presence
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ steps.apple.outputs.identity }}
+          APPLE_ID: ${{ secrets.APPLE_ID || null }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD || null }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || null }}
+        run: |
+          for v in APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "${!v+x}" ]; then
+              echo "UNSET      $v"
+            elif [ -n "${!v}" ]; then
+              echo "NONEMPTY   $v"
+            else
+              echo "EMPTY      $v  <-- still satisfies var_os presence check"
+            fi
+          done
+
       - name: Build and publish release
         uses: tauri-apps/tauri-action@action-v0.6.2
         env:
@@ -151,9 +170,13 @@ jobs:
           # tauri.conf.json and codesign then runs with no identity at all. The
           # apple step emits the real identity, or "-" for ad-hoc signing.
           APPLE_SIGNING_IDENTITY: ${{ steps.apple.outputs.identity }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # || null, for the same reason as the identity above: tauri-macos-sign
+          # checks these with var_os and treats "present" as "configured", so an
+          # empty string sends it down the notarisation path with no credentials and
+          # the bundle fails with "Team ID must be at least 3 characters".
+          APPLE_ID: ${{ secrets.APPLE_ID || null }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD || null }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || null }}
         with:
           tauriScript: npx tauri
           tagName: ${{ inputs.tag || github.ref_name }}
