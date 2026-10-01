@@ -10,11 +10,17 @@ on:
         description: Version tag to build and publish (for example, v0.1.15)
         required: true
         type: string
-      platforms:
-        description: 'Runner labels to build, comma-separated. Empty means all of them.'
+      platform:
+        description: 'Runner to build. "all" builds every platform.'
         required: false
-        default: ''
-        type: string
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - ubuntu-24.04
+          - windows-latest
+          - macos-15-intel
+          - macos-latest
 
 permissions:
   contents: write
@@ -23,9 +29,6 @@ jobs:
   publish:
     name: Publish (${{ matrix.platform }})
     runs-on: ${{ matrix.platform }}
-    # Пустой inputs.platforms означает «собрать всё». Список через запятую сужает
-    # матрицу до нужных раннеров, чтобы можно было проверить одну платформу.
-    if: ${{ inputs.platforms == '' || contains(inputs.platforms, matrix.platform) }}
     strategy:
       fail-fast: false
       max-parallel: 1
@@ -41,7 +44,10 @@ jobs:
         #
         # No target is pinned per platform, so every runner builds natively and the sidecar is
         # compiled for the architecture the bundler will target. See actions/runner-images README.
-        platform: [ubuntu-24.04, windows-latest, macos-15-intel, macos-latest]
+        # Пустой inputs.platform (то есть тег-пуш, где inputs не задан) разворачивается
+        # в полный список. Явный выбор собирает одну платформу: matrix недоступен в
+        # job-level if, поэтому фильтр живёт здесь, а fromJSON превращает строку в массив.
+        platform: ${{ inputs.platform != '' && inputs.platform != 'all' && fromJSON(format('["{0}"]', inputs.platform)) || fromJSON('["ubuntu-24.04", "windows-latest", "macos-15-intel", "macos-latest"]') }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
