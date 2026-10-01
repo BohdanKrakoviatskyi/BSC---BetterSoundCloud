@@ -67,6 +67,38 @@
 .playlist-dialog-track:hover .playlist-dialog-track-play{opacity:1}
 .my-library-page>.page-heading{margin-bottom:24px}
 
+/* Animated wallpaper. A GIF is stored untouched, so it plays on its own; the badge
+   exists so a moving background reads as a choice rather than as a glitch. */
+.background-preview {
+  position: relative;
+}
+.background-animated-badge {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  padding: 2px 7px;
+  border: 1px solid rgba(255, 255, 255, .22);
+  border-radius: 999px;
+  background: rgba(8, 8, 9, .74);
+  color: #f0eef0;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .4px;
+  text-transform: lowercase;
+  pointer-events: none;
+}
+.background-preview.is-animated {
+  outline: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  outline-offset: 2px;
+}
+.background-blur-note {
+  display: block;
+  max-width: 34ch;
+  color: #8b8a91;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
 /* Track details */
 .track-detail-page{max-width:1320px;padding:14px clamp(0px,1.2vw,18px) 58px}
 .track-detail-back{padding:6px 0;border:0;border-radius:8px;background:transparent;color:#a3a3a9;transition:color .18s}

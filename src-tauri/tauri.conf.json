@@ -21,7 +21,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; base-uri 'none'; object-src 'self'; form-action 'none'; frame-ancestors 'none'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' https://w.soundcloud.com; frame-src https://w.soundcloud.com; media-src 'self' blob: https://*.sndcdn.com https://*.soundcloud.cloud; worker-src 'self' blob:; img-src 'self' asset: data: https://*.sndcdn.com https://*.soundcloud.com; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' ipc: http://ipc.localhost https://*.sndcdn.com https://*.soundcloud.cloud"
+      "csp": "default-src 'self'; base-uri 'none'; object-src 'self'; form-action 'none'; frame-ancestors 'none'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' https://w.soundcloud.com; frame-src https://w.soundcloud.com; media-src 'self' blob: https://*.sndcdn.com https://*.soundcloud.cloud; worker-src 'self' blob:; img-src 'self' asset: data: blob: https://*.sndcdn.com https://*.soundcloud.com; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' ipc: http://ipc.localhost https://*.sndcdn.com https://*.soundcloud.cloud"
     }
   },
   "bundle": {

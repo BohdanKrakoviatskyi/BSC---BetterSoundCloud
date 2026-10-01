@@ -1,12 +1,28 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import type { Profile, Settings } from '../types';
 import { ErrorMessage } from './ErrorMessage';
-import { createUserBackgroundPreset, deleteUserBackgroundPreset, loadUserBackgroundPresets, type UserBackgroundPreset } from '../lib/backgroundPresets';
+import { createUserBackgroundPreset, deleteUserBackgroundPreset, isAnimatedPreset, loadUserBackgroundPresets, type UserBackgroundPreset } from '../lib/backgroundPresets';
 import { describeError, normalizeToken } from '../lib/format';
 import './SettingsPanel.css';
 
 const MAX_BACKGROUND_DATA_URL_LENGTH = 700_000;
+// A GIF cannot be re-encoded: a canvas keeps one frame, so the animation would be lost. The
+// file is carried through as base64 instead, which costs about a third more than the raw bytes
+// and therefore needs a larger ceiling than a redrawn still image does.
+const MAX_ANIMATED_FILE_BYTES = 12 * 1024 * 1024;
+/**
+ * The longest data URL an animation of MAX_ANIMATED_FILE_BYTES can produce.
+ *
+ * Derived rather than written down on purpose. base64 spends four characters on every three
+ * bytes, so a literal number here silently disagrees with the file limit above it, and that
+ * disagreement is what once made an 11.5 MB GIF pass the file check and then fail as "too big".
+ */
+const MAX_ANIMATED_BACKGROUND_LENGTH =
+  'data:image/gif;base64,'.length + Math.ceil((MAX_ANIMATED_FILE_BYTES * 4) / 3) + 64;
 const MAX_BACKGROUND_FILE_SIZE = 25 * 1024 * 1024;
+/** Formats that can be redrawn by canvas without losing anything that matters. */
+const REDRAWABLE_BACKGROUND_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const ANIMATED_BACKGROUND_TYPE = 'image/gif';
 const BACKGROUND_PRESETS = [
   { name: 'Синий нуар', fileName: '025bef26455d0dd81b480740debab6aa.jpg' },
   { name: 'Ночной пейзаж', fileName: '24a15fa7c44039c32c08754e5f88b0ad.jpg' },
@@ -16,12 +32,46 @@ const BACKGROUND_PRESETS = [
   { name: 'Красное яблоко', fileName: 'сау.jpg' },
 ] as const;
 
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ''));
+    reader.onerror = () => reject(new Error('Не удалось прочитать файл.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+/** True for file types that carry their own animation and must not be redrawn. */
+function isAnimatedBackground(file: File): boolean {
+  return file.type === ANIMATED_BACKGROUND_TYPE;
+}
+
 async function encodeBackgroundImage(file: File): Promise<string> {
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-    throw new Error('Выбери изображение в формате JPEG, PNG или WebP.');
+  if (![...REDRAWABLE_BACKGROUND_TYPES, ANIMATED_BACKGROUND_TYPE].includes(file.type)) {
+    throw new Error('Выбери изображение в формате JPEG, PNG, WebP или GIF.');
   }
   if (file.size > MAX_BACKGROUND_FILE_SIZE) {
     throw new Error('Размер исходного изображения не должен превышать 25 МБ.');
+  }
+  // Checked against the file itself, because that is the number the user can see and reason
+  // about. Comparing the encoded string length instead would reject files the picker allowed.
+  if (isAnimatedBackground(file) && file.size > MAX_ANIMATED_FILE_BYTES) {
+    throw new Error('Анимация слишком большая: выбери GIF не больше 12 МБ.');
+  }
+
+  // Animated formats bypass the canvas entirely. Re-encoding would silently flatten the
+  // animation, and the user would be looking at a still image after choosing a GIF on purpose.
+  if (isAnimatedBackground(file)) {
+    const dataUrl = await readAsDataUrl(file);
+    if (!dataUrl.startsWith('data:' + ANIMATED_BACKGROUND_TYPE)) {
+      throw new Error('Файл оказался не анимацией. Выбери GIF.');
+    }
+    // A guard against an encoding that came out longer than base64 could produce at all, which
+    // would mean the reader gave back something other than the file that was handed to it.
+    if (dataUrl.length > MAX_ANIMATED_BACKGROUND_LENGTH) {
+      throw new Error('Не удалось подготовить анимацию: файл слишком большой.');
+    }
+    return dataUrl;
   }
 
   const image = await createImageBitmap(file);
@@ -61,6 +111,7 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
   const [token, setToken] = useState('');
   const [showToken, setShowToken] = useState(false);
   const [backgroundBusy, setBackgroundBusy] = useState(false);
+  const backgroundIsAnimated = Boolean(settings.backgroundImage && isAnimatedPreset(settings.backgroundImage));
   const [backgroundError, setBackgroundError] = useState('');
   const [userBackgroundPresets, setUserBackgroundPresets] = useState<UserBackgroundPreset[]>([]);
   const [backgroundPresetName, setBackgroundPresetName] = useState('');
@@ -232,7 +283,7 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
             <div className="setting-row background-image-setting">
               <span><b>Фоновое изображение</b></span>
               <label className="background-upload-button">
-                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => void selectBackground(event)} disabled={backgroundBusy} />
+                <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={(event) => void selectBackground(event)} disabled={backgroundBusy} />
                 <span>{backgroundBusy ? 'Обрабатываю…' : settings.backgroundImage ? 'Заменить' : 'Выбрать фото'}</span>
               </label>
             </div>
@@ -264,8 +315,9 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
             {backgroundError && <p className="background-image-error" role="alert">{backgroundError}</p>}
             {settings.backgroundImage && <>
               <div className="background-preview-row">
-                <div className="background-preview" aria-label="Предпросмотр текущего фона">
+                <div className={`background-preview ${backgroundIsAnimated ? 'is-animated' : ''}`} aria-label="Предпросмотр текущего фона">
                   <span style={{ backgroundImage: `url("${settings.backgroundImage}")`, filter: `blur(${settings.backgroundBlur}px)` }} />
+                  {backgroundIsAnimated && <span className="background-animated-badge" aria-live="polite">анимация</span>}
                 </div>
                 <button className="text-action background-remove-button" type="button" onClick={() => { setBackgroundError(''); onUpdate({ backgroundImage: '', backgroundBlur: 0 }); }}>Убрать фон</button>
               </div>
@@ -275,7 +327,7 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
               </form>
             </>}
             <label className="setting-row background-blur-setting">
-              <span><b>Размытие фона</b></span>
+              <span><b>Размытие фона</b>{backgroundIsAnimated && <small className="background-blur-note">GIF не переживает большое размытие — картинка расплывается в кашу.</small>}</span>
               <span className="background-blur-control"><input aria-label="Размытие фонового изображения" type="range" min="0" max="24" step="1" value={settings.backgroundBlur} disabled={!settings.backgroundImage} onChange={(event) => onUpdate({ backgroundBlur: Number(event.currentTarget.value) })} /><output>{settings.backgroundBlur}px</output></span>
             </label>
           </div>

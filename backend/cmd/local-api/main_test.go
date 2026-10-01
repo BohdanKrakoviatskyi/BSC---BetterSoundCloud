@@ -109,7 +109,34 @@ func TestMixedSelectionsIncludesPlaylistsAndOAuthToken(t *testing.T) {
 }
 
 func TestBackgroundImageValidation(t *testing.T) {
-	validJPEG := "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString([]byte{0xff, 0xd8, 0xff, 0xd9})
+	dataURL := func(mime string, payload []byte) string {
+		return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(payload)
+	}
+	validJPEG := dataURL("image/jpeg", []byte{0xff, 0xd8, 0xff, 0xd9})
+	// GIF89a is what real encoders emit; GIF87a is the older revision and must be accepted too.
+	validGIF := dataURL("image/gif", []byte("GIF89a"))
+	validPNG := dataURL("image/png", []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a})
+	// Builds a GIF data URL at least `size` characters long, whose payload really decodes to
+	// something starting with a GIF signature.
+	//
+	// Two details are load-bearing. Padding with raw 'A' characters cannot be padded past a
+	// multiple of four, because base64 rejects any other length and the whole URL would fail to
+	// decode, which would prove nothing about the size ceiling. And the length is rounded up, so
+	// the caller's number is a floor the result always reaches: the ceiling case has to come out
+	// strictly above the limit, since the validator refuses a value only when it is longer.
+	animationOfSize := func(fileBytes int) string {
+		const prefix = "data:image/gif;base64,"
+		signature := []byte("GIF89a")
+		encoded := base64.StdEncoding.EncodeToString(signature)
+		// The filler is measured in encoded characters, not in bytes: base64 spends four
+		// characters on every three bytes. Sizing it in bytes would build a URL three quarters of
+		// the requested length, which is the very mistake that caused this bug.
+		filler := base64.StdEncoding.EncodedLen(fileBytes) - len(encoded)
+		if filler < 0 {
+			filler = 0
+		}
+		return prefix + encoded + strings.Repeat("A", filler)
+	}
 	for _, test := range []struct {
 		name  string
 		value string
@@ -117,9 +144,26 @@ func TestBackgroundImageValidation(t *testing.T) {
 	}{
 		{name: "empty image clears background", value: "", valid: true},
 		{name: "jpeg data url", value: validJPEG, valid: true},
-		{name: "unsupported mime type", value: "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte{0xff, 0xd8, 0xff}), valid: false},
+		{name: "gif data url", value: validGIF, valid: true},
+		{name: "older gif revision", value: dataURL("image/gif", []byte("GIF87a")), valid: true},
+		{name: "png data url", value: validPNG, valid: true},
+		{name: "unsupported mime type", value: "data:image/bmp;base64," + base64.StdEncoding.EncodeToString([]byte{0xff, 0xd8, 0xff, 0xd9}), valid: false},
 		{name: "invalid jpeg signature", value: "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString([]byte("not jpeg")), valid: false},
-		{name: "oversized image", value: "data:image/jpeg;base64," + strings.Repeat("A", 700_000), valid: false},
+		// A GIF cannot be smuggled through the jpeg prefix: the declared type and the payload
+		// signature have to agree, which is the whole reason the check is per format.
+		{name: "gif bytes under jpeg prefix", value: "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString([]byte("GIF89a")), valid: false},
+		{name: "jpeg bytes under gif prefix", value: "data:image/gif;base64," + base64.StdEncoding.EncodeToString([]byte{0xff, 0xd8, 0xff, 0xd9}), valid: false},
+		{name: "truncated gif signature", value: dataURL("image/gif", []byte("GIF")), valid: false},
+		{name: "not base64", value: "data:image/gif;base64,%%%not-base64%%%", valid: false},
+		{name: "oversized still image", value: "data:image/jpeg;base64," + strings.Repeat("A", 700_000), valid: false},
+		// The animation ceiling is deliberately three times the still one, because an animation is
+		// stored as the untouched file while a still image is redrawn and re-encoded as JPEG.
+		{name: "oversized animation", value: "data:image/gif;base64," + strings.Repeat("A", 12_000_000), valid: false},
+		{name: "animation at its ceiling", value: animationOfSize(animatedFileBytes), valid: true},
+		{name: "animation just over the ceiling", value: animationOfSize(animatedFileBytes + 1), valid: false},
+		// 11.5 MB was the size that produced the report: it is comfortably inside the file limit
+		// but needs more data-URL characters than a naively written ceiling would allow.
+		{name: "eleven and a half megabytes", value: animationOfSize(11_500_000), valid: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			if got := validBackgroundImage(test.value); got != test.valid {

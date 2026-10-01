@@ -25,6 +25,13 @@ const (
 	appName         = "BetterSoundCloud"
 	appVersion      = "0.1.0"
 	maxLine         = 1 << 20
+	// maxRequestBytes is the true ceiling on a single request line.
+	//
+	// maxLine is kept only for reference: it is far too small for anything carrying a
+	// background. A settings update with an animation is one JSON line of about sixteen million
+	// characters, and a scanner buffer under that stops reading the line at all, so the request
+	// is silently dropped and the frontend reports a save failure with no cause.
+	maxRequestBytes = 40 << 20
 	maxRecentTracks = 20
 
 	// officialAPIBase — официальный API SoundCloud (OAuth-приложения).
@@ -400,7 +407,9 @@ func run(input io.Reader, output io.Writer) error {
 	}
 
 	scanner := bufio.NewScanner(input)
-	scanner.Buffer(make([]byte, 4096), maxLine)
+	// Grown on demand, so this only reserves a small buffer until a genuinely large request
+	// arrives; Scanner allocates more as it reads rather than up front.
+	scanner.Buffer(make([]byte, 64*1024), maxRequestBytes)
 	writer := bufio.NewWriter(output)
 	for scanner.Scan() {
 		var req request
@@ -2255,16 +2264,62 @@ func validSoundCloudClientID(value string) bool {
 	return true
 }
 
+// animatedFileBytes is the largest animation accepted, in bytes of the original file.
+//
+// The table below stores a character count, which is a different unit and used to disagree with
+// this one: a literal figure there quietly became a smaller file limit, because base64 spends four
+// characters on every three bytes. maxAnimatedURLLength keeps the two tied together.
+const animatedFileBytes = 12 * 1024 * 1024
+
+func maxAnimatedURLLength() int {
+	// base64.StdEncoding.EncodedLen is ceil(n/3)*4; the prefix is counted in full on top.
+	return len("data:image/gif;base64,") + base64.StdEncoding.EncodedLen(animatedFileBytes)
+}
+
+// backgroundFormats maps the data URL prefix to its size ceiling and magic bytes.
+//
+// The ceilings differ because the encoders differ: a still image is redrawn by the frontend
+// and re-encoded as JPEG, while an animation is passed through untouched, since a canvas would
+// flatten it to a single frame. Base64 costs about a third more than the raw file in both
+// cases, so the animated ceiling is roughly three times the still one.
+var backgroundFormats = []struct {
+	prefix string
+	// magic is the byte signature the decoded payload must start with.
+	magic []byte
+	// maxLength caps the whole data URL, prefix included.
+	maxLength int
+}{
+	{prefix: "data:image/jpeg;base64,", magic: []byte{0xff, 0xd8, 0xff}, maxLength: 700_000},
+	{prefix: "data:image/png;base64,", magic: []byte{0x89, 'P', 'N', 'G'}, maxLength: 700_000},
+	{prefix: "data:image/webp;base64,", magic: []byte{'R', 'I', 'F', 'F'}, maxLength: 700_000},
+	{prefix: "data:image/gif;base64,", magic: []byte{'G', 'I', 'F', '8'}, maxLength: maxAnimatedURLLength()},
+}
+
 func validBackgroundImage(value string) bool {
 	if value == "" {
 		return true
 	}
-	const prefix = "data:image/jpeg;base64,"
-	if len(value) > 700_000 || !strings.HasPrefix(value, prefix) {
-		return false
+	for _, format := range backgroundFormats {
+		if !strings.HasPrefix(value, format.prefix) {
+			continue
+		}
+		if len(value) > format.maxLength {
+			return false
+		}
+		image, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(value, format.prefix))
+		if err != nil || len(image) < len(format.magic) {
+			return false
+		}
+		// The declared type alone is not enough: the bytes have to carry the same signature,
+		// so a data URL labelled image/jpeg cannot smuggle an arbitrary payload through here.
+		if !bytes.Equal(image[:len(format.magic)], format.magic) {
+			return false
+		}
+		// GIF87a is the older revision and GIF89a adds the graphic control extension. Both are
+		// real GIFs, and the 8 alone does not distinguish them, so the revision byte is ignored.
+		return true
 	}
-	image, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(value, prefix))
-	return err == nil && len(image) >= 3 && image[0] == 0xff && image[1] == 0xd8 && image[2] == 0xff
+	return false
 }
 
 func validAccent(value string) bool {
@@ -2285,3 +2340,4 @@ func writeResponse(writer *bufio.Writer, value response) error {
 	}
 	return writer.Flush()
 }
+

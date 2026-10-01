@@ -26,6 +26,7 @@ import { MyProfilePage } from './components/MyProfilePage';
 import { UpdaterNotification } from './components/UpdaterNotification';
 import { QueuePanel } from './components/QueuePanel';
 import { describeError } from './lib/format';
+import { useBackgroundUrl } from '../lib/useBackgroundUrl';
 
 const defaultSettings: Settings = { accent: '#ff765d', volume: 70, clientId: '', backgroundImage: '', backgroundBlur: 0 };
 const sidebarWidthsKey = 'better-soundcloud.sidebar-widths';
@@ -1122,6 +1123,14 @@ export function App() {
     }
   }
 
+  // The wallpaper arrives as a data URL, and Chrome refuses to load a URL longer than 2 MB. The
+  // hook hands back an object URL instead, which stays short however big the image is.
+  //
+  // It has to sit above every early return below. A hook called after one of them runs a
+  // different number of times depending on the state, which React rejects, and the whole view
+  // fails to render.
+  const backgroundUrl = useBackgroundUrl(settings.backgroundImage);
+
   if (!ready) {
     return (
       <div className="auth-shell">
@@ -1143,9 +1152,9 @@ export function App() {
 
   return (
     <div
-      className={`app-shell ${playerVisible && !isViewingPlayingTrack ? 'player-visible' : ''} ${settings.backgroundImage ? 'has-custom-background' : ''} ${lyricsPanelState}`}
+      className={`app-shell ${playerVisible && !isViewingPlayingTrack ? 'player-visible' : ''} ${backgroundUrl ? 'has-custom-background' : ''} ${lyricsPanelState}`}
       style={{
-        '--custom-background-image': settings.backgroundImage ? `url("${settings.backgroundImage}")` : 'none',
+        '--custom-background-image': backgroundUrl ? `url("${backgroundUrl}")` : 'none',
         '--custom-background-blur': `${settings.backgroundBlur}px`,
         '--content-panel-opacity': String(0.4 + Math.min(settings.backgroundBlur, 6) * (0.2 / 6)),
         '--sidebar-width': `${sidebarWidth}px`,
