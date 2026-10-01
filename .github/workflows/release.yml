@@ -10,6 +10,11 @@ on:
         description: Version tag to build and publish (for example, v0.1.15)
         required: true
         type: string
+      platforms:
+        description: 'Runner labels to build, comma-separated. Empty means all of them.'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: write
@@ -18,6 +23,9 @@ jobs:
   publish:
     name: Publish (${{ matrix.platform }})
     runs-on: ${{ matrix.platform }}
+    # Пустой inputs.platforms означает «собрать всё». Список через запятую сужает
+    # матрицу до нужных раннеров, чтобы можно было проверить одну платформу.
+    if: ${{ inputs.platforms == '' || contains(inputs.platforms, matrix.platform) }}
     strategy:
       fail-fast: false
       max-parallel: 1
@@ -39,12 +47,14 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Sync version from release tag
+        shell: bash
         env:
           RELEASE_VERSION: ${{ inputs.tag || github.ref_name }}
         run: node scripts/sync-release-version.mjs
 
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
+        shell: bash
         run: |
           sudo apt-get update
           sudo apt-get install --yes \
@@ -76,9 +86,11 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install npm dependencies
+        shell: bash
         run: npm ci
 
       - name: Build backend sidecar
+        shell: bash
         # No TAURI_ENV_TARGET_TRIPLE here on purpose: every runner builds natively, so the host
         # triple is correct. Pinning it was what broke when a runner changed architecture.
         run: npm run build:go
@@ -89,8 +101,12 @@ jobs:
       - name: Check for Apple signing secrets
         id: apple
         if: runner.os == 'macOS'
+        shell: bash
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          # Раньше переменная не попадала в env этого шага, и $APPLE_SIGNING_IDENTITY
+          # оставалась пустой: identity выходил пустым даже с сертификатом.
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
           if [ -n "$APPLE_CERTIFICATE" ]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
@@ -110,6 +126,7 @@ jobs:
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+        shell: bash
         run: |
           set -euo pipefail
           KEYCHAIN="$RUNNER_TEMP/build.keychain"
@@ -129,7 +146,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
-          # Empty when the Apple secrets are absent, which keeps the ad-hoc path working.
+          # Never empty: an empty value here overrides signingIdentity "-" from
+          # tauri.conf.json and codesign then runs with no identity at all. The
+          # apple step emits the real identity, or "-" for ad-hoc signing.
           APPLE_SIGNING_IDENTITY: ${{ steps.apple.outputs.identity }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
@@ -144,6 +163,9 @@ jobs:
           args: ${{ runner.os == 'Linux' && '--bundles appimage' || '' }}
 
       - name: Report signing mode
+        # На Windows дефолтный shell — PowerShell, и bash-синтаксис падал с
+        # ParserError. Явный shell делает шаг одинаковым на всех раннерах.
+        shell: bash
         run: |
           if [ "$RUNNER_OS" = "macOS" ]; then
             if [ "$APPLE_SIGNED" = "true" ]; then
