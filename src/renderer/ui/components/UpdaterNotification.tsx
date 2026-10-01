@@ -10,6 +10,7 @@ export function UpdaterNotification() {
   const [updating, setUpdating] = useState(false);
   const [checking, setChecking] = useState(false);
   const [status, setStatus] = useState('');
+  const [statusError, setStatusError] = useState(false);
   const [currentVersion, setCurrentVersion] = useState('…');
   const [logs, setLogs] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
@@ -45,6 +46,37 @@ export function UpdaterNotification() {
     return String(reason);
   }
 
+  /**
+   * Turns a failed updater operation into something worth reading.
+   *
+   * The plugin reports manifest and transport problems as English sentences, and those were being
+   * shown verbatim: "Ошибка проверки: Error: Could not fetch a valid release JSON from the remote".
+   * The full text still reaches the console through addLog; this only decides what a person sees.
+   *
+   * Returns null for anything unrecognised, so an unexpected failure is reported rather than
+   * disguised as one of the known ones.
+   */
+  function describeUpdaterError(reason: unknown): string | null {
+    const raw = reason instanceof Error ? reason.message : String(reason);
+    const text = raw.toLowerCase();
+
+    // The release has no signed latest.json, or it is not readable. This is the current state of
+    // the project: v0.1.17 published without updater artifacts.
+    if (text.includes('release json') || text.includes('parse json') || text.includes('invalid json') || text.includes('unexpected token')) {
+      return 'Сервер релизов не отдал файл обновления. Обычно релиз собран без подписи — до тех пор обновляться придётся вручную.';
+    }
+    if (text.includes('signature') || text.includes('public key') || text.includes('verify')) {
+      return 'Подпись обновления не прошла проверку, установка отменена.';
+    }
+    if (text.includes('enotfound') || text.includes('econnrefused') || text.includes('timed out') || text.includes('timeout') || text.includes('network') || text.includes('fetch failed')) {
+      return 'Нет связи с сервером обновлений. Проверка повторится позже.';
+    }
+    if (text.includes('403') || text.includes('404') || text.includes('429') || text.includes('forbidden') || text.includes('not found')) {
+      return 'Сервер обновлений сейчас недоступен. Проверка повторится позже.';
+    }
+    return null;
+  }
+
   useEffect(() => {
     if (!open) return;
     function onPointerDown(event: PointerEvent) {
@@ -61,11 +93,16 @@ export function UpdaterNotification() {
     };
   }, [open]);
 
-  async function checkForUpdate(active = true) {
+  /**
+   * @param byUser true when the person pressed the check button, false for the check that runs on
+   *   launch. Only a request the user made is allowed to raise an error in the panel.
+   */
+  async function checkForUpdate(active = true, byUser = false) {
     if (!isTauri() || checking) return;
     setChecking(true);
     setStatus('Проверяю обновления…');
-    addLog('Starting updater check()');
+    setStatusError(false);
+    addLog(`Starting updater check()${byUser ? ' (requested by user)' : ' (automatic on launch)'}`);
     try {
       const available = await check();
       if (!active) return;
@@ -75,7 +112,18 @@ export function UpdaterNotification() {
     } catch (reason) {
       const detail = formatReason(reason);
       addLog(`Updater check failed: ${detail}`);
-      if (active) setStatus(`Ошибка проверки: ${reason instanceof Error ? `${reason.name}: ${reason.message}` : String(reason)}`);
+      if (!active) return;
+      if (byUser) {
+        setStatusError(true);
+        setStatus(
+          describeUpdaterError(reason)
+          ?? `Не удалось проверить обновления: ${reason instanceof Error ? reason.message : String(reason)}`,
+        );
+      } else {
+        // The launch check was nobody's request. A server that cannot be reached is not the user's
+        // problem to solve here, so the panel stays neutral and the reason is left in the console.
+        setStatus('Автопроверка обновлений не удалась');
+      }
     } finally {
       if (active) setChecking(false);
     }
@@ -107,7 +155,11 @@ export function UpdaterNotification() {
     } catch (reason) {
       const detail = formatReason(reason);
       addLog(`Updater installation failed: ${detail}`);
-      setStatus(`Ошибка установки: ${reason instanceof Error ? `${reason.name}: ${reason.message}` : String(reason)}`);
+      setStatusError(true);
+      setStatus(
+        describeUpdaterError(reason)
+        ?? `Не удалось установить обновление: ${reason instanceof Error ? reason.message : String(reason)}`,
+      );
       setUpdating(false);
     }
   }
@@ -122,10 +174,10 @@ export function UpdaterNotification() {
     {open && <section className="updater-popover" role="dialog" aria-label="Обновление приложения">
       <div className="updater-popover-title">Обновления</div>
       <p className="updater-current-version">Текущая версия: <strong>{currentVersion}</strong></p>
-      <p className={`updater-popover-status${status.startsWith('Ошибка') ? ' is-error' : ''}`} aria-live="polite">{status || 'Проверка ещё не выполнена'}</p>
+      <p className={`updater-popover-status${statusError ? ' is-error' : ''}`} aria-live="polite">{status || 'Проверка ещё не выполнена'}</p>
       {update
         ? <button className="updater-button has-update" type="button" onClick={() => void installUpdate()} disabled={updating}>{updating ? 'Установка…' : 'Обновить'}</button>
-        : <button className="updater-button updater-check-button" type="button" onClick={() => void checkForUpdate()} disabled={checking} aria-label={checking ? 'Проверка обновлений' : 'Проверить обновления'} title={checking ? 'Проверка обновлений…' : 'Проверить обновления'}>
+        : <button className="updater-button updater-check-button" type="button" onClick={() => void checkForUpdate(true, true)} disabled={checking} aria-label={checking ? 'Проверка обновлений' : 'Проверить обновления'} title={checking ? 'Проверка обновлений…' : 'Проверить обновления'}>
             <FaDownload className={checking ? 'is-checking' : ''} aria-hidden="true" />
           </button>}
       {import.meta.env.DEV && <details className="updater-log-details" open>
