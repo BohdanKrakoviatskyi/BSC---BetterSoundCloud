@@ -141,42 +141,45 @@ jobs:
             -s -k "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN"
           security list-keychain -d user -s "$KEYCHAIN" login.keychain-db
           rm -f "$RUNNER_TEMP/cert.p12"
-      - name: TEMP diagnostic - Apple env presence
-        if: runner.os == 'macOS'
-        shell: bash
-        env:
-          APPLE_SIGNING_IDENTITY: ${{ steps.apple.outputs.identity }}
-          APPLE_ID: ${{ secrets.APPLE_ID || null }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD || null }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || null }}
-        run: |
-          for v in APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
-            if [ -z "${!v+x}" ]; then
-              echo "UNSET      $v"
-            elif [ -n "${!v}" ]; then
-              echo "NONEMPTY   $v"
-            else
-              echo "EMPTY      $v  <-- still satisfies var_os presence check"
-            fi
-          done
-
-      - name: Build and publish release
+      # Two variants of the build step instead of one step with a conditional env block.
+      # A step's env map cannot omit a key, and `${{ ... || null }}` does not omit it either:
+      # the runner sets the variable to an empty string, which var_os still reports as present.
+      # That was measured on the runner, not assumed. tauri-macos-sign matches "notarisation
+      # configured" on presence, so three empty strings sent it down the Apple ID path and the
+      # bundle failed with "Team ID must be at least 3 characters". Omitting the keys entirely
+      # lets notarize_auth fall through to the API key branch and report no credentials, which
+      # is a warning rather than an error.
+      - name: Build and publish release (Apple Developer signed and notarised)
+        if: steps.apple.outputs.enabled == 'true'
         uses: tauri-apps/tauri-action@action-v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
-          # Never empty: an empty value here overrides signingIdentity "-" from
-          # tauri.conf.json and codesign then runs with no identity at all. The
-          # apple step emits the real identity, or "-" for ad-hoc signing.
           APPLE_SIGNING_IDENTITY: ${{ steps.apple.outputs.identity }}
-          # || null, for the same reason as the identity above: tauri-macos-sign
-          # checks these with var_os and treats "present" as "configured", so an
-          # empty string sends it down the notarisation path with no credentials and
-          # the bundle fails with "Team ID must be at least 3 characters".
-          APPLE_ID: ${{ secrets.APPLE_ID || null }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD || null }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || null }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          tauriScript: npx tauri
+          tagName: ${{ inputs.tag || github.ref_name }}
+          releaseName: BetterSoundCloud ${{ inputs.tag || github.ref_name }}
+          releaseBody: See the release assets to download and install this version.
+          releaseDraft: false
+          prerelease: false
+          args: ${{ runner.os == 'Linux' && '--bundles appimage' || '' }}
+
+      - name: Build and publish release (ad-hoc signing, no notarisation)
+        # Runs on Linux and Windows too, where the apple step is skipped and no Apple variable
+        # is needed. The identity is the constant "-", matching signingIdentity in tauri.conf.json:
+        # it must be non-empty, and an empty value would leave codesign without an identity.
+        if: steps.apple.outputs.enabled != 'true'
+        uses: tauri-apps/tauri-action@action-v0.6.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: '-'
         with:
           tauriScript: npx tauri
           tagName: ${{ inputs.tag || github.ref_name }}
