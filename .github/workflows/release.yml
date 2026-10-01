@@ -19,7 +19,6 @@ on:
           - all
           - ubuntu-24.04
           - windows-latest
-          - macos-15-intel
           - macos-latest
 
 permissions:
@@ -33,21 +32,17 @@ jobs:
       fail-fast: false
       max-parallel: 1
       matrix:
-        # Both Apple architectures are covered, and the labels are chosen deliberately.
+        # macOS собирается на Apple Silicon (macos-latest, arm64). Intel-сборка убрана:
+        # отдельный x64-раннер удваивает время и расходы, а arm64-приложение на Intel Mac
+        # всё равно запускается через Rosetta 2. Если Intel-бинарь понадобится, вернуть
+        # macos-15-intel в этот список и в options инпута platform.
         #
-        #   macos-15-intel  x64     Intel build, for Macs that cannot run arm64
-        #   macos-latest    arm64   Apple Silicon, and the newest macOS
-        #
-        # The plain-looking "macos-14" is arm64 and deprecated, which is what broke the last
-        # release: it built an x86_64 sidecar on an arm64 runner and the bundler could not find it.
-        # GitHub's Intel labels carry an explicit "-intel" suffix, which the old matrix missed.
-        #
-        # No target is pinned per platform, so every runner builds natively and the sidecar is
-        # compiled for the architecture the bundler will target. See actions/runner-images README.
+        # Ни для какой платформы triple не зафиксирован: каждый раннер собирает нативно,
+        # поэтому sidecar всегда совпадает с архитектурой, которую таргетит бандлер.
         # Пустой inputs.platform (то есть тег-пуш, где inputs не задан) разворачивается
         # в полный список. Явный выбор собирает одну платформу: matrix недоступен в
         # job-level if, поэтому фильтр живёт здесь, а fromJSON превращает строку в массив.
-        platform: ${{ inputs.platform != '' && inputs.platform != 'all' && fromJSON(format('["{0}"]', inputs.platform)) || fromJSON('["ubuntu-24.04", "windows-latest", "macos-15-intel", "macos-latest"]') }}
+        platform: ${{ inputs.platform != '' && inputs.platform != 'all' && fromJSON(format('["{0}"]', inputs.platform)) || fromJSON('["ubuntu-24.04", "windows-latest", "macos-latest"]') }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
