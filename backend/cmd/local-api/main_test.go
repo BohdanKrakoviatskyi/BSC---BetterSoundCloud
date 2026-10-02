@@ -7,9 +7,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"runtime"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -207,12 +207,19 @@ func TestAuthLoginStoresTokenAndHidesIt(t *testing.T) {
 	if !strings.Contains(string(stored), "valid-token") {
 		t.Fatalf("auth file should contain the token")
 	}
-	info, err := os.Stat(svc.authPath)
-	if err != nil {
-		t.Fatalf("auth file stat: %v", err)
-	}
-	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
-		t.Fatalf("auth file permissions = %o, want 600", info.Mode().Perm())
+	// Only where the bits exist. Windows has no POSIX modes, Go's Chmod does not restrict access
+	// there, and the file comes out 0666, so this assertion can only ever fail on that platform.
+	//
+	// Note what the guard does not do: the token file on Windows is still not restricted to the
+	// owner. This makes the suite green, it does not tighten the file.
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(svc.authPath)
+		if err != nil {
+			t.Fatalf("auth file stat: %v", err)
+		}
+		if info.Mode().Perm() != 0o600 {
+			t.Fatalf("auth file permissions = %o, want 600", info.Mode().Perm())
+		}
 	}
 
 	// Renderer не должен получать сам токен — только признак входа и профиль.
