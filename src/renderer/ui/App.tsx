@@ -442,8 +442,20 @@ export function App() {
       else if (!nextTrack) setShouldPlay(false);
       return;
     }
-    // Ни шафла, ни репита: песня просто встаёт на паузу с начала. Следующий трек запускается
-    // вручную — кнопкой «вперёд» или кликом; автопереход на соседний трек из очереди убран.
+    // Репит-один разбирается раньше, в самом PlayerBar: он перезапускает трек сам и сюда не
+    // доходит. Дальше — обычный переход по очереди, ровно как по кнопке «вперёд».
+    if (manualQueueEnabled) {
+      advanceManualQueue();
+      return;
+    }
+    // currentTrackIndex >= 0 обязателен: у трека, открытого отдельно, индекс -1 и в очереди лежит
+    // только он сам. Без проверки 0 < 1 проходит, и следующим играет тот же трек — бесконечное
+    // повторение вместо остановки.
+    if (currentTrackIndex >= 0 && currentTrackIndex + 1 < queueTracks.length) {
+      void loadTrackAt(currentTrackIndex + 1);
+      return;
+    }
+    // Очередь кончилась — останавливаемся.
     setShouldPlay(false);
     if (lyricsPanelActive) setPlaybackPositionMs(0);
   }
