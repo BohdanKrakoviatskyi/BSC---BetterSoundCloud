@@ -131,6 +131,18 @@ func (s *service) RPCTrackLyrics(params trackLyricsParams) (trackLyrics, error) 
 	return saveCache(trackLyrics{TrackID: params.TrackID, Lines: []lyricsLine{}, Logs: logs}), nil
 }
 
+// lyricsDegenerateOverlap is the point at which a title and an artist are the same words, which
+// makes the pair useless as a search: track_name=BATO&artist_name=BATO finds nothing useful.
+//
+// Kept at 0.75 and shared by both query builders. At 0.6 the pair ("BATO - Miura", "Miura")
+// scores 0.65 and would be dropped, which loses a legitimate query without preventing the defect
+// this was added for.
+const lyricsDegenerateOverlap = 0.75
+
+func lyricsDegenerateQueryPair(title, artist string) bool {
+	return lyricsTokenOverlap(title, artist) >= lyricsDegenerateOverlap
+}
+
 func (s *service) resolveLyricsTrack(params trackLyricsParams, logs *[]string) (lyricsQuery, bool) {
 	cleaned := stripLyricsNoise(params.Title)
 	base := stripLyricsVersionMarkers(cleaned)
@@ -142,7 +154,7 @@ func (s *service) resolveLyricsTrack(params trackLyricsParams, logs *[]string) (
 	queries := append([]string(nil), titles...)
 	for _, title := range titles {
 		for _, artist := range artists {
-			if lyricsTokenOverlap(title, artist) >= 0.75 {
+			if lyricsDegenerateQueryPair(title, artist) {
 				continue
 			}
 			queries = appendUniqueFold(queries, title+" "+artist)
@@ -272,6 +284,11 @@ func (s *service) findLyricsByVariants(params trackLyricsParams, logs *[]string)
 	queryLimitReached := false
 	for _, title := range titles {
 		for _, artist := range artists {
+			// Checked before the query budget, so a skipped pair does not use one of the eight
+			// slots that real variants need.
+			if lyricsDegenerateQueryPair(title, artist) {
+				continue
+			}
 			if len(queries) >= 8 {
 				queryLimitReached = true
 				break
@@ -342,6 +359,20 @@ func scoreLRCLibRecord(query lyricsQuery, candidate lrclibRecord, requireDuratio
 	shortTitle := lyricsTitleSpecificity(query.Title) < 3
 	if shortTitle && artistScore < 0.5 {
 		return candidateScore{}, false
+	}
+	// A track with no version marker is an original, so a candidate that is far off in length is a
+	// different song rather than a variant. The soft score below does not catch this on its own:
+	// lyricsDurationScore only rejects past delta/(want+have) > 0.35, and 102s against 127s is
+	// 0.109, which scored a confident-looking 0.2 and let "BATO - Miura" be given the words of
+	// "BATO - Apparts".
+	//
+	// Both conditions must hold. An absolute gap alone would reject a long track for a small
+	// difference that barely matters; a relative gap alone would reject a short track for seconds.
+	if requireDuration && query.Duration > 0 && candidate.Duration > 0 {
+		delta := math.Abs(float64(query.Duration) - candidate.Duration)
+		if delta > 18 && delta/float64(query.Duration) > 0.15 {
+			return candidateScore{}, false
+		}
 	}
 	durationScore := lyricsDurationScore(query.Duration, int64(math.Round(candidate.Duration)))
 	if durationScore == 0 && requireDuration {
