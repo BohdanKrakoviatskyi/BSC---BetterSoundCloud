@@ -284,3 +284,75 @@ func TestTrackLyricsKeepsFoundLyricsForTheSession(t *testing.T) {
 		t.Fatalf("aged lookup returned no lyrics: %#v", result)
 	}
 }
+
+// A track must never be given another song's lyrics because the names share a word. "BATO - Miura"
+// (102s) was served the text of "BATO - Apparts" (127s) by the same artist: the query built from one
+// half of the title scored 0.659 against the superset name, which clears the 0.62 title gate, and the
+// soft duration score returned 0.2 for a 25s gap because it only rejects past 35%. Nothing separated
+// the two songs.
+func TestTrackLyricsRejectsWrongTrackBySameArtist(t *testing.T) {
+	svc := newTestService(t, "")
+	svc.httpClient = &http.Client{Transport: testRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Host == "api.deezer.com" {
+			return lyricsJSONResponse(request, http.StatusNotFound, `{}`), nil
+		}
+		if request.URL.Host == "lrclib.net" && request.URL.Path == "/api/search" {
+			return lyricsJSONResponse(request, http.StatusOK, `[{"trackName":"BATO - Apparts","artistName":"Русская Рэп-Сцена","duration":127.0,"plainLyrics":"текст чужой песни"}]`), nil
+		}
+		t.Errorf("unexpected request: %s", request.URL)
+		return lyricsJSONResponse(request, http.StatusNotFound, `{}`), nil
+	})}
+
+	result, err := svc.RPCTrackLyrics(trackLyricsParams{
+		TrackID:    41,
+		Title:      "BATO - Miura",
+		Artist:     "Русская Рэп-Сцена",
+		DurationMs: 102000,
+	})
+	if err != nil {
+		t.Fatalf("RPCTrackLyrics: %v", err)
+	}
+	for _, line := range result.Lines {
+		if strings.Contains(line.Text, "чужой") {
+			t.Fatalf("a different song was matched: %#v", result)
+		}
+	}
+	if len(result.Lines) != 0 {
+		t.Fatalf("expected no lyrics, got %d lines: %#v", len(result.Lines), result.Lines)
+	}
+}
+
+// The other half of the same trade-off: a version marker legitimately changes the length, so the
+// new duration gate must not reject a slowed version of the right song.
+func TestTrackLyricsKeepsSlowedVersionOfSameLength(t *testing.T) {
+	svc := newTestService(t, "")
+	svc.httpClient = &http.Client{Transport: testRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Host == "api.deezer.com" {
+			return lyricsJSONResponse(request, http.StatusNotFound, `{}`), nil
+		}
+		if request.URL.Host == "lrclib.net" && request.URL.Path == "/api/search" {
+			query := request.URL.Query()
+			if query.Get("track_name") == "Same Song" {
+				return lyricsJSONResponse(request, http.StatusOK, `[{"trackName":"Same Song Slowed","artistName":"Same Artist","duration":180.0,"plainLyrics":"stretched\n\nout"}]`), nil
+			}
+			return lyricsJSONResponse(request, http.StatusOK, `[]`), nil
+		}
+		t.Errorf("unexpected request: %s", request.URL)
+		return lyricsJSONResponse(request, http.StatusNotFound, `{}`), nil
+	})}
+
+	// 102s original against a 180s slowed version: a 78s and 76% gap, which the gate would reject if
+	// the version marker did not exempt it.
+	result, err := svc.RPCTrackLyrics(trackLyricsParams{
+		TrackID:    42,
+		Title:      "Same Song (slowed)",
+		Artist:     "Same Artist",
+		DurationMs: 102000,
+	})
+	if err != nil {
+		t.Fatalf("RPCTrackLyrics: %v", err)
+	}
+	if len(result.Lines) != 2 {
+		t.Fatalf("a slowed version of the right song was rejected: %#v", result)
+	}
+}
