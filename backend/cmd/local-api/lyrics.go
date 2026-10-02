@@ -88,23 +88,47 @@ func (s *service) RPCTrackLyrics(params trackLyricsParams) (trackLyrics, error) 
 		return trackLyrics{}, errors.New("lyrics HTTP client is not configured")
 	}
 
+	s.lyricsMu.RLock()
+	if s.lyricsCache != nil {
+		if cached, ok := s.lyricsCache[params.TrackID]; ok {
+			// Найденный текст отдаём всегда: он не перестанет быть верным.
+			// Промах — только пока не истекли пять минут, иначе трек останется пустым до конца сессии.
+			if len(cached.lyrics.Lines) > 0 || time.Since(cached.cachedAt) < 5*time.Minute {
+				s.lyricsMu.RUnlock()
+				return cached.lyrics, nil
+			}
+		}
+	}
+	s.lyricsMu.RUnlock()
+	saveCache := func(lyrics trackLyrics) trackLyrics {
+		s.lyricsMu.Lock()
+		if s.lyricsCache == nil {
+			s.lyricsCache = make(map[int64]cachedLyrics)
+		}
+		s.lyricsCache[lyrics.TrackID] = cachedLyrics{
+			lyrics:   lyrics,
+			cachedAt: time.Now(),
+		}
+		s.lyricsMu.Unlock()
+		return lyrics
+	}
 	logs := []string{"Старт поиска текста: " + params.Title + " — " + params.Artist}
 	canonical, canonicalFound := s.resolveLyricsTrack(params, &logs)
 	if canonicalFound {
 		logs = append(logs, fmt.Sprintf("Deezer выбрал: %s — %s", canonical.Artist, canonical.Title))
 		if lyrics, found := s.findLyricsForQuery(params.TrackID, canonical, &logs); found {
 			lyrics.Logs = logs
-			return lyrics, nil
+			return saveCache(lyrics), nil
 		}
 	} else {
 		logs = append(logs, "Deezer не подтвердил подходящую запись; пробую исходные название и исполнителя")
 	}
 	if lyrics, found := s.findLyricsByVariants(params, &logs); found {
 		lyrics.Logs = logs
-		return lyrics, nil
+		return saveCache(lyrics), nil
 	}
 	logs = append(logs, "Текст не найден: LRCLIB не вернул подходящих синхронизированных или обычных лирик")
-	return trackLyrics{TrackID: params.TrackID, Lines: []lyricsLine{}, Logs: logs}, nil
+	return saveCache(trackLyrics{TrackID: params.TrackID, Lines: []lyricsLine{}, Logs: logs}), nil
 }
 
 func (s *service) resolveLyricsTrack(params trackLyricsParams, logs *[]string) (lyricsQuery, bool) {
@@ -424,6 +448,21 @@ func lyricsFromLRCLibRecord(trackID int64, record lrclibRecord) (trackLyrics, bo
 	if len(lines) == 0 {
 		return trackLyrics{}, false
 	}
+	// Plain text arrives without timestamps, so they are spread evenly across the length of the
+	// matched record and the response reports itself as synced, which is what lets the sidebar
+	// follow playback.
+	//
+	// A record with no duration is left unsynced on purpose. Spreading across zero would keep every
+	// line at StartMs 0 while claiming to be synced, and the sidebar would then stay on the first
+	// line for the whole track.
+	if durationMs := int64(record.Duration * 1000); durationMs > 0 {
+		return trackLyrics{
+			TrackID:   trackID,
+			Lines:     syntheticTimings(lines, durationMs),
+			SourceURL: "https://lrclib.net",
+			IsSynced:  true,
+		}, true
+	}
 	return trackLyrics{TrackID: trackID, Lines: lines, SourceURL: "https://lrclib.net"}, true
 }
 
@@ -579,6 +618,27 @@ func parsePlainLyrics(content string) []lyricsLine {
 		}
 	}
 	return lines
+}
+
+// syntheticTimings distributes plain lyrics evenly across the track duration.
+// A 10% intro gap is skipped so the first line does not appear at second zero.
+// The result has isSynced semantics so the sidebar can follow playback.
+func syntheticTimings(lines []lyricsLine, durationMs int64) []lyricsLine {
+	if len(lines) == 0 || durationMs <= 0 {
+		return lines
+	}
+	introMs := durationMs / 10
+	usableMs := durationMs - introMs
+	step := usableMs / int64(len(lines))
+	result := make([]lyricsLine, len(lines))
+	for i, line := range lines {
+		result[i] = lyricsLine{
+			ID:      line.ID,
+			Text:    line.Text,
+			StartMs: introMs + int64(i)*step,
+		}
+	}
+	return result
 }
 
 func parseLRC(content string) []lyricsLine {

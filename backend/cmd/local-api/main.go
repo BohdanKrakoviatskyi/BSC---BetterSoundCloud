@@ -24,9 +24,16 @@ import (
 )
 
 const (
-	appName         = "BetterSoundCloud"
-	appVersion      = "0.1.0"
-	maxLine         = 1 << 20
+	appName    = "BetterSoundCloud"
+	appVersion = "0.1.0"
+	maxLine    = 1 << 20
+	// maxRequestBytes is the true ceiling on a single request line.
+	//
+	// maxLine is kept only for reference: it is far too small for anything carrying a
+	// background. A settings update with an animation is one JSON line of about sixteen million
+	// characters, and a scanner buffer under that stops reading the line at all, so the request
+	// is silently dropped and the frontend reports a save failure with no cause.
+	maxRequestBytes = 40 << 20
 	maxRecentTracks = 20
 
 	// officialAPIBase — официальный API SoundCloud (OAuth-приложения).
@@ -355,6 +362,16 @@ type soundcloudTrackDetails struct {
 	} `json:"user"`
 }
 
+// cachedLyrics is one entry of the lyrics cache: the response, and when it was stored.
+//
+// A miss is kept for five minutes rather than for the session. It used to be permanent, so a track
+// whose text was missing — or whose first lookup failed while reporting a miss — stayed empty for
+// as long as the app ran.
+type cachedLyrics struct {
+	lyrics   trackLyrics
+	cachedAt time.Time
+}
+
 type service struct {
 	mu           sync.Mutex
 	settingsPath string
@@ -365,6 +382,11 @@ type service struct {
 	history      []soundcloudTrackCard
 	apiBase      string
 	httpClient   *http.Client
+	// Lyrics are cached separately from everything else and behind their own lock: mu is held
+	// across disk writes and settings updates, so borrowing it for a cache that outlives an HTTP
+	// lookup would queue unrelated work behind the network.
+	lyricsMu    sync.RWMutex
+	lyricsCache map[int64]cachedLyrics
 }
 
 func main() {
@@ -390,6 +412,7 @@ func run(input io.Reader, output io.Writer) error {
 		historyPath:  filepath.Join(dataDir, "history.json"),
 		apiBase:      apiBase(),
 		httpClient:   &http.Client{Timeout: 15 * time.Second},
+		lyricsCache:  make(map[int64]cachedLyrics),
 	}
 	if err := svc.loadSettings(); err != nil {
 		return err
