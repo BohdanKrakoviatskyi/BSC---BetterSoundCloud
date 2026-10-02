@@ -449,8 +449,11 @@ export function App() {
       else if (!nextTrack) setShouldPlay(false);
       return;
     }
+    // У трека, открытого отдельно, currentTrackIndex равен -1, а в очереди лежит только он сам:
+    // nextIndex вышел бы 0, nextTrack — только что закончившаяся песня, и loadTrackAt(0) повторил бы
+    // её бесконечно. Поэтому индекс должен быть неотрицательным.
     const nextIndex = currentTrackIndex + 1;
-    const nextTrack = queueTracks[nextIndex];
+    const nextTrack = currentTrackIndex >= 0 ? queueTracks[nextIndex] : undefined;
     if (!nextTrack) {
       setShouldPlay(false);
       return;
