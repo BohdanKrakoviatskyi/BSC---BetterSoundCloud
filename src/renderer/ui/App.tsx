@@ -26,6 +26,7 @@ import { ErrorMessage } from './components/ErrorMessage';
 import { MyProfilePage } from './components/MyProfilePage';
 import { UpdaterNotification } from './components/UpdaterNotification';
 import { QueuePanel } from './components/QueuePanel';
+import { ConnectedAccounts } from './components/ConnectedAccounts';
 import { ServiceSwitcher } from './components/ServiceSwitcher';
 import { MultiAuthScreen } from './components/MultiAuthScreen';
 
@@ -1537,7 +1538,7 @@ export function App() {
               playbackLoading={playbackLoading}
             />
           : page === 'settings'
-            ? <SettingsPanel settings={settings} saved={saved} error={error} profile={profile} tokenError={loginError} tokenBusy={loginBusy} onSaveToken={saveAccessToken} onClearData={clearAppData} onUpdate={(patch) => void updateSettings(patch)} />
+            ? <SettingsPanel settings={settings} saved={saved} error={error} profile={profile} tokenError={loginError} tokenBusy={loginBusy} onSaveToken={saveAccessToken} onClearData={clearAppData} onUpdate={(patch) => void updateSettings(patch)} accountsSection={<ConnectedAccounts accounts={serviceAccounts} activeService={activeService} onSwitch={(service) => void switchService(service)} onSignOutSoundCloud={() => { setError(''); setLogoutDialogOpen(true); }} />} />
           : page === 'profile' && profile
             ? <MyProfilePage
                 account={profile}

@@ -1,0 +1,134 @@
+/* The connected-accounts section.
+ *
+ * Reuses the settings-card shell that the rest of the panel is built from, so this section looks like
+ * part of the page rather than a separate thing dropped into it. */
+
+.settings-accounts {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.accounts-notice {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.accounts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.accounts-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+/* The active service is marked with the service colour, not the user's accent: this says which service
+   it is rather than restating a setting. */
+.accounts-row.is-current {
+  border-color: color-mix(in srgb, var(--service-accent, var(--accent)) 55%, transparent);
+}
+
+.accounts-row.is-connected {
+  background: color-mix(in srgb, #2fbf71 7%, transparent);
+}
+
+.accounts-row__glyph {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  color: var(--service-accent, var(--accent));
+}
+
+.accounts-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.accounts-copy b {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.accounts-copy small {
+  font-size: 11px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.accounts-copy code {
+  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--muted) 18%, transparent);
+}
+
+.accounts-current {
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: var(--service-accent, var(--accent));
+  border: 1px solid color-mix(in srgb, var(--service-accent, var(--accent)) 45%, transparent);
+}
+
+.accounts-oauth {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.accounts-oauth-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.accounts-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.accounts-field input {
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 12px;
+  color: inherit;
+  background: color-mix(in srgb, var(--muted) 10%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.accounts-field input:focus-visible {
+  outline: 2px solid var(--service-accent, var(--accent));
+  outline-offset: 1px;
+}
+
+.accounts-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Written out rather than left to the reader: this is the one place in the app where a secret is stored
+   in the webview, and the cost is worth stating where the fields are. */
+.accounts-note {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted);
+}

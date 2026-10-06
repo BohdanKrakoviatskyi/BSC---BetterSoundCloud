@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useEffect, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 import type { Profile, Settings } from '../types';
 import { ConfirmDialog } from './ConfirmDialog';
 import { ErrorMessage } from './ErrorMessage';
@@ -55,9 +55,17 @@ type Props = {
   tokenBusy: boolean;
   onSaveToken: (token: string) => Promise<boolean>;
   onClearData: () => Promise<boolean>;
+  /**
+   * Rendered after the SoundCloud connection card.
+   *
+   * A slot rather than props: the connected-accounts section is about services rather than about settings,
+   * and passing its six props through here would make this panel the place where multi-service state is
+   * defined, which is App's job and already is.
+   */
+  accountsSection?: ReactNode;
 };
 
-export function SettingsPanel({ settings, saved, error, profile, tokenError, tokenBusy, onUpdate, onSaveToken, onClearData }: Props) {
+export function SettingsPanel({ settings, saved, error, profile, tokenError, tokenBusy, onUpdate, onSaveToken, onClearData, accountsSection }: Props) {
   const [clientId, setClientId] = useState(settings.clientId);
   const [token, setToken] = useState('');
   const [showToken, setShowToken] = useState(false);
@@ -240,6 +248,8 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
             </div>
           </form>
         </section>
+
+        {accountsSection}
 
         <section className="settings-card settings-danger-zone" aria-labelledby="clear-data-heading">
           <div>
