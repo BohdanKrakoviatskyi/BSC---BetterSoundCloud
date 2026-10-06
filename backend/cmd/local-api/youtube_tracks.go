@@ -85,6 +85,11 @@ type youtubePlaylistSnippetWire struct {
 type youtubePlaylistWire struct {
 	ID      string                     `json:"id"`
 	Snippet youtubePlaylistSnippetWire `json:"snippet"`
+	// The item count lives here rather than in the snippet. Asking for this part is what lets a
+	// playlist report how many tracks it holds instead of reporting none.
+	ContentDetails struct {
+		ItemCount int `json:"itemCount"`
+	} `json:"contentDetails"`
 }
 
 type youtubePlaylistListWire struct {
@@ -327,7 +332,7 @@ func (s *service) RPCYoutubePlaylistsMine(params youtubePageParams) (youtubePlay
 		return youtubePlaylistPage{}, err
 	}
 	values := url.Values{
-		"part":       {"snippet"},
+		"part":       {"snippet,contentDetails"},
 		"maxResults": {strconv.Itoa(youtubeLimit(params.Limit, youtubePageSize))},
 	}
 	if params.PageToken != "" {
@@ -544,6 +549,7 @@ func mapYoutubePlaylist(wire youtubePlaylistWire) youtubePlaylist {
 		Description: wire.Snippet.Description,
 		ArtworkURL:  bestYoutubeThumbnail(wire.Snippet.Thumbnails),
 		Artist:      wire.Snippet.ChannelTitle,
+		TrackCount:  wire.ContentDetails.ItemCount,
 	}
 	if wire.ID != "" {
 		playlist.URN = "youtube:playlist:" + wire.ID

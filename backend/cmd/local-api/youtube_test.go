@@ -583,10 +583,23 @@ func TestYoutubePlaylistTracksReadsResourceID(t *testing.T) {
 func TestYoutubePlaylistsMine(t *testing.T) {
 	svc := signedInYoutubeService(t)
 	recorder := &youtubeRecorder{}
-	routeYoutube(t, svc, map[string]string{"/v3/playlists": `{"items":[{
-		"id":"PL1","snippet":{"title":"Road Trip","description":"for driving","channelTitle":"Me",
-		"thumbnails":{"medium":{"url":"https://m","width":320,"height":180},"maxres":{"url":"https://x","width":1280,"height":720}}}
-	}],"nextPageToken":null}`}, recorder)
+	// A raw string, so the fixture is the JSON it claims to be with no escaping in between.
+	routeYoutube(t, svc, map[string]string{"/v3/playlists": `{
+		"items": [{
+			"id": "PL1",
+			"snippet": {
+				"title": "Road Trip",
+				"description": "for driving",
+				"channelTitle": "Me",
+				"thumbnails": {
+					"medium": {"url": "https://m", "width": 320, "height": 180},
+					"maxres": {"url": "https://x", "width": 1280, "height": 720}
+				}
+			},
+			"contentDetails": {"itemCount": 42}
+		}],
+		"nextPageToken": null
+	}`}, recorder)
 
 	page, err := svc.RPCYoutubePlaylistsMine(youtubePageParams{})
 	if err != nil {
@@ -602,12 +615,24 @@ func TestYoutubePlaylistsMine(t *testing.T) {
 	if got.ArtworkURL != "https://x" || got.Description != "for driving" {
 		t.Errorf("unexpected playlist fields: %#v", got)
 	}
-	parsed, _ := url.Parse(recorder.url)
-	if parsed.Query().Get("mine") != "true" {
-		t.Errorf("mine = %q", parsed.Query().Get("mine"))
+	// The count comes from contentDetails, which sits beside snippet rather than inside it. Without
+	// asking for that part this reads zero for every playlist, and a screen then shows "0 tracks"
+	// instead of nothing — a number that is always wrong is worse than an absent one.
+	if got.TrackCount != 42 {
+		t.Errorf("trackCount = %d, want 42", got.TrackCount)
+	}
+
+	requested, parseErr := url.Parse(recorder.url)
+	if parseErr != nil {
+		t.Fatalf("parse request url: %v", parseErr)
+	}
+	if requested.Query().Get("part") != "snippet,contentDetails" {
+		t.Errorf("part = %q, the item count needs contentDetails", requested.Query().Get("part"))
+	}
+	if requested.Query().Get("mine") != "true" {
+		t.Errorf("mine = %q", requested.Query().Get("mine"))
 	}
 }
-
 func TestYoutubeTrackDetailsNotFound(t *testing.T) {
 	svc := signedInYoutubeService(t)
 	routeYoutube(t, svc, map[string]string{"/v3/videos": `{"items":[]}`}, nil)
