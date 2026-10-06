@@ -80,6 +80,48 @@ export type SoundCloudSocialPage = { collection: SoundCloudSocialUser[]; nextHre
 export type SoundCloudSearchTrack = SoundCloudTrack;
 export type SoundCloudMixedSelection = { id: string; title: string; description?: string; tracks: SoundCloudSearchTrack[]; playlists?: SoundCloudPlaylist[]; madeForYou?: boolean };
 export type SoundCloudPlaylist = { id: string; urn?: string; title: string; permalinkUrl?: string; artworkUrl?: string; trackCount: number; user: { username: string } };
+
+// ---- Spotify
+//
+// A track carries nativeId and source rather than a numeric id. The domain Track still has one, and
+// a great deal of code keys on it, but Spotify's ids are strings and hashing one into that field
+// would collide — a collision means liking the wrong track and playing the wrong queue entry. So the
+// real id stays here and identity is decided on source plus nativeId.
+
+export type SpotifyAuthProfile = { id: string; displayName?: string; email?: string; product?: string };
+export type SpotifyAuthStatus = { authorized: boolean; profile?: SpotifyAuthProfile; expiresAt?: number };
+export type SpotifyArtist = { id: string; name: string };
+export type SpotifyImage = { url: string; width: number };
+export type SpotifyAlbum = { id: string; name: string; images: SpotifyImage[] };
+export type SpotifyTrack = {
+  nativeId: string;
+  source: string;
+  urn: string;
+  title: string;
+  permalink?: string;
+  artworkUrl?: string;
+  durationMs: number;
+  popularity?: number;
+  previewUrl?: string;
+  artists: SpotifyArtist[];
+  album: SpotifyAlbum;
+};
+export type SpotifyTrackPage = { tracks: SpotifyTrack[]; nextHref?: string };
+export type SpotifyPlaylist = {
+  nativeId: string;
+  source: string;
+  urn: string;
+  title: string;
+  permalink?: string;
+  artworkUrl?: string;
+  trackCount: number;
+  artist: string;
+};
+export type SpotifyPlaylistPage = { playlists: SpotifyPlaylist[]; nextHref?: string };
+export type SpotifySaveResult = { id: string; saved: boolean };
+export type SpotifySearchRequest = { query: string; limit?: number };
+export type SpotifyPageRequest = { next?: string; limit?: number };
+export type SpotifyRecommendRequest = { seedTrackIds?: string[]; seedArtists?: string[]; limit?: number };
 type BackendResponse<T> = { id: number; result?: T; error?: string };
 type PendingRequest = {
   method: string;
@@ -266,6 +308,65 @@ class LocalBackend {
     }
   }
 
+  // ---- Spotify
+  //
+  // Every one of these needs a bearer token, which lives in the sidecar rather than here, so the
+  // client id and secret travel with the request that needs them. Nothing about a session is cached
+  // on this side of the bridge: a stale token that is believed to be good produces failures that look
+  // like a network problem.
+
+  async spotifyAuthStatus(): Promise<SpotifyAuthStatus> {
+    return this.request<SpotifyAuthStatus>('spotify.auth.status', {}, 10_000);
+  }
+
+  async spotifyAuthExchange(code: string, clientId: string, clientSecret: string, redirectUri: string): Promise<SpotifyAuthStatus> {
+    return this.request<SpotifyAuthStatus>('spotify.auth.exchange', { code, clientId, clientSecret, redirectUri }, 30_000);
+  }
+
+  async spotifyAuthRefresh(clientId: string, clientSecret: string): Promise<SpotifyAuthStatus> {
+    return this.request<SpotifyAuthStatus>('spotify.auth.refresh', { clientId, clientSecret }, 30_000);
+  }
+
+  async spotifyAuthLogout(): Promise<SpotifyAuthStatus> {
+    return this.request<SpotifyAuthStatus>('spotify.auth.logout', {}, 10_000);
+  }
+
+  async spotifyMyTracks(next?: string, limit?: number): Promise<SpotifyTrackPage> {
+    return this.request<SpotifyTrackPage>('spotify.tracks.mine', { next, limit }, 30_000);
+  }
+
+  async spotifyMyPlaylists(next?: string, limit?: number): Promise<SpotifyPlaylistPage> {
+    return this.request<SpotifyPlaylistPage>('spotify.playlists.mine', { next, limit }, 30_000);
+  }
+
+  async spotifyPlaylistTracks(id: string, next?: string, limit?: number): Promise<SpotifyTrackPage> {
+    return this.request<SpotifyTrackPage>('spotify.playlist.tracks', { id, next, limit }, 30_000);
+  }
+
+  async spotifyTrackDetails(id: string): Promise<SpotifyTrack> {
+    return this.request<SpotifyTrack>('spotify.track.details', { id }, 30_000);
+  }
+
+  async spotifySearchTracks(query: string, limit?: number): Promise<SpotifyTrackPage> {
+    return this.request<SpotifyTrackPage>('spotify.search.tracks', { query, limit }, 20_000);
+  }
+
+  async spotifyRecommendations(request: SpotifyRecommendRequest): Promise<SpotifyTrackPage> {
+    return this.request<SpotifyTrackPage>('spotify.recommendations', { ...request }, 30_000);
+  }
+
+  async spotifyUserProfile(): Promise<SpotifyAuthProfile> {
+    return this.request<SpotifyAuthProfile>('spotify.user.profile', {}, 20_000);
+  }
+
+  async spotifySaveTrack(id: string): Promise<SpotifySaveResult> {
+    return this.request<SpotifySaveResult>('spotify.track.save', { id }, 30_000);
+  }
+
+  async spotifyUnsaveTrack(id: string): Promise<SpotifySaveResult> {
+    return this.request<SpotifySaveResult>('spotify.track.unsave', { id }, 30_000);
+  }
+
   private async request<T>(method: string, params: object = {}, timeoutMs = 5000): Promise<T> {
     if (!this.child) {
       const error = new Error('Локальный backend не запущен');
@@ -371,4 +472,17 @@ export const desktop = {
   userPlaylists: (userId: number) => backend.userPlaylists(userId),
   likeTrack: (trackId: number, trackUrn: string, userId?: number, clientId?: string, datadomeCookie?: string) => backend.likeTrack(trackId, trackUrn, userId, clientId, datadomeCookie),
   unlikeTrack: (trackId: number, trackUrn: string, userId?: number, clientId?: string, datadomeCookie?: string) => backend.unlikeTrack(trackId, trackUrn, userId, clientId, datadomeCookie),
+  spotifyAuthStatus: () => backend.spotifyAuthStatus(),
+  spotifyAuthExchange: (code: string, clientId: string, clientSecret: string, redirectUri: string) => backend.spotifyAuthExchange(code, clientId, clientSecret, redirectUri),
+  spotifyAuthRefresh: (clientId: string, clientSecret: string) => backend.spotifyAuthRefresh(clientId, clientSecret),
+  spotifyAuthLogout: () => backend.spotifyAuthLogout(),
+  spotifyMyTracks: (next?: string, limit?: number) => backend.spotifyMyTracks(next, limit),
+  spotifyMyPlaylists: (next?: string, limit?: number) => backend.spotifyMyPlaylists(next, limit),
+  spotifyPlaylistTracks: (id: string, next?: string, limit?: number) => backend.spotifyPlaylistTracks(id, next, limit),
+  spotifyTrackDetails: (id: string) => backend.spotifyTrackDetails(id),
+  spotifySearchTracks: (query: string, limit?: number) => backend.spotifySearchTracks(query, limit),
+  spotifyRecommendations: (request: SpotifyRecommendRequest) => backend.spotifyRecommendations(request),
+  spotifyUserProfile: () => backend.spotifyUserProfile(),
+  spotifySaveTrack: (id: string) => backend.spotifySaveTrack(id),
+  spotifyUnsaveTrack: (id: string) => backend.spotifyUnsaveTrack(id),
 };
