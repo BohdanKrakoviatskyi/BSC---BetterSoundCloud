@@ -1,4 +1,4 @@
-import type { AuthStatus, SoundCloudMixedSelection, SoundCloudPlaylist, SoundCloudSearchTrack, SoundCloudSocialPage, SoundCloudTrack, SoundCloudTrackDetails, SoundCloudTrackPage, SoundCloudUserProfile, TrackLikeResult, TrackLyricsDTO, TrackStream } from '../renderer/lib/desktop';
+import type { AuthStatus, SoundCloudMixedSelection, SoundCloudPlaylist, SoundCloudSearchTrack, SoundCloudSocialPage, SoundCloudTrack, SoundCloudTrackDetails, SoundCloudTrackPage, SoundCloudUserProfile, SpotifyAuthProfile, SpotifyAuthStatus, SpotifyPlaylistPage, SpotifyRecommendRequest, SpotifySaveResult, SpotifyTrack, SpotifyTrackPage, TrackLikeResult, TrackLyricsDTO, TrackStream } from '../renderer/lib/desktop';
 
 export {};
 
@@ -42,6 +42,24 @@ declare global {
       userPlaylists(userId: number): Promise<SoundCloudPlaylist[]>;
       likeTrack(trackId: number, trackUrn: string, userId?: number, clientId?: string, datadomeCookie?: string): Promise<TrackLikeResult>;
       unlikeTrack(trackId: number, trackUrn: string, userId?: number, clientId?: string, datadomeCookie?: string): Promise<TrackLikeResult>;
+
+      // ---- Spotify
+      //
+      // A next href is accepted by the methods that can page, because Spotify's continuation is an
+      // opaque URL rather than an offset and cannot be reconstructed by the caller.
+      spotifyAuthStatus(): Promise<SpotifyAuthStatus>;
+      spotifyAuthExchange(code: string, clientId: string, clientSecret: string, redirectUri: string): Promise<SpotifyAuthStatus>;
+      spotifyAuthRefresh(clientId: string, clientSecret: string): Promise<SpotifyAuthStatus>;
+      spotifyAuthLogout(): Promise<SpotifyAuthStatus>;
+      spotifyMyTracks(next?: string, limit?: number): Promise<SpotifyTrackPage>;
+      spotifyMyPlaylists(next?: string, limit?: number): Promise<SpotifyPlaylistPage>;
+      spotifyPlaylistTracks(id: string, next?: string, limit?: number): Promise<SpotifyTrackPage>;
+      spotifyTrackDetails(id: string): Promise<SpotifyTrack>;
+      spotifySearchTracks(query: string, limit?: number): Promise<SpotifyTrackPage>;
+      spotifyRecommendations(request: SpotifyRecommendRequest): Promise<SpotifyTrackPage>;
+      spotifyUserProfile(): Promise<SpotifyAuthProfile>;
+      spotifySaveTrack(id: string): Promise<SpotifySaveResult>;
+      spotifyUnsaveTrack(id: string): Promise<SpotifySaveResult>;
     };
   }
 }
