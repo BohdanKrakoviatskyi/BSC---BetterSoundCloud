@@ -248,3 +248,22 @@ html[data-compact='true'] .settings-panel { padding-top: 17px; }
 @media (max-width: 1000px) { .player-bar { grid-template-columns: minmax(140px, 1fr) minmax(230px, 1.3fr); gap: 14px; padding: 12px 20px; } .player-volume { display: none; } }
 @media (max-width: 760px) { .track-detail-hero { grid-template-columns: minmax(150px, 240px) minmax(0, 1fr); gap: 20px; padding: 20px; } .track-detail-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .track-detail-columns { grid-template-columns: 1fr; } }
 @media (max-width: 760px) { .topbar { gap: 12px; } .track-search { width: min(300px, 58%); } .breadcrumbs { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
+
+/* Accent per service, set from the root data-service attribute rather than from --accent.
+ * --accent is the user's own setting: switching service must not change the colour they chose, so
+ * the service colour is a separate variable used only by service-specific elements. */
+:root {
+  --service-accent: var(--accent, #ff765d);
+}
+
+:root[data-service='soundcloud'] {
+  --service-accent: #ff5500;
+}
+
+:root[data-service='spotify'] {
+  --service-accent: #1db954;
+}
+
+:root[data-service='youtube-music'] {
+  --service-accent: #ff0033;
+}

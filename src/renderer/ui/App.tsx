@@ -1195,6 +1195,12 @@ export function App() {
     };
   }, []);
 
+  // The service accent is a separate variable from --accent, which is the user's own setting and is
+  // left alone. Switching service changes what marks the service, not the colour they chose.
+  useEffect(() => {
+    document.documentElement.dataset.service = activeService;
+  }, [activeService]);
+
   useEffect(() => {
     document.documentElement.style.setProperty('--accent', settings.accent);
     document.documentElement.dataset.compact = String(settings.compact);
@@ -1694,6 +1700,7 @@ export function App() {
         {error && <ErrorMessage message={error} />}
       </ConfirmDialog>}
       <PlayerBar
+        source={activeService}
         track={currentTrack}
         seekRequest={seekRequest}
         onSeekRequestHandled={(requestId) => setSeekRequest((current) => current?.requestId === requestId ? null : current)}

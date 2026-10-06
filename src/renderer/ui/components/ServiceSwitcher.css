@@ -38,8 +38,8 @@
 
 /* Active is accent-coloured and slightly larger, so the current service is findable without reading. */
 .service-switcher__item.is-active {
-  color: var(--accent);
-  border-color: var(--accent);
+  color: var(--service-accent, var(--accent));
+  border-color: var(--service-accent, var(--accent));
   transform: scale(1.05);
 }
 

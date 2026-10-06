@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Track } from '../../domain/models';
 import { SoundCloudWidget, type SoundCloudWidgetControls } from './SoundCloudWidget';
 import { DirectStreamPlayer } from './DirectStreamPlayer';
+import type { ServiceProvider } from '../../domain/models';
 
 export type PlayerSeekRequest = { requestId: number; trackId: number; positionMs: number };
 
@@ -33,6 +34,14 @@ type Props = {
   onProgress: (positionMs: number) => void;
   onError: (message: string) => void;
   onPlaybackStateChange: (playing: boolean) => void;
+  /**
+   * Which service the track came from.
+   *
+   * Optional, and deliberately not derived from the track: App owns the active service, and a player
+   * that second-guessed it from the track's own fields would be reading the same fact from two places.
+   * Without it the bar behaves exactly as before, which is what lets it ship ahead of the switcher.
+   */
+  source?: ServiceProvider;
 };
 
 function formatTime(seconds: number): string {
@@ -43,9 +52,13 @@ function formatTime(seconds: number): string {
 
 const soundCloudLogo = 'https://developers.soundcloud.com/assets/logo_big_white-a38cb93cd8fa05a93183280f295e13aff1a4ae0945ca2fb0efbe85b82588431e.png';
 
-export function PlayerBar({ track, seekRequest, onSeekRequestHandled, repeatOne, onToggleRepeat, shuffleLiked, onToggleShuffle, loading, shouldPlay, volume, onVolumeChange, error, hasNext, liked, onLike, queueOpen, onToggleQueue, onOpenTrack, onOpenArtist, onTogglePlayback, onNext, onPrevious, onEnded, onReady, onProgress, onError, onPlaybackStateChange }: Props) {
+export function PlayerBar({ track, seekRequest, onSeekRequestHandled, repeatOne, onToggleRepeat, shuffleLiked, onToggleShuffle, loading, shouldPlay, volume, onVolumeChange, error, hasNext, liked, onLike, queueOpen, onToggleQueue, onOpenTrack, onOpenArtist, onTogglePlayback, onNext, onPrevious, onEnded, onReady, onProgress, onError, onPlaybackStateChange, source }: Props) {
   const [widgetControls, setWidgetControls] = useState<SoundCloudWidgetControls | null>(null);
   const [playbackMode, setPlaybackMode] = useState<'widget' | 'direct'>('widget');
+  // Resolved from the track rather than passed separately for the playing path, because a mismatched
+  // pair would show SoundCloud's iframe for a Spotify track.
+  const trackService: ServiceProvider = track?.source ?? source ?? 'soundcloud';
+  const canPlayInApp = trackService !== 'youtube-music';
 
   const [directRetryKey, setDirectRetryKey] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
@@ -171,7 +184,11 @@ export function PlayerBar({ track, seekRequest, onSeekRequestHandled, repeatOne,
 
   return (
     <footer className="player-bar" aria-label="Аудиоплеер">
-      {track && playbackMode === 'widget' && (
+      {/*
+        SoundCloud's iframe widget is loaded from w.soundcloud.com and cannot play anything else, so it is
+        scoped to that service rather than kept as the first mode for every source.
+      */}
+      {track && trackService === 'soundcloud' && playbackMode === 'widget' && (
         <SoundCloudWidget
           track={track}
           volume={volumeValue}
@@ -189,7 +206,27 @@ export function PlayerBar({ track, seekRequest, onSeekRequestHandled, repeatOne,
           }}
         />
       )}
-      {track && playbackMode === 'direct' && (
+      {track && canPlayInApp && trackService !== 'soundcloud' && (
+        <DirectStreamPlayer
+          key={`${track.id}:${directRetryKey}`}
+          track={track}
+          volume={volumeValue}
+          shouldPlay={shouldPlay}
+          onControlsReady={setWidgetControls}
+          onReady={onReady}
+          onPlaybackStateChange={(playing) => {
+            onPlaybackStateChange(playing);
+          }}
+          onProgress={handleProgress}
+          onEnded={handleTrackEnded}
+          onError={(message) => {
+            onPlaybackStateChange(false);
+            onError(message);
+          }}
+        />
+      )}
+
+      {track && trackService === 'soundcloud' && playbackMode === 'direct' && (
         <DirectStreamPlayer
           key={`${track.id}:${directRetryKey}`}
           track={track}

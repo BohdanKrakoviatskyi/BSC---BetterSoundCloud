@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import Hls from 'hls.js';
 import type { Track } from '../../domain/models';
-import { appGateway } from '../../lib/appGateway';
+import { serviceManager } from '../../lib/serviceManager';
 import type { TrackStreamOption } from '../../lib/desktop';
 import type { SoundCloudWidgetControls } from './SoundCloudWidget';
 
@@ -140,14 +140,19 @@ export function DirectStreamPlayer({ track, volume, shouldPlay, onControlsReady,
     audio.addEventListener('ended', handleEnded);
     audio.addEventListener('error', handleError);
 
-    void appGateway.trackStream(track.urn).then((stream) => {
+    // Through the active adapter rather than appGateway directly. The SoundCloud adapter forwards to
+    // the same call with the same URN, so that path is byte-identical; Spotify's answers with its
+    // thirty-second preview instead, which is the most the Web API gives without Premium.
+    void serviceManager.active.trackStream(track).then((stream) => {
       if (!active) return;
       candidates = [{ url: stream.url, preview: stream.preview, hls: stream.hls, quality: stream.quality }, ...(stream.alternatives ?? [])];
       startCandidate(0);
     }).catch((error: unknown) => {
       if (!active) return;
       callbacksRef.current.onPlaybackStateChange(false);
-      callbacksRef.current.onError(error instanceof Error ? error.message : 'Не удалось получить аудиопоток SoundCloud.');
+      callbacksRef.current.onError(
+        error instanceof Error ? error.message : `Не удалось получить аудиопоток ${track.source ?? 'SoundCloud'}.`,
+      );
     });
 
     return () => {
