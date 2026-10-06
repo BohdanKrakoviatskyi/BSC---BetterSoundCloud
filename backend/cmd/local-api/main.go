@@ -378,6 +378,14 @@ type service struct {
 	settings     settings
 	authPath     string
 	auth         authState
+	// Spotify keeps its own token file rather than sharing the SoundCloud one: they are
+	// independent services with independent lifetimes, and one being cleared must not sign the
+	// other out.
+	spotifyPath    string
+	spotifyAuth    spotifyAuthState
+	// A field so tests can point at an httptest server.
+	spotifyAPIBase string
+	spotifyAuthURL string
 	historyPath  string
 	history      []soundcloudTrackCard
 	apiBase      string
@@ -409,6 +417,9 @@ func run(input io.Reader, output io.Writer) error {
 		settingsPath: filepath.Join(dataDir, "settings.json"),
 		settings:     defaultSettings(),
 		authPath:     filepath.Join(dataDir, "auth.json"),
+		spotifyPath:  filepath.Join(dataDir, "spotify.json"),
+		spotifyAPIBase: spotifyDefaultAPIBase,
+		spotifyAuthURL: spotifyDefaultAuthURL,
 		historyPath:  filepath.Join(dataDir, "history.json"),
 		apiBase:      apiBase(),
 		httpClient:   &http.Client{Timeout: 15 * time.Second},
@@ -419,6 +430,10 @@ func run(input io.Reader, output io.Writer) error {
 	}
 	// Повреждённое или нечитаемое хранилище токена не должно мешать запуску:
 	// работаем как неавторизованные, диагностика уходит в stderr.
+	// Spotify's session is independent of SoundCloud's and must not fail the launch on its own.
+	if err := svc.loadSpotifyAuth(); err != nil {
+		log.Printf("spotify.auth stage=load_failed error=%q", err.Error())
+	}
 	if err := svc.loadAuth(); err != nil {
 		fmt.Fprintln(os.Stderr, "local backend: auth state ignored:", err)
 	}
