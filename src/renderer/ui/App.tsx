@@ -2,8 +2,10 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from
 import { invoke } from '@tauri-apps/api/core';
 import type { ArtistProfile, Playlist, SocialUser, Track, TrackDetails, TrackCollection, TrackLyrics } from '../domain/models';
 import { appGateway } from '../lib/appGateway';
+import { serviceManager, serviceCapabilities } from '../lib/serviceManager';
+import type { ServiceAccount, ServiceProvider } from '../domain/models';
+import { getLastActiveService, setLastActiveService, loadCredentials } from '../lib/credentialStore';
 import type { SoundCloudCredentials } from '../lib/useSoundCloudAuth';
-import { AuthScreen } from './components/AuthScreen';
 import { HomePage } from './components/HomePage';
 import { LikedTracksSection } from './components/LikedTracksSection';
 import { LyricsSidebar } from './components/LyricsSidebar';
@@ -24,6 +26,8 @@ import { ErrorMessage } from './components/ErrorMessage';
 import { MyProfilePage } from './components/MyProfilePage';
 import { UpdaterNotification } from './components/UpdaterNotification';
 import { QueuePanel } from './components/QueuePanel';
+import { ServiceSwitcher } from './components/ServiceSwitcher';
+import { MultiAuthScreen } from './components/MultiAuthScreen';
 
 const defaultSettings: Settings = { accent: '#ff765d', compact: false, volume: 70, clientId: '', backgroundImage: '', backgroundBlur: 0 };
 const sidebarWidthsKey = 'better-soundcloud.sidebar-widths';
@@ -63,6 +67,27 @@ export function App() {
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(true);
   const [auth, setAuth] = useState<'checking' | 'guest' | 'authorized'>('checking');
+  // Which service the library below belongs to. Seeded from storage rather than from a constant, so a
+  // launch goes back to where the user was rather than to SoundCloud every time.
+  // Seeded from storage, and the manager is pointed at the same service straight away rather than
+  // reconciled afterwards. Left to reconcile, one render would read capabilities from Spotify while the
+  // library loaded from SoundCloud — the switcher showing an artist-less service over a SoundCloud
+  // library, which looks like a bug in one of them.
+  const [activeService, setActiveService] = useState<ServiceProvider>(() => {
+    const restored = getLastActiveService();
+    try {
+      serviceManager.switchTo(restored);
+      return restored;
+    } catch {
+      serviceManager.switchTo('soundcloud');
+      return 'soundcloud';
+    }
+  });
+  const [serviceAccounts, setServiceAccounts] = useState<Partial<Record<ServiceProvider, ServiceAccount>>>({});
+  const [switchingService, setSwitchingService] = useState(false);
+  // Read from the adapter rather than written out, so the two cannot disagree the first time a method is
+  // added to one of them.
+  const capabilities = serviceCapabilities(activeService);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loginBusy, setLoginBusy] = useState(false);
   const [loginError, setLoginError] = useState('');
@@ -185,6 +210,9 @@ export function App() {
     setHistory((current) => [track, ...current.filter((item) => item.id !== track.id)].slice(0, 20));
     setHistoryError('');
     historyWriteRef.current = historyWriteRef.current.then(async () => {
+      // The sidecar's history is keyed by SoundCloud ids, so a Spotify track written there would sit in
+      // the list and be unplayable. Only the service that owns the store records to it.
+      if (activeService !== 'soundcloud') return;
       try {
         await appGateway.historyRecord(track);
         console.info('[ui.history] track recorded', { trackId: track.id });
@@ -208,7 +236,7 @@ export function App() {
     setSelectionsLoading(true);
     setSelectionsError('');
     try {
-      const loaded = await appGateway.mixedSelections();
+      const loaded = await serviceManager.active.mixedSelections();
       setSelections(loaded);
       console.info('[ui.mixed-selections] loaded', { count: loaded.length, tracks: loaded.reduce((count, selection) => count + selection.tracks.length, 0) });
     } catch (reason) {
@@ -224,7 +252,7 @@ export function App() {
     setTracksLoading(true);
     setTracksError('');
     try {
-      const loaded = await appGateway.myTracks();
+      const loaded = await serviceManager.active.myTracks();
       setTracks(loaded);
       setLikedTracks(Object.fromEntries(loaded.map((track) => [track.id, true])));
       console.info('[ui.tracks] loaded', { count: loaded.length });
@@ -275,11 +303,11 @@ export function App() {
     setPlaylistsLoading(true);
     setPlaylistsError('');
     try {
-      const loaded = await appGateway.myPlaylists();
+      const loaded = await serviceManager.active.myPlaylists();
       setPlaylists(loaded);
-      console.info('[ui.playlists] loaded', { count: loaded.length });
+      console.info('[ui.playlists] loaded', { count: loaded.length, service: activeService });
     } catch (reason) {
-      const message = reasonText(reason, 'Не удалось загрузить плейлисты SoundCloud');
+      const message = reasonText(reason, 'Не удалось загрузить плейлисты');
       setPlaylistsError(message);
       console.error('[ui.playlists] load failed', { error: message });
     } finally {
@@ -301,8 +329,44 @@ export function App() {
     });
   }
 
+  /**
+   * The like path for a service that is not SoundCloud.
+   *
+   * SoundCloud's is not used here: it carries a captcha challenge, a retry loop and a DataDome cookie, and
+   * the adapter's signature has nowhere to put any of that. It stays where it is.
+   */
+  async function toggleTrackLikeOutsideSoundCloud(track: Track, wasLiked: boolean): Promise<boolean> {
+    const adapter = serviceManager.active;
+    if (!adapter.likeTrack || !adapter.unlikeTrack) {
+      setTracksError(`Лайки не поддерживаются сервисом ${activeService}`);
+      return false;
+    }
+    const operation = wasLiked ? 'unlike' : 'like';
+    setLikeBusy((current) => ({ ...current, [track.id]: true }));
+    setTracksError('');
+    try {
+      const result = wasLiked
+        ? await adapter.unlikeTrack(track)
+        : await adapter.likeTrack(track);
+      applyTrackLikeState(track, result.liked);
+      console.info(`[ui.track.${operation}] completed`, { service: activeService, trackId: track.id, liked: result.liked });
+      return true;
+    } catch (reason) {
+      const message = reasonText(reason, 'Не удалось изменить лайк');
+      console.error(`[ui.track.${operation}] failed`, { service: activeService, trackId: track.id, error: message });
+      setTracksError(message);
+      return false;
+    } finally {
+      setLikeBusy((current) => ({ ...current, [track.id]: false }));
+    }
+  }
+
   async function toggleTrackLike(track: Track) {
     const wasLiked = (likedTracks[track.id] !== undefined ? likedTracks[track.id] : tracks.some((item) => item.id === track.id));
+    if (activeService !== 'soundcloud') {
+      await toggleTrackLikeOutsideSoundCloud(track, wasLiked);
+      return;
+    }
     const operation = wasLiked ? 'unlike' : 'like';
     setLikedTracks((current) => ({ ...current, [track.id]: !wasLiked }));
     setLikeBusy((current) => ({ ...current, [track.id]: true }));
@@ -462,6 +526,129 @@ export function App() {
     if (lyricsPanelActive) void openTrackDetails(nextTrack, queueTracks);
   }
 
+  /**
+   * Points the app at another service and loads what belongs to it.
+   *
+   * The previous service's data is cleared before the new one loads rather than after. Leaving it up
+   * means the library shows SoundCloud tracks for as long as a request takes, and the player can start on
+   * a track the new service has nothing to do with.
+   */
+  async function switchService(next: ServiceProvider) {
+    if (switchingService) return;
+    // Not the same as "already active". activeService is seeded from storage, so a user whose last
+    // service was Spotify and who is not signed into it is sitting on the guest screen with Spotify
+    // already selected — and the switch their successful sign-in triggers must still run, or the library
+    // never loads and the screen never goes away.
+    if (next === activeService && serviceAccounts[next]?.isLoggedIn) return;
+    setSwitchingService(true);
+    setError('');
+    try {
+      // Throws for a service with no adapter, which is a programming mistake rather than a runtime
+      // condition, and is said to at the point of the mistake.
+      const adapter = serviceManager.switchTo(next);
+      setLastActiveService(next);
+      setActiveService(next);
+
+      setTracks([]);
+      setPlaylists([]);
+      setSelections([]);
+      setLikedTracks({});
+      setLikeBusy({});
+      setActivePlaylist(null);
+      setActivePlaylistTracks([]);
+      setRelatedTracks([]);
+      setDetailsTrack(null);
+      setArtistProfile(null);
+      setArtistTracks([]);
+      setArtistLikedTracks([]);
+      setTracksError('');
+
+      let session;
+      try {
+        session = await adapter.authStatus();
+      } catch (reason) {
+        // A status check that fails means signed out as far as the interface is concerned. It is not a
+        // reason to throw the switch away and strand the user on the previous service.
+        console.warn('[ui.services] status check failed', { service: next, error: reasonText(reason, 'unknown') });
+        session = { authorized: false, profile: null };
+      }
+
+      // An expired token is worth one recovery attempt before giving up, whenever the service can
+      // refresh at all. No condition on stored credentials: Google's grant is authorized by the refresh
+      // token alone, and Spotify's throws a clear message when its credentials are missing, which the
+      // catch below turns into signed-out rather than into a failure.
+      if (!session.authorized && adapter.authRefresh) {
+        try {
+          session = await adapter.authRefresh();
+        } catch (reason) {
+          console.warn('[ui.services] refresh failed', { service: next, error: reasonText(reason, 'unknown') });
+        }
+      }
+
+      setServiceAccounts((current) => ({
+        ...current,
+        [next]: {
+          service: next,
+          profile: session.profile ?? null,
+          isLoggedIn: session.authorized,
+          credentials: loadCredentials(next) ?? undefined,
+        },
+      }));
+
+      if (!session.authorized) {
+        setProfile(null);
+        setAuth('guest');
+        return;
+      }
+
+      setProfile(session.profile ?? null);
+      setAuth('authorized');
+      void loadTracks();
+      void loadPlaylists();
+      void loadMixedSelections();
+      // The history store belongs to SoundCloud and is keyed by its ids, so it is not loaded for
+      // anything else — and nothing records to it for anything else either.
+      if (next === 'soundcloud') void loadHistory();
+      console.info('[ui.services] switched', { service: next, authorized: session.authorized });
+    } finally {
+      setSwitchingService(false);
+    }
+  }
+
+  /** Records what a service reports about itself, without switching to it. */
+  async function refreshServiceAccount(service: ServiceProvider) {
+    const adapter = serviceManager.getAdapter(service);
+    if (!adapter) return;
+    try {
+      const session = await adapter.authStatus();
+      setServiceAccounts((current) => ({
+        ...current,
+        [service]: {
+          service,
+          profile: session.profile ?? null,
+          isLoggedIn: session.authorized,
+          credentials: loadCredentials(service) ?? undefined,
+        },
+      }));
+    } catch (reason) {
+      // Silent on purpose: this runs at startup for every service, and a warning on a screen nobody is
+      // looking at yet is noise.
+      console.debug('[ui.services] account check failed', { service, error: reasonText(reason, 'unknown') });
+    }
+  }
+
+  /**
+   * Opens an artist page, when the active service has artists.
+   *
+   * The callers pass this to components as a callback and a callback cannot be undefined, so the guard
+   * lives here rather than at each call site: twenty components would each need their own check, and one
+   * forgotten would be a link that navigates nowhere.
+   */
+  function openArtistWhenAvailable(track: Track) {
+    if (!capabilities.artists) return;
+    void openArtistFromTrack(track);
+  }
+
   function selectTrack(track: Track) {
     if (currentTrack?.id === track.id) {
       setShouldPlay((playing) => !playing);
@@ -491,7 +678,11 @@ export function App() {
     setActivePlaylistLoading(true);
     setPage('playlist');
     try {
-      setActivePlaylistTracks(await appGateway.playlistTracks(playlist.urn || playlist.id));
+      // The playlist's own id, not its URN. The SoundCloud sidecar strips a `soundcloud:playlists:`
+      // prefix when it is given one and uses the value as-is when it is not, so both services take this
+      // unchanged — whereas the URN would be wrong for Spotify and YouTube, whose sidecars want the bare
+      // id.
+      setActivePlaylistTracks(await serviceManager.active.playlistTracks(playlist.id));
     } catch (reason) {
       setActivePlaylistError(reasonText(reason, 'Не удалось загрузить треки плейлиста'));
     } finally {
@@ -546,8 +737,8 @@ export function App() {
     setRelatedError('');
     console.info('[ui.track.details] loading', { trackId: track.id });
     const [detailsResult, relatedResult] = await Promise.allSettled([
-      appGateway.trackDetails(track.id),
-      appGateway.relatedTracks(track.id),
+      serviceManager.active.trackDetails(track.nativeId ?? String(track.id)),
+      serviceManager.active.relatedTracks(track.nativeId ?? String(track.id)),
     ]);
     if (requestId !== detailsRequestId.current) {
       console.debug('[ui.track.details] ignored stale response', { trackId: track.id, requestId });
@@ -760,7 +951,7 @@ export function App() {
     setArtistPlaylistsLoading(true);
     setArtistPlaylistsError('');
     try {
-      const details = await appGateway.trackDetails(track.id);
+      const details = await serviceManager.active.trackDetails(track.nativeId ?? String(track.id));
       if (requestId !== artistRequestId.current) return;
       const artistId = details.artist.id;
       if (!artistId) {
@@ -934,13 +1125,39 @@ export function App() {
     let active = true;
     appGateway.start()
       .then(() => Promise.all([appGateway.getSettings(), appGateway.authStatus()]))
-      .then(([storedSettings, status]) => {
+      .then(async ([storedSettings, status]) => {
         if (!active) return;
         setSettings(storedSettings);
         setProfile(status.profile ?? null);
         setAuth(status.authorized ? 'authorized' : 'guest');
         setReady(true);
         void loadHistory();
+
+        // Every registered service is asked about itself, not only the active one: the switcher has to
+        // show a grey dot beside a service nobody is signed into, and it cannot ask after it has shown.
+        for (const candidate of serviceManager.allServices) {
+          void refreshServiceAccount(candidate);
+        }
+
+        // SoundCloud's own status above is the app's existing bootstrap and is left in charge when it is
+        // the remembered service, or when it is signed in. The multi-service path only takes over when
+        // the user last worked in something else and that service still has a session.
+        const remembered = getLastActiveService();
+        if (remembered === 'soundcloud') return;
+        const stored = loadCredentials(remembered);
+        if (!stored) return;
+        const adapter = serviceManager.getAdapter(remembered);
+        if (!adapter) return;
+        try {
+          const restored = await adapter.authStatus();
+          if (!active || !restored.authorized) return;
+          console.info('[ui.startup] restoring remembered service', { service: remembered });
+          await switchService(remembered);
+        } catch (reason) {
+          // Falling through to the guest screen is the right outcome: a service that cannot be reached is
+          // a service that cannot be used, and the switcher still shows it as disconnected.
+          console.warn('[ui.startup] restore failed', { service: remembered, error: reasonText(reason, 'unknown') });
+        }
         if (status.authorized) {
           void loadTracks();
           void loadPlaylists();
@@ -971,6 +1188,9 @@ export function App() {
           console.warn('[local-backend] stop failed during app cleanup', { error: reasonText(reason, String(reason)) });
         });
       };
+      // Written on unmount as well as on switch, so a service chosen and then quit from is restored
+      // next launch even if the switch never completed.
+      setLastActiveService(getLastActiveService());
       void historyWriteRef.current.then(stopBackend, stopBackend);
     };
   }, []);
@@ -996,7 +1216,7 @@ export function App() {
     setLyricsLoading(true);
     setLyricsError('');
     console.info('[ui.lyrics] loading', { trackId });
-    void appGateway.trackLyrics(detailsTrack)
+    void serviceManager.active.trackLyrics(detailsTrack)
       .then((loaded) => {
         if (requestId !== lyricsRequestId.current) return;
         setLyrics(loaded);
@@ -1096,13 +1316,28 @@ export function App() {
     setLoginError('');
     setError('');
     try {
-      await appGateway.authLogout();
+      // The service on screen, not always SoundCloud. With a Spotify library up, signing out of
+      // SoundCloud would have ended an account the user was not even looking at.
+      if (activeService === 'soundcloud') {
+        await appGateway.authLogout();
+      } else {
+        await serviceManager.active.authLogout();
+      }
     } catch (reason) {
       const message = reasonText(reason, 'Не удалось выйти');
-      console.error('[ui.auth.logout] failed', { error: message });
+      console.error('[ui.auth.logout] failed', { service: activeService, error: message });
       setError(message);
       return false;
     }
+    setServiceAccounts((current) => ({
+      ...current,
+      [activeService]: {
+        service: activeService,
+        profile: null,
+        isLoggedIn: false,
+        credentials: current[activeService]?.credentials,
+      },
+    }));
     setProfile(null);
     setTracks([]);
     setPlaylists([]);
@@ -1178,7 +1413,21 @@ export function App() {
     );
   }
 
-  if (auth === 'guest') return <AuthScreen error={loginError} busy={loginBusy} clientId={settings.clientId} onLogin={(token, clientId) => void login(token, clientId)} onSilentLogin={silentLogin} />;
+  if (auth === 'guest') {
+    return (
+      <MultiAuthScreen
+        accounts={serviceAccounts}
+        lastService={activeService}
+        error={loginError}
+        soundCloud={{
+          clientId: settings.clientId,
+          onLogin: (token, clientId) => void login(token, clientId),
+          onSilentLogin: silentLogin,
+        }}
+        onSignedIn={(service) => void switchService(service)}
+      />
+    );
+  }
 
   const isViewingPlayingTrack = page === 'track' && currentTrack !== null && detailsTrack !== null && currentTrack.id === detailsTrack.id;
   const lyricsPanelState = lyricsPhase === 'closed' ? '' : `lyrics-panel-${lyricsPhase}`;
@@ -1198,6 +1447,13 @@ export function App() {
         <div className="window-tools"><button className="icon-button" type="button" onClick={() => setPage('likes')} aria-label="Назад">‹</button></div>
         <div className="global-search"><TrackSearch onSelect={selectTrack} /></div>
         <div className="top-actions">
+          <ServiceSwitcher
+            activeService={activeService}
+            accounts={serviceAccounts}
+            switching={switchingService}
+            busyService={switchingService ? activeService : null}
+            onSwitch={(service) => void switchService(service)}
+          />
 
           <button className={`header-account${page === 'profile' ? ' is-current' : ''}`} type="button" onClick={() => void openMyProfile()} title="Открыть профиль" aria-label="Мой профиль">
             {profile?.avatarUrl
@@ -1215,7 +1471,7 @@ export function App() {
         </div>
       </header>
       <div className="workspace">
-        <Sidebar profile={profile} page={page} tracks={tracks} onNavigate={setPage} onPlayTrack={selectTrack} onOpenTrack={(track) => void openTrackDetails(track, tracks)} onOpenArtist={(track) => void openArtistFromTrack(track)} onResize={(delta) => setSidebarWidth((width) => Math.max(220, Math.min(380, width + delta)))} />
+        <Sidebar profile={profile} page={page} tracks={tracks} activeService={activeService} onOpenArtist={capabilities.artists ? openArtistWhenAvailable : undefined} onNavigate={setPage} onPlayTrack={selectTrack} onOpenTrack={(track) => void openTrackDetails(track, tracks)} onResize={(delta) => setSidebarWidth((width) => Math.max(220, Math.min(380, width + delta)))} />
         <main className="main-view panel" id="mainView"><div className="main-scroll">
         {page === 'home'
           ? <HomePage
@@ -1234,7 +1490,7 @@ export function App() {
               onOpenPlaylist={(playlist) => void openPlaylist(playlist)}
               onClearHistory={() => void clearHistory()}
               onRetry={() => void loadMixedSelections()}
-              onOpenArtist={(track) => void openArtistFromTrack(track)}
+              onOpenArtist={capabilities.artists ? openArtistWhenAvailable : undefined}
             />
           : page === 'search'
             ? <section className="page-content search-landing"><span className="eyebrow">ПОИСК SOUNDCLOUD</span><h1>Найди свой следующий трек</h1><p>Введи название песни или имя исполнителя в строку поиска.</p><button type="button" className="primary-button" onClick={focusGlobalSearch}>Начать поиск <span>⌕</span></button></section>
@@ -1254,7 +1510,7 @@ export function App() {
                 onPlayTrack={selectTrack}
                 onOpenTrack={(track, context) => void openTrackDetails(track, context)}
                 onOpenPlaylist={(playlist) => void openPlaylist(playlist)}
-                onOpenArtist={(track) => void openArtistFromTrack(track)}
+                onOpenArtist={capabilities.artists ? openArtistWhenAvailable : undefined}
               />
           : page === 'playlist' && activePlaylist
             ? <PlaylistPage playlist={activePlaylist} tracks={activePlaylistTracks} loading={activePlaylistLoading} error={activePlaylistError} onBack={() => setPage(playlistReturnPage)} onPlay={playPlaylist} />
@@ -1326,7 +1582,7 @@ export function App() {
                 onBack={() => setPage('artist')}
                 onPlay={selectTrack}
                 onOpen={(track, context) => void openTrackDetails(track, context)}
-                onOpenArtist={(track) => void openArtistFromTrack(track)}
+                onOpenArtist={capabilities.artists ? openArtistWhenAvailable : undefined}
               />
           : page === 'artist'
             ? <ArtistProfilePage
@@ -1455,7 +1711,7 @@ export function App() {
         queueOpen={queueOpen}
         onToggleQueue={() => setQueueOpen((open) => !open)}
         onOpenTrack={() => { if (currentTrack) void openTrackDetails(currentTrack, queueTracks); }}
-        onOpenArtist={() => { if (currentTrack) void openArtistFromTrack(currentTrack); }}
+        onOpenArtist={capabilities.artists ? () => { if (currentTrack) void openArtistFromTrack(currentTrack); } : undefined}
         onTogglePlayback={togglePlayback}
         onPrevious={() => void loadTrackAt(Math.max(currentTrackIndex - 1, 0))}
         onNext={playNextTrack}

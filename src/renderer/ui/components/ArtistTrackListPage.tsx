@@ -18,7 +18,8 @@ type Props = {
   onBack: () => void;
   onPlay: (track: Track) => void;
   onOpen: (track: Track, context: Track[]) => void;
-  onOpenArtist: (track: Track) => void;
+  /** Optional, as in the other track-listing components: an artist's own page has nothing to link to. */
+  onOpenArtist?: (track: Track) => void;
 };
 
 export function ArtistTrackListPage({ title, artistName, tracks, totalCount, loading = false, error = '', hasMore = false, onLoadMore, currentTrackId, isPlaying, playbackLoading, onBack, onPlay, onOpen, onOpenArtist }: Props) {
@@ -51,7 +52,7 @@ export function ArtistTrackListPage({ title, artistName, tracks, totalCount, loa
           isLoading={currentTrackId === track.id && playbackLoading}
           onPlay={() => onPlay(track)}
           onOpenDetails={() => onOpen(track, tracks)}
-          onOpenArtist={() => onOpenArtist(track)}
+          onOpenArtist={onOpenArtist ? () => onOpenArtist(track) : undefined}
         />)}</div>}
     {error && <div className="artist-track-list-status" role="status">{error}<button type="button" onClick={onLoadMore}>Повторить</button></div>}
     {loading && tracks.length > 0 && <p className="artist-track-list-status">Загружаю следующие 20…</p>}

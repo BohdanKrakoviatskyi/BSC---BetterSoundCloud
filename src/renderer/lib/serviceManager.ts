@@ -5,6 +5,37 @@ import { spotifyAdapter } from './adapters/spotifyAdapter';
 import { youtubeMusicAdapter } from './adapters/youtubeMusicAdapter';
 
 /**
+ * What a service can do, as far as the interface is concerned.
+ *
+ * Artists and social are false for Spotify and YouTube Music because neither API has the concept: the
+ * YouTube Data API knows channels, and a channel is not an artist page with an avatar and a follower
+ * count. Saying so is what lets the screens hide those links rather than offer something that goes
+ * nowhere.
+ */
+export type ServiceCapabilities = {
+  /** A track's artist leads to a profile page. */
+  artists: boolean;
+  /** The service can add and remove a track from the user's library. */
+  likes: boolean;
+  /** The service has its own listening history. */
+  history: boolean;
+};
+
+export function serviceCapabilities(service: ServiceProvider): ServiceCapabilities {
+  const adapter = serviceManager.getAdapter(service);
+  if (!adapter) {
+    return { artists: false, likes: false, history: false };
+  }
+  return {
+    artists: Boolean(adapter.artistProfile),
+    likes: Boolean(adapter.likeTrack && adapter.unlikeTrack),
+    // The app keeps its own history for every service, so this is about the sidecar's store rather than
+    // about whether history exists in the interface at all.
+    history: Boolean(adapter.historyList),
+  };
+}
+
+/**
  * Registry of the available services and which one the interface is showing.
  *
  * Read-only for everything except register and switchTo. There is one instance for the app, and the
