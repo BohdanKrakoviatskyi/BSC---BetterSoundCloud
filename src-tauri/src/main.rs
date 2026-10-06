@@ -61,11 +61,18 @@ const SPOTIFY_AUTHORIZE_URL: &str = "https://accounts.spotify.com/authorize";
 const SPOTIFY_REDIRECT_HOST: &str = "localhost";
 const SPOTIFY_REDIRECT_PORT: u16 = 8888;
 const SPOTIFY_REDIRECT_PATH: &str = "/callback";
-/// Only the scopes needed to sign in and read the account. Every scope added is another permission
-/// the app asks for and another line on the authorization screen, so this starts deliberately small
-/// and grows when a feature that needs more actually lands. Playback scopes are not here yet,
-/// because nothing in the app can use them.
-const SPOTIFY_SCOPES: &str = "user-read-private user-read-email";
+/// Exactly the scopes the sidecar's calls need, and no more.
+///
+///   user-read-private, user-read-email          /v1/me
+///   user-library-read                           /v1/me/tracks
+///   user-library-modify                         PUT and DELETE /v1/me/tracks
+///   playlist-read-private, playlist-read-collaborative
+///                                               /v1/me/playlists, /v1/playlists/{id}/tracks
+///
+/// Search, track details and recommendations are public endpoints and need nothing added.
+/// No playback scope: the app plays preview_url through its own audio element, so the Web Playback
+/// SDK scopes would buy nothing.
+const SPOTIFY_SCOPES: &str = "user-read-private user-read-email user-library-read user-library-modify playlist-read-private playlist-read-collaborative";
 
 /// Label of the webview used for the YouTube Music authorization flow.
 const YOUTUBE_WINDOW_LABEL: &str = "youtube-auth";
