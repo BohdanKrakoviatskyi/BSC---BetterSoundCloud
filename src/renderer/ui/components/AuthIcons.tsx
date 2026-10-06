@@ -1,6 +1,10 @@
 /**
- * Vector marks for the sign-in screen.
+ * Vector marks for the three services.
  * SVGs inherit `currentColor`, scale with the layout, and stay crisp on any display.
+ *
+ * Spotify and YouTube Music are drawn rather than traced from the brands: reproducing a logo path from
+ * memory gives something recognisably wrong, and these have to read correctly at sixteen pixels, where a
+ * hand of a real logo is mostly noise anyway.
  */
 
 type GlyphProps = {
@@ -15,6 +19,46 @@ export function CloudGlyph({ className }: GlyphProps) {
         fill="currentColor"
         d="M17.4 18.75H7.1a4.85 4.85 0 0 1-.55-9.67A6.35 6.35 0 0 1 18.75 10.9a4.4 4.4 0 0 1-1.35 7.85Z"
       />
+    </svg>
+  );
+}
+
+/** Spotify mark: a ring with three waves. */
+export function SpotifyGlyph({ className }: GlyphProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" focusable="false">
+      <circle cx="12" cy="12" r="9.6" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <path
+        d="M7.4 9.7c2.5-1.1 5.6-.9 7.9.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <path
+        d="M8.2 12.7c2-.8 4.5-.6 6.4.4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <path
+        d="M9.1 15.5c1.5-.6 3.3-.4 4.6.4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+/** YouTube Music mark: a rounded rectangle with a play triangle. */
+export function YouTubeGlyph({ className }: GlyphProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" focusable="false">
+      <rect x="2.2" y="5" width="19.6" height="14" rx="4.2" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M10.2 9.3v5.4l4.6-2.7-4.6-2.7Z" fill="currentColor" />
     </svg>
   );
 }

@@ -1,0 +1,190 @@
+/* The guest screen: one card per service.
+ *
+ * The background video and its `background` class belong to AuthScreen.css and are reused rather than
+ * duplicated вЂ” a second video element with a different class would need a second set of tuning, and
+ * the two would drift apart the first time someone changed one of them. */
+
+.multi-auth {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  overflow: hidden;
+  color: #f4f6fb;
+}
+
+.multi-auth__inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  padding: 32px 24px;
+  width: 100%;
+  max-width: 1040px;
+}
+
+.multi-auth__heading {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.multi-auth__cards {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 18px;
+  width: 100%;
+}
+
+/* The glass treatment is what makes the cards legible over a moving video without hiding it. */
+.multi-auth__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 280px;
+  max-width: 320px;
+  padding: 24px 20px 20px;
+  text-align: center;
+  border: 1px solid var(--glass-border, rgb(255 255 255 / 14%));
+  border-radius: 16px;
+  background: rgb(255 255 255 / 6%);
+  backdrop-filter: blur(20px) saturate(115%);
+  -webkit-backdrop-filter: blur(20px) saturate(115%);
+  box-shadow: var(--glass-shadow, 0 18px 48px rgb(0 0 0 / 32%));
+  transition:
+    border-color 0.2s var(--ease-out),
+    transform 0.2s var(--ease-out);
+}
+
+.multi-auth__card.is-connected {
+  border-color: color-mix(in srgb, #2fbf71 55%, transparent);
+}
+
+.multi-auth__glyph {
+  width: 40px;
+  height: 40px;
+  color: #f4f6fb;
+}
+
+.multi-auth__card.is-connected .multi-auth__glyph {
+  color: #2fbf71;
+}
+
+.multi-auth__title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.multi-auth__status {
+  margin: 0;
+  min-height: 2.4em;
+  font-size: 12px;
+  line-height: 1.2;
+  color: rgb(244 246 251 / 68%);
+  /* A long channel or user name must not stretch the card out of line with its neighbours. */
+  overflow-wrap: anywhere;
+}
+
+.multi-auth__card.is-connected .multi-auth__status {
+  color: #2fbf71;
+}
+
+.multi-auth__form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.multi-auth__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  font-size: 11px;
+  color: rgb(244 246 251 / 62%);
+}
+
+.multi-auth__field input {
+  width: 100%;
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 12px;
+  color: #f4f6fb;
+  background: rgb(0 0 0 / 28%);
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 8px;
+}
+
+.multi-auth__field input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+
+.multi-auth__action {
+  margin-top: 4px;
+  padding: 9px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: filter 0.2s var(--ease-out);
+}
+
+.multi-auth__action:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.multi-auth__action:disabled {
+  cursor: not-allowed;
+  filter: saturate(0.5) brightness(0.8);
+}
+
+/* The hint doubles as the button label for the OAuth cards, so it is set as a smaller caption rather
+   than filling the button. */
+.multi-auth__form .multi-auth__action {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.25;
+  padding: 9px 12px;
+}
+
+.multi-auth__error {
+  max-width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .multi-auth__card {
+    transition: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .multi-auth__heading {
+    font-size: 21px;
+  }
+
+  .multi-auth__card {
+    flex-basis: 100%;
+    max-width: none;
+  }
+}
+
+.multi-auth__hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.3;
+  color: rgb(244 246 251 / 52%);
+  text-align: left;
+}

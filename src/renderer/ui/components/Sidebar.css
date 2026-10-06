@@ -1,0 +1,45 @@
+/* The service badge at the top of the sidebar.
+ *
+ * Sidebar had no stylesheet of its own until now — its rules live in styles.css. This file exists only
+ * for the badge, so everything here is scoped to .sidebar-service and cannot reach the navigation. */
+
+.sidebar-service {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  /* Fills the sidebar's width rather than hugging the text, so it lines up with the nav links below it
+     instead of floating in the middle of the panel. */
+  align-self: stretch;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sidebar-service__glyph {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  color: var(--accent);
+}
+
+.sidebar-service span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Narrow sidebar: the name is what goes, since the mark and the title attribute still identify it. */
+@media (max-width: 1180px) {
+  .sidebar-service {
+    justify-content: center;
+  }
+
+  .sidebar-service span {
+    display: none;
+  }
+}

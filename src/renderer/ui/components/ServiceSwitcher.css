@@ -1,0 +1,148 @@
+/* The row of service buttons in the topbar.
+ *
+ * Colours come from the project's own variables rather than literals, so the row follows the accent and
+ * the panel theme the way the rest of the UI does. */
+
+.service-switcher {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.service-switcher__item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  /* The row sits in a crowded topbar; a transparent hit area would swallow clicks meant for the
+     neighbouring buttons. */
+  padding: 5px 9px 7px;
+  min-width: 62px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    transform 0.2s var(--ease-out),
+    border-color 0.2s var(--ease-out),
+    color 0.2s var(--ease-out);
+}
+
+.service-switcher__item:hover:not(:disabled) {
+  color: var(--soft);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+}
+
+/* Active is accent-coloured and slightly larger, so the current service is findable without reading. */
+.service-switcher__item.is-active {
+  color: var(--accent);
+  border-color: var(--accent);
+  transform: scale(1.05);
+}
+
+.service-switcher__item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.service-switcher__item:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+/* During a switch the button that is working pulses, and the others are dimmed. Without this a two-second
+   wait looks like a dropped click. */
+.service-switcher__item:disabled:not(.is-active) {
+  opacity: 0.4;
+}
+
+.service-switcher__glyph,
+.service-switcher__avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
+.service-switcher__placeholder {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--muted) 22%, transparent);
+}
+
+.service-switcher__label {
+  font-size: 10px;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.service-switcher__dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+  transition: background 0.2s var(--ease-out);
+}
+
+/* Connected reads green rather than merely "not grey", because on a dark panel two greys are hard to
+   tell apart at seven pixels. */
+.service-switcher__dot.is-on {
+  background: #2fbf71;
+}
+
+.service-switcher__dot[data-busy='true'] {
+  background: var(--accent);
+  animation: service-switcher-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes service-switcher-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* The animation is decorative and the dot still changes colour without it, so a reduced-motion setting
+   costs nothing here. */
+@media (prefers-reduced-motion: reduce) {
+  .service-switcher__item,
+  .service-switcher__dot {
+    transition: none;
+  }
+
+  .service-switcher__item.is-active {
+    transform: none;
+  }
+
+  .service-switcher__dot[data-busy='true'] {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* Narrow windows: the labels are the first thing to go. The marks and the dots still identify the
+   services, and the accessible name carries the full text. */
+@media (max-width: 860px) {
+  .service-switcher__label {
+    display: none;
+  }
+
+  .service-switcher__item {
+    min-width: 34px;
+    padding: 5px 7px;
+  }
+}
