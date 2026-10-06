@@ -13,8 +13,6 @@
     "allow-finish-auth-flow",
     "allow-show-captcha-window",
     "allow-poll-captcha-challenge",
-    "allow-like-track-webview",
-    "allow-sync-session",
     {
       "identifier": "shell:allow-spawn",
       "allow": [
@@ -25,11 +23,28 @@
         }
       ]
     },
-    "shell:allow-stdin-write",
-    "shell:allow-kill",
-    "allow-start-spotify-auth",
-    "allow-poll-spotify-auth",
-    "allow-start-youtube-auth",
-    "allow-poll-youtube-auth"
+    {
+      "identifier": "shell:allow-stdin-write",
+      "allow": [
+        {
+          "name": "binaries/local-api",
+          "sidecar": true,
+          "args": false
+        }
+      ]
+    },
+    {
+      "identifier": "shell:allow-kill",
+      "allow": [
+        {
+          "name": "binaries/local-api",
+          "sidecar": true
+        }
+      ]
+    },
+    {"identifier":"allow-start-spotify-auth"},
+    {"identifier":"allow-poll-spotify-auth"},
+    {"identifier":"allow-start-youtube-auth"},
+    {"identifier":"allow-poll-youtube-auth"}
   ]
 }

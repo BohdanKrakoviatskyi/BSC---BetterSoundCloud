@@ -1,0 +1,41 @@
+/**
+ * Single place the UI pulls glyphs from: FontAwesome 6 (free, solid).
+ * All icons render `<svg>` with `fill: currentColor`, so CSS only needs to
+ * size them — no stroke overrides. Swap the family here to move off FA.
+ */
+export {
+  FaAlignLeft,
+  FaArrowDown,
+  FaArrowLeft,
+  FaArrowRight,
+  FaArrowRightFromBracket,
+  FaArrowUp,
+  FaArrowUpRightFromSquare,
+  FaBackwardStep,
+  FaBell,
+  FaCheck,
+  FaChevronDown,
+  FaChevronLeft,
+  FaChevronRight,
+  FaCommentDots,
+  FaDownload,
+  FaForwardStep,
+  FaGear,
+  FaHeadphones,
+  FaHeart,
+  FaListUl,
+  FaMagnifyingGlass,
+  FaMaximize,
+  FaMinimize,
+  FaMinus,
+  FaMusic,
+  FaPause,
+  FaPlay,
+  FaPlus,
+  FaRepeat,
+  FaShuffle,
+  FaWandMagicSparkles,
+  FaVolumeHigh,
+  FaVolumeXmark,
+  FaXmark,
+} from 'react-icons/fa6';

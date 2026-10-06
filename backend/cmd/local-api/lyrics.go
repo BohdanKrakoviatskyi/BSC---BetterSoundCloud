@@ -85,7 +85,7 @@ func (s *service) RPCTrackLyrics(params trackLyricsParams) (trackLyrics, error) 
 		return trackLyrics{}, errors.New("некорректные данные трека")
 	}
 	if s.httpClient == nil {
-		return trackLyrics{}, errors.New("lyrics HTTP client is not configured")
+		return trackLyrics{}, errors.New("сервис поиска текста песни недоступен")
 	}
 
 	s.lyricsMu.RLock()
@@ -223,7 +223,7 @@ func scoreDeezerCandidate(params trackLyricsParams, candidate deezerTrack, title
 
 	artistScore := 0.0
 	for _, artist := range artists {
-		artistScore = maxFloat(artistScore, lyricsTokenOverlap(artist, candidate.Artist.Name))
+		artistScore = math.Max(artistScore, lyricsTokenOverlap(artist, candidate.Artist.Name))
 	}
 	shortTitle := lyricsTitleSpecificity(bestTitle) < 3
 	// For titles such as "Crush" or "Fever", matching title words is not enough. The catalog
@@ -456,7 +456,7 @@ func (s *service) getLyricsJSON(endpoint string, target any) error {
 				}
 				lastErr = err
 			} else {
-				lastErr = fmt.Errorf("lyrics provider returned HTTP %d", response.StatusCode)
+				lastErr = fmt.Errorf("источник текста вернул ошибку HTTP %d", response.StatusCode)
 				response.Body.Close()
 				if response.StatusCode < 500 {
 					return lastErr
@@ -725,11 +725,4 @@ func uniqueStrings(values []string) []string {
 		result = appendUniqueFold(result, value)
 	}
 	return result
-}
-
-func maxFloat(a, b float64) float64 {
-	if a > b {
-		return a
-	}
-	return b
 }

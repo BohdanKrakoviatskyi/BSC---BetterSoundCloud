@@ -1,12 +1,28 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 import type { Profile, Settings } from '../types';
-import { ConfirmDialog } from './ConfirmDialog';
 import { ErrorMessage } from './ErrorMessage';
-import { createUserBackgroundPreset, deleteUserBackgroundPreset, loadUserBackgroundPresets, type UserBackgroundPreset } from '../lib/backgroundPresets';
+import { createUserBackgroundPreset, deleteUserBackgroundPreset, isAnimatedPreset, loadUserBackgroundPresets, type UserBackgroundPreset } from '../lib/backgroundPresets';
+import { describeError, normalizeToken } from '../lib/format';
 import './SettingsPanel.css';
 
 const MAX_BACKGROUND_DATA_URL_LENGTH = 700_000;
+// A GIF cannot be re-encoded: a canvas keeps one frame, so the animation would be lost. The
+// file is carried through as base64 instead, which costs about a third more than the raw bytes
+// and therefore needs a larger ceiling than a redrawn still image does.
+const MAX_ANIMATED_FILE_BYTES = 12 * 1024 * 1024;
+/**
+ * The longest data URL an animation of MAX_ANIMATED_FILE_BYTES can produce.
+ *
+ * Derived rather than written down on purpose. base64 spends four characters on every three
+ * bytes, so a literal number here silently disagrees with the file limit above it, and that
+ * disagreement is what once made an 11.5 MB GIF pass the file check and then fail as "too big".
+ */
+const MAX_ANIMATED_BACKGROUND_LENGTH =
+  'data:image/gif;base64,'.length + Math.ceil((MAX_ANIMATED_FILE_BYTES * 4) / 3) + 64;
 const MAX_BACKGROUND_FILE_SIZE = 25 * 1024 * 1024;
+/** Formats that can be redrawn by canvas without losing anything that matters. */
+const REDRAWABLE_BACKGROUND_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const ANIMATED_BACKGROUND_TYPE = 'image/gif';
 const BACKGROUND_PRESETS = [
   { name: 'Синий нуар', fileName: '025bef26455d0dd81b480740debab6aa.jpg' },
   { name: 'Ночной пейзаж', fileName: '24a15fa7c44039c32c08754e5f88b0ad.jpg' },
@@ -16,12 +32,46 @@ const BACKGROUND_PRESETS = [
   { name: 'Красное яблоко', fileName: 'сау.jpg' },
 ] as const;
 
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ''));
+    reader.onerror = () => reject(new Error('Не удалось прочитать файл.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+/** True for file types that carry their own animation and must not be redrawn. */
+function isAnimatedBackground(file: File): boolean {
+  return file.type === ANIMATED_BACKGROUND_TYPE;
+}
+
 async function encodeBackgroundImage(file: File): Promise<string> {
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-    throw new Error('Выбери изображение в формате JPEG, PNG или WebP.');
+  if (![...REDRAWABLE_BACKGROUND_TYPES, ANIMATED_BACKGROUND_TYPE].includes(file.type)) {
+    throw new Error('Выбери изображение в формате JPEG, PNG, WebP или GIF.');
   }
   if (file.size > MAX_BACKGROUND_FILE_SIZE) {
     throw new Error('Размер исходного изображения не должен превышать 25 МБ.');
+  }
+  // Checked against the file itself, because that is the number the user can see and reason
+  // about. Comparing the encoded string length instead would reject files the picker allowed.
+  if (isAnimatedBackground(file) && file.size > MAX_ANIMATED_FILE_BYTES) {
+    throw new Error('Анимация слишком большая: выбери GIF не больше 12 МБ.');
+  }
+
+  // Animated formats bypass the canvas entirely. Re-encoding would silently flatten the
+  // animation, and the user would be looking at a still image after choosing a GIF on purpose.
+  if (isAnimatedBackground(file)) {
+    const dataUrl = await readAsDataUrl(file);
+    if (!dataUrl.startsWith('data:' + ANIMATED_BACKGROUND_TYPE)) {
+      throw new Error('Файл оказался не анимацией. Выбери GIF.');
+    }
+    // A guard against an encoding that came out longer than base64 could produce at all, which
+    // would mean the reader gave back something other than the file that was handed to it.
+    if (dataUrl.length > MAX_ANIMATED_BACKGROUND_LENGTH) {
+      throw new Error('Не удалось подготовить анимацию: файл слишком большой.');
+    }
+    return dataUrl;
   }
 
   const image = await createImageBitmap(file);
@@ -54,7 +104,6 @@ type Props = {
   tokenError: string;
   tokenBusy: boolean;
   onSaveToken: (token: string) => Promise<boolean>;
-  onClearData: () => Promise<boolean>;
   /**
    * Rendered after the SoundCloud connection card.
    *
@@ -65,13 +114,12 @@ type Props = {
   accountsSection?: ReactNode;
 };
 
-export function SettingsPanel({ settings, saved, error, profile, tokenError, tokenBusy, onUpdate, onSaveToken, onClearData, accountsSection }: Props) {
+export function SettingsPanel({ settings, saved, error, profile, tokenError, tokenBusy, onUpdate, onSaveToken, accountsSection }: Props) {
   const [clientId, setClientId] = useState(settings.clientId);
   const [token, setToken] = useState('');
   const [showToken, setShowToken] = useState(false);
-  const [clearDialogOpen, setClearDialogOpen] = useState(false);
-  const [clearBusy, setClearBusy] = useState(false);
   const [backgroundBusy, setBackgroundBusy] = useState(false);
+  const backgroundIsAnimated = Boolean(settings.backgroundImage && isAnimatedPreset(settings.backgroundImage));
   const [backgroundError, setBackgroundError] = useState('');
   const [userBackgroundPresets, setUserBackgroundPresets] = useState<UserBackgroundPreset[]>([]);
   const [backgroundPresetName, setBackgroundPresetName] = useState('');
@@ -84,14 +132,15 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
     let active = true;
     void loadUserBackgroundPresets()
       .then((presets) => { if (active) setUserBackgroundPresets(presets); })
-      .catch((reason: unknown) => { if (active) setBackgroundError(reason instanceof Error ? reason.message : 'Не удалось загрузить сохранённые пресеты.'); });
+      .catch((reason: unknown) => { if (active) setBackgroundError(describeError(reason, 'Не удалось загрузить сохранённые пресеты.')); });
     return () => { active = false; };
   }, []);
 
   async function submitToken(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!token.trim()) return;
-    const saved = await onSaveToken(token.trim());
+    const accessToken = normalizeToken(token);
+    if (!accessToken) return;
+    const saved = await onSaveToken(accessToken);
     if (saved) {
       setToken('');
       setShowToken(false);
@@ -109,7 +158,7 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
       const backgroundImage = await encodeBackgroundImage(file);
       onUpdate({ backgroundImage });
     } catch (reason) {
-      setBackgroundError(reason instanceof Error ? reason.message : 'Не удалось загрузить изображение.');
+      setBackgroundError(describeError(reason, 'Не удалось загрузить изображение.'));
     } finally {
       setBackgroundBusy(false);
     }
@@ -126,7 +175,7 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
       const backgroundImage = await encodeBackgroundImage(file);
       onUpdate({ backgroundImage });
     } catch (reason) {
-      setBackgroundError(reason instanceof Error ? reason.message : 'Не удалось применить пресет.');
+      setBackgroundError(describeError(reason, 'Не удалось применить пресет.'));
     } finally {
       setBackgroundBusy(false);
     }
@@ -143,7 +192,7 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
       setUserBackgroundPresets((current) => [preset, ...current]);
       setBackgroundPresetName('');
     } catch (reason) {
-      setBackgroundError(reason instanceof Error ? reason.message : 'Не удалось сохранить пресет.');
+      setBackgroundError(describeError(reason, 'Не удалось сохранить пресет.'));
     } finally {
       setBackgroundBusy(false);
     }
@@ -156,23 +205,9 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
       await deleteUserBackgroundPreset(preset.id);
       setUserBackgroundPresets((current) => current.filter(({ id }) => id !== preset.id));
     } catch (reason) {
-      setBackgroundError(reason instanceof Error ? reason.message : 'Не удалось удалить пресет.');
+      setBackgroundError(describeError(reason, 'Не удалось удалить пресет.'));
     } finally {
       setBackgroundBusy(false);
-    }
-  }
-
-  async function confirmClearData() {
-    setClearBusy(true);
-    try {
-      const cleared = await onClearData();
-      if (cleared) {
-        setToken('');
-        setShowToken(false);
-        setClearDialogOpen(false);
-      }
-    } finally {
-      setClearBusy(false);
     }
   }
 
@@ -194,7 +229,7 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
             <div>
               <h2 id="personalization-title">Интерфейс</h2>
             </div>
-            <button className="settings-reset-button" type="button" disabled={backgroundBusy} onClick={() => { setBackgroundError(''); onUpdate({ accent: '#ff765d', compact: false, backgroundImage: '', backgroundBlur: 0 }); }}>
+            <button className="settings-reset-button" type="button" disabled={backgroundBusy} onClick={() => { setBackgroundError(''); onUpdate({ accent: '#ff765d', backgroundImage: '', backgroundBlur: 0 }); }}>
               Сбросить оформление
             </button>
           </div>
@@ -202,10 +237,6 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
             <label className="setting-row color-setting">
               <span><b>Цвет акцента</b></span>
               <input aria-label="Цвет акцента" type="color" value={settings.accent} onChange={(event) => onUpdate({ accent: event.target.value })} />
-            </label>
-            <label className="setting-row compact-setting">
-              <span><b>Компактный интерфейс</b></span>
-              <span className="switch"><input type="checkbox" checked={settings.compact} onChange={(event) => onUpdate({ compact: event.target.checked })} /><i /></span>
             </label>
             <label className="setting-row volume-setting">
               <span><b>Начальная громкость</b></span>
@@ -248,16 +279,10 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
             </div>
           </form>
         </section>
+        </div>
 
         {accountsSection}
 
-        <section className="settings-card settings-danger-zone" aria-labelledby="clear-data-heading">
-          <div>
-            <h2 id="clear-data-heading">Начать с чистого листа</h2>
-          </div>
-          <button className="danger-button" type="button" onClick={() => setClearDialogOpen(true)}>Очистить данные</button>
-        </section>
-        </div>
         <div className="settings-column settings-column-background">
         <section className="settings-card settings-background" aria-labelledby="background-title">
           <div className="settings-card-heading">
@@ -269,7 +294,7 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
             <div className="setting-row background-image-setting">
               <span><b>Фоновое изображение</b></span>
               <label className="background-upload-button">
-                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => void selectBackground(event)} disabled={backgroundBusy} />
+                <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={(event) => void selectBackground(event)} disabled={backgroundBusy} />
                 <span>{backgroundBusy ? 'Обрабатываю…' : settings.backgroundImage ? 'Заменить' : 'Выбрать фото'}</span>
               </label>
             </div>
@@ -301,8 +326,9 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
             {backgroundError && <p className="background-image-error" role="alert">{backgroundError}</p>}
             {settings.backgroundImage && <>
               <div className="background-preview-row">
-                <div className="background-preview" aria-label="Предпросмотр текущего фона">
+                <div className={`background-preview ${backgroundIsAnimated ? 'is-animated' : ''}`} aria-label="Предпросмотр текущего фона">
                   <span style={{ backgroundImage: `url("${settings.backgroundImage}")`, filter: `blur(${settings.backgroundBlur}px)` }} />
+                  {backgroundIsAnimated && <span className="background-animated-badge" aria-live="polite">анимация</span>}
                 </div>
                 <button className="text-action background-remove-button" type="button" onClick={() => { setBackgroundError(''); onUpdate({ backgroundImage: '', backgroundBlur: 0 }); }}>Убрать фон</button>
               </div>
@@ -312,7 +338,7 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
               </form>
             </>}
             <label className="setting-row background-blur-setting">
-              <span><b>Размытие фона</b></span>
+              <span><b>Размытие фона</b>{backgroundIsAnimated && <small className="background-blur-note">GIF не переживает большое размытие — картинка расплывается в кашу.</small>}</span>
               <span className="background-blur-control"><input aria-label="Размытие фонового изображения" type="range" min="0" max="24" step="1" value={settings.backgroundBlur} disabled={!settings.backgroundImage} onChange={(event) => onUpdate({ backgroundBlur: Number(event.currentTarget.value) })} /><output>{settings.backgroundBlur}px</output></span>
             </label>
           </div>
@@ -320,20 +346,7 @@ export function SettingsPanel({ settings, saved, error, profile, tokenError, tok
 
         </div>
       </div>
-      {error && !clearDialogOpen && <ErrorMessage message={error} className="settings-page-error" />}
-      {clearDialogOpen && <ConfirmDialog
-        eyebrow="СБРОС ПРИЛОЖЕНИЯ"
-        title="Очистить все данные?"
-        description="Сохранённый токен будет удалён, а Client ID и настройки сбросятся к значениям по умолчанию. Приложение выйдет из аккаунта SoundCloud. Это действие нельзя отменить."
-        confirmLabel="Да, очистить"
-        busyLabel="Очищаю…"
-        busy={clearBusy}
-        variant="danger"
-        onClose={() => setClearDialogOpen(false)}
-        onConfirm={() => void confirmClearData()}
-      >
-        {error && <ErrorMessage message={error} />}
-      </ConfirmDialog>}
+      {error && <ErrorMessage message={error} className="settings-page-error" />}
     </section>
   );
 }

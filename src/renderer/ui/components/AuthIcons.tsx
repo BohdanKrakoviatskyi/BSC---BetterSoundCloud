@@ -7,6 +7,13 @@
  * hand of a real logo is mostly noise anyway.
  */
 
+import {
+  FaArrowUpRightFromSquare,
+  FaCheck,
+  FaChevronDown,
+  FaWandMagicSparkles,
+} from '../lib/icons';
+
 type GlyphProps = {
   className?: string;
 };
@@ -65,18 +72,7 @@ export function YouTubeGlyph({ className }: GlyphProps) {
 
 /** Chevron for the manual-setup accordion. */
 export function ChevronGlyph({ className }: GlyphProps) {
-  return (
-    <svg viewBox="0 0 16 16" className={className} aria-hidden="true" focusable="false">
-      <path
-        d="M3.5 6.2 8 10.5l4.5-4.3"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
+  return <FaChevronDown className={className} aria-hidden="true" />;
 }
 
 /** Five-bar waveform, painted with the surrounding text color. */
@@ -105,27 +101,15 @@ export function BrandMark({ className }: GlyphProps) {
 
 /** Check mark for the feature list. */
 export function CheckGlyph({ className }: GlyphProps) {
-  return (
-    <svg viewBox="0 0 16 16" className={className} aria-hidden="true" focusable="false">
-      <path d="M3.2 8.7 6.3 11.8 12.8 4.8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <FaCheck className={className} aria-hidden="true" />;
 }
 
 /** Diagonal arrow used by the primary call to action. */
 export function ArrowUpRightGlyph({ className }: GlyphProps) {
-  return (
-    <svg viewBox="0 0 16 16" className={className} aria-hidden="true" focusable="false">
-      <path d="M5 11 11 5M6.2 5H11v4.8" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <FaArrowUpRightFromSquare className={className} aria-hidden="true" />;
 }
 
-/** Four-point sparkle for the wordmark footer. */
+/** Sparkle for the wordmark footer. */
 export function SparkleGlyph({ className }: GlyphProps) {
-  return (
-    <svg viewBox="0 0 16 16" className={className} aria-hidden="true" focusable="false">
-      <path d="M8 1.5c.5 3 1.5 4 4.5 4.5-3 .5-4 1.5-4.5 4.5-.5-3-1.5-4-4.5-4.5 3-.5 4-1.5 4.5-4.5Z" fill="currentColor" />
-    </svg>
-  );
+  return <FaWandMagicSparkles className={className} aria-hidden="true" />;
 }

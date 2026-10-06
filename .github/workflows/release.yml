@@ -10,6 +10,16 @@ on:
         description: Version tag to build and publish (for example, v0.1.15)
         required: true
         type: string
+      platform:
+        description: 'Runner to build. "all" builds every platform.'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - ubuntu-24.04
+          - windows-latest
+          - macos-latest
 
 permissions:
   contents: write
@@ -22,18 +32,30 @@ jobs:
       fail-fast: false
       max-parallel: 1
       matrix:
-        platform: [ubuntu-24.04, windows-latest, macos-latest]
+        # macOS собирается на Apple Silicon (macos-latest, arm64). Intel-сборка убрана:
+        # отдельный x64-раннер удваивает время и расходы, а arm64-приложение на Intel Mac
+        # всё равно запускается через Rosetta 2. Если Intel-бинарь понадобится, вернуть
+        # macos-15-intel в этот список и в options инпута platform.
+        #
+        # Ни для какой платформы triple не зафиксирован: каждый раннер собирает нативно,
+        # поэтому sidecar всегда совпадает с архитектурой, которую таргетит бандлер.
+        # Пустой inputs.platform (то есть тег-пуш, где inputs не задан) разворачивается
+        # в полный список. Явный выбор собирает одну платформу: matrix недоступен в
+        # job-level if, поэтому фильтр живёт здесь, а fromJSON превращает строку в массив.
+        platform: ${{ inputs.platform != '' && inputs.platform != 'all' && fromJSON(format('["{0}"]', inputs.platform)) || fromJSON('["ubuntu-24.04", "windows-latest", "macos-latest"]') }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
       - name: Sync version from release tag
+        shell: bash
         env:
           RELEASE_VERSION: ${{ inputs.tag || github.ref_name }}
         run: node scripts/sync-release-version.mjs
 
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
+        shell: bash
         run: |
           sudo apt-get update
           sudo apt-get install --yes \
@@ -65,17 +87,79 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install npm dependencies
+        shell: bash
         run: npm ci
 
       - name: Build backend sidecar
+        shell: bash
+        # No TAURI_ENV_TARGET_TRIPLE here on purpose: every runner builds natively, so the host
+        # triple is correct. Pinning it was what broke when a runner changed architecture.
         run: npm run build:go
 
-      - name: Build and publish release
+      # Apple Developer signing and notarisation. These steps run only when the secrets
+      # exist, so a fork still builds, but an unsigned build is no longer silent: the
+      # report below names the mode the build actually used.
+      - name: Check for Apple signing secrets
+        id: apple
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          # Раньше переменная не попадала в env этого шага, и $APPLE_SIGNING_IDENTITY
+          # оставалась пустой: identity выходил пустым даже с сертификатом.
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          if [ -n "$APPLE_CERTIFICATE" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "identity=$APPLE_SIGNING_IDENTITY" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            # Ad-hoc signing, matching signingIdentity "-" in tauri.conf.json. This must not be
+            # an empty string: an empty APPLE_SIGNING_IDENTITY overrides that config value and
+            # codesign is then invoked with no identity at all, which failed the whole bundle.
+            echo "identity=-" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Import Apple Developer certificate
+        if: runner.os == 'macOS' && steps.apple.outputs.enabled == 'true'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/build.keychain"
+          security create-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: \
+            -s -k "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychain -d user -s "$KEYCHAIN" login.keychain-db
+          rm -f "$RUNNER_TEMP/cert.p12"
+      # Two variants of the build step instead of one step with a conditional env block.
+      # A step's env map cannot omit a key, and `${{ ... || null }}` does not omit it either:
+      # the runner sets the variable to an empty string, which var_os still reports as present.
+      # That was measured on the runner, not assumed. tauri-macos-sign matches "notarisation
+      # configured" on presence, so three empty strings sent it down the Apple ID path and the
+      # bundle failed with "Team ID must be at least 3 characters". Omitting the keys entirely
+      # lets notarize_auth fall through to the API key branch and report no credentials, which
+      # is a warning rather than an error.
+      - name: Build and publish release (Apple Developer signed and notarised)
+        if: steps.apple.outputs.enabled == 'true'
         uses: tauri-apps/tauri-action@action-v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ steps.apple.outputs.identity }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           tauriScript: npx tauri
           tagName: ${{ inputs.tag || github.ref_name }}
@@ -84,3 +168,40 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ runner.os == 'Linux' && '--bundles appimage' || '' }}
+
+      - name: Build and publish release (ad-hoc signing, no notarisation)
+        # Runs on Linux and Windows too, where the apple step is skipped and no Apple variable
+        # is needed. The identity is the constant "-", matching signingIdentity in tauri.conf.json:
+        # it must be non-empty, and an empty value would leave codesign without an identity.
+        if: steps.apple.outputs.enabled != 'true'
+        uses: tauri-apps/tauri-action@action-v0.6.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: '-'
+        with:
+          tauriScript: npx tauri
+          tagName: ${{ inputs.tag || github.ref_name }}
+          releaseName: BetterSoundCloud ${{ inputs.tag || github.ref_name }}
+          releaseBody: See the release assets to download and install this version.
+          releaseDraft: false
+          prerelease: false
+          args: ${{ runner.os == 'Linux' && '--bundles appimage' || '' }}
+
+      - name: Report signing mode
+        # На Windows дефолтный shell — PowerShell, и bash-синтаксис падал с
+        # ParserError. Явный shell делает шаг одинаковым на всех раннерах.
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            if [ "$APPLE_SIGNED" = "true" ]; then
+              echo "macOS build: Apple Developer signed and notarised"
+            else
+              echo "::warning::macOS build is ad-hoc signed and NOT notarised; Gatekeeper blocks it on first launch. Set APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY, APPLE_KEYCHAIN_PASSWORD, APPLE_ID, APPLE_PASSWORD and APPLE_TEAM_ID."
+            fi
+          else
+            echo "$RUNNER_OS build: platform code signing is not configured; SmartScreen may warn on first run."
+          fi
+        env:
+          APPLE_SIGNED: ${{ steps.apple.outputs.enabled == 'true' }}

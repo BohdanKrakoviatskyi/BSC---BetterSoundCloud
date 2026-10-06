@@ -14,6 +14,7 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { TrackSearch } from './components/TrackSearch';
 import { TrackDetailsPage } from './components/TrackDetailsPage';
 import { ArtistProfilePage } from './components/ArtistProfilePage';
+import { FaArrowRightFromBracket, FaChevronLeft, FaGear } from './lib/icons';
 import { ArtistTrackListPage } from './components/ArtistTrackListPage';
 import { SocialUsersPage } from './components/SocialUsersPage';
 import { Sidebar } from './components/Sidebar';
@@ -29,8 +30,10 @@ import { QueuePanel } from './components/QueuePanel';
 import { ConnectedAccounts } from './components/ConnectedAccounts';
 import { ServiceSwitcher } from './components/ServiceSwitcher';
 import { MultiAuthScreen } from './components/MultiAuthScreen';
+import { describeError } from './lib/format';
+import { useBackgroundUrl } from '../lib/useBackgroundUrl';
 
-const defaultSettings: Settings = { accent: '#ff765d', compact: false, volume: 70, clientId: '', backgroundImage: '', backgroundBlur: 0 };
+const defaultSettings: Settings = { accent: '#ff765d', volume: 70, clientId: '', backgroundImage: '', backgroundBlur: 0 };
 const sidebarWidthsKey = 'better-soundcloud.sidebar-widths';
 
 function savedSidebarWidths(): { left: number; lyrics: number } {
@@ -43,10 +46,6 @@ function savedSidebarWidths(): { left: number; lyrics: number } {
   } catch {
     return { left: 320, lyrics: 380 };
   }
-}
-
-function reasonText(reason: unknown, fallback: string): string {
-  return reason instanceof Error ? reason.message : fallback;
 }
 
 type CaptchaChallengeStatus = { completed: boolean; closed: boolean; datadomeCookie?: string | null };
@@ -218,7 +217,7 @@ export function App() {
         await appGateway.historyRecord(track);
         console.info('[ui.history] track recorded', { trackId: track.id });
       } catch (reason) {
-        const message = reasonText(reason, 'Не удалось сохранить историю');
+        const message = describeError(reason, 'Не удалось сохранить историю');
         setHistoryError(message);
         console.error('[ui.history] record failed', { trackId: track.id, error: message });
       }
@@ -241,7 +240,7 @@ export function App() {
       setSelections(loaded);
       console.info('[ui.mixed-selections] loaded', { count: loaded.length, tracks: loaded.reduce((count, selection) => count + selection.tracks.length, 0) });
     } catch (reason) {
-      const message = reasonText(reason, 'Не удалось загрузить подборки');
+      const message = describeError(reason, 'Не удалось загрузить подборки');
       setSelectionsError(message);
       console.error('[ui.mixed-selections] failed', { error: message });
     } finally {
@@ -258,7 +257,7 @@ export function App() {
       setLikedTracks(Object.fromEntries(loaded.map((track) => [track.id, true])));
       console.info('[ui.tracks] loaded', { count: loaded.length });
     } catch (reason) {
-      const message = reasonText(reason, 'Не удалось загрузить треки');
+      const message = describeError(reason, 'Не удалось загрузить треки');
       console.error('[ui.tracks] load failed', { error: message });
       setTracksError(message);
     } finally {
@@ -277,7 +276,7 @@ export function App() {
       console.info('[ui.history] loaded', { count: loaded.length });
     } catch (reason) {
       if (mutation !== historyMutationRef.current) return;
-      const message = reasonText(reason, 'Не удалось загрузить историю прослушиваний');
+      const message = describeError(reason, 'Не удалось загрузить историю прослушиваний');
       setHistoryError(message);
       console.error('[ui.history] load failed', { error: message });
     } finally {
@@ -294,7 +293,7 @@ export function App() {
       setHistory(cleared);
       console.info('[ui.history] cleared', { remaining: cleared.length });
     } catch (reason) {
-      const message = reasonText(reason, 'Не удалось очистить историю прослушиваний');
+      const message = describeError(reason, 'Не удалось очистить историю прослушиваний');
       setHistoryError(message);
       console.error('[ui.history] clear failed', { error: message });
     }
@@ -308,7 +307,7 @@ export function App() {
       setPlaylists(loaded);
       console.info('[ui.playlists] loaded', { count: loaded.length, service: activeService });
     } catch (reason) {
-      const message = reasonText(reason, 'Не удалось загрузить плейлисты');
+      const message = describeError(reason, 'Не удалось загрузить плейлисты');
       setPlaylistsError(message);
       console.error('[ui.playlists] load failed', { error: message });
     } finally {
@@ -353,7 +352,7 @@ export function App() {
       console.info(`[ui.track.${operation}] completed`, { service: activeService, trackId: track.id, liked: result.liked });
       return true;
     } catch (reason) {
-      const message = reasonText(reason, 'Не удалось изменить лайк');
+      const message = describeError(reason, 'Не удалось изменить лайк');
       console.error(`[ui.track.${operation}] failed`, { service: activeService, trackId: track.id, error: message });
       setTracksError(message);
       return false;
@@ -407,7 +406,7 @@ export function App() {
       applyTrackLikeState(track, result.liked);
       console.info(`[ui.track.${operation}] completed`, { trackId: track.id, liked: result.liked });
     } catch (reason) {
-      const message = reasonText(reason, 'Не удалось изменить лайк');
+      const message = describeError(reason, 'Не удалось изменить лайк');
       console.error(`[ui.track.${operation}] failed`, { trackId: track.id, error: message });
       setLikedTracks((current) => ({ ...current, [track.id]: wasLiked }));
       setTracksError(message);
@@ -502,29 +501,28 @@ export function App() {
   }
 
   function handleTrackEnded() {
-    if (manualQueueEnabled) {
-      const nextTrack = manualQueue[1];
-      advanceManualQueue();
-      if (nextTrack && lyricsPanelActive) void openTrackDetails(nextTrack, manualQueue);
-      return;
-    }
     if (shuffleLiked) {
       const nextTrack = playRandomLikedTrack();
       if (nextTrack && lyricsPanelActive) void openTrackDetails(nextTrack, tracks);
       else if (!nextTrack) setShouldPlay(false);
       return;
     }
-    // У трека, открытого отдельно, currentTrackIndex равен -1, а в очереди лежит только он сам:
-    // nextIndex вышел бы 0, nextTrack — только что закончившаяся песня, и loadTrackAt(0) повторил бы
-    // её бесконечно. Поэтому индекс должен быть неотрицательным.
-    const nextIndex = currentTrackIndex + 1;
-    const nextTrack = currentTrackIndex >= 0 ? queueTracks[nextIndex] : undefined;
-    if (!nextTrack) {
-      setShouldPlay(false);
+    // Репит-один разбирается раньше, в самом PlayerBar: он перезапускает трек сам и сюда не
+    // доходит. Дальше — обычный переход по очереди, ровно как по кнопке «вперёд».
+    if (manualQueueEnabled) {
+      advanceManualQueue();
       return;
     }
-    void loadTrackAt(nextIndex);
-    if (lyricsPanelActive) void openTrackDetails(nextTrack, queueTracks);
+    // currentTrackIndex >= 0 обязателен: у трека, открытого отдельно, индекс -1 и в очереди лежит
+    // только он сам. Без проверки 0 < 1 проходит, и следующим играет тот же трек — бесконечное
+    // повторение вместо остановки.
+    if (currentTrackIndex >= 0 && currentTrackIndex + 1 < queueTracks.length) {
+      void loadTrackAt(currentTrackIndex + 1);
+      return;
+    }
+    // Очередь кончилась — останавливаемся.
+    setShouldPlay(false);
+    if (lyricsPanelActive) setPlaybackPositionMs(0);
   }
 
   /**
@@ -570,7 +568,7 @@ export function App() {
       } catch (reason) {
         // A status check that fails means signed out as far as the interface is concerned. It is not a
         // reason to throw the switch away and strand the user on the previous service.
-        console.warn('[ui.services] status check failed', { service: next, error: reasonText(reason, 'unknown') });
+        console.warn('[ui.services] status check failed', { service: next, error: describeError(reason, 'unknown') });
         session = { authorized: false, profile: null };
       }
 
@@ -582,7 +580,7 @@ export function App() {
         try {
           session = await adapter.authRefresh();
         } catch (reason) {
-          console.warn('[ui.services] refresh failed', { service: next, error: reasonText(reason, 'unknown') });
+          console.warn('[ui.services] refresh failed', { service: next, error: describeError(reason, 'unknown') });
         }
       }
 
@@ -634,7 +632,7 @@ export function App() {
     } catch (reason) {
       // Silent on purpose: this runs at startup for every service, and a warning on a screen nobody is
       // looking at yet is noise.
-      console.debug('[ui.services] account check failed', { service, error: reasonText(reason, 'unknown') });
+      console.debug('[ui.services] account check failed', { service, error: describeError(reason, 'unknown') });
     }
   }
 
@@ -685,7 +683,7 @@ export function App() {
       // id.
       setActivePlaylistTracks(await serviceManager.active.playlistTracks(playlist.id));
     } catch (reason) {
-      setActivePlaylistError(reasonText(reason, 'Не удалось загрузить треки плейлиста'));
+      setActivePlaylistError(describeError(reason, 'Не удалось загрузить треки плейлиста'));
     } finally {
       setActivePlaylistLoading(false);
     }
@@ -749,7 +747,7 @@ export function App() {
       setDetailsTrack(detailsResult.value);
       console.info('[ui.track.details] loaded', { trackId: detailsResult.value.id, title: detailsResult.value.title });
     } else {
-      const message = reasonText(detailsResult.reason, 'Не удалось загрузить информацию о треке');
+      const message = describeError(detailsResult.reason, 'Не удалось загрузить информацию о треке');
       console.error('[ui.track.details] failed', { trackId: track.id, error: message });
       setDetailsError(message);
     }
@@ -757,7 +755,7 @@ export function App() {
       setRelatedTracks(relatedResult.value);
       console.info('[ui.track.related] loaded', { trackId: track.id, count: relatedResult.value.length });
     } else {
-      const message = reasonText(relatedResult.reason, 'Не удалось загрузить похожие треки');
+      const message = describeError(relatedResult.reason, 'Не удалось загрузить похожие треки');
       console.error('[ui.track.related] failed', { trackId: track.id, error: message });
       setRelatedError(message);
     }
@@ -798,7 +796,7 @@ export function App() {
       setArtistProfile(profileResult.value);
       console.info('[ui.artist.profile] loaded', { artistId, username: profileResult.value.username });
     } else {
-      const message = reasonText(profileResult.reason, 'Не удалось загрузить профиль автора');
+      const message = describeError(profileResult.reason, 'Не удалось загрузить профиль автора');
       console.error('[ui.artist.profile] failed', { artistId, error: message });
       setArtistProfileError(message);
     }
@@ -806,7 +804,7 @@ export function App() {
       setArtistTracks(tracksResult.value);
       console.info('[ui.artist.tracks] loaded', { artistId, count: tracksResult.value.length });
     } else {
-      const message = reasonText(tracksResult.reason, 'Не удалось загрузить треки автора');
+      const message = describeError(tracksResult.reason, 'Не удалось загрузить треки автора');
       console.error('[ui.artist.tracks] failed', { artistId, error: message });
       setArtistTracksError(message);
     }
@@ -817,12 +815,12 @@ export function App() {
     }
     else {
       setArtistLikedTracks([]);
-      setArtistLikedTracksError(reasonText(likesResult.reason, 'Лайки автора недоступны'));
+      setArtistLikedTracksError(describeError(likesResult.reason, 'Лайки автора недоступны'));
     }
     if (playlistsResult.status === 'fulfilled') setArtistPlaylists(playlistsResult.value);
     else {
       setArtistPlaylists([]);
-      setArtistPlaylistsError(reasonText(playlistsResult.reason, 'Не удалось загрузить плейлисты автора'));
+      setArtistPlaylistsError(describeError(playlistsResult.reason, 'Не удалось загрузить плейлисты автора'));
     }
     setArtistProfileLoading(false);
     setArtistTracksLoading(false);
@@ -845,7 +843,7 @@ export function App() {
       else setArtistFollowingsNext(result.next || '');
     } catch (reason) {
       if (requestId !== artistSocialRequestId.current) return;
-      setArtistSocialError(reasonText(reason, 'Не удалось загрузить список пользователей'));
+      setArtistSocialError(describeError(reason, 'Не удалось загрузить список пользователей'));
     } finally {
       if (requestId === artistSocialRequestId.current) setArtistSocialLoading(false);
     }
@@ -866,7 +864,7 @@ export function App() {
       console.info('[ui.artist.likes] appended', { artistId, count: result.tracks.length, total: artistLikedTracks.length + result.tracks.length, hasNext: Boolean(result.next) });
     } catch (reason) {
       if (requestId !== artistRequestId.current) return;
-      setArtistLikedTracksError(reasonText(reason, 'Не удалось загрузить следующие лайки автора'));
+      setArtistLikedTracksError(describeError(reason, 'Не удалось загрузить следующие лайки автора'));
     } finally {
       artistLikesLoadingRef.current = false;
       if (requestId === artistRequestId.current) setArtistLikedTracksLoading(false);
@@ -966,7 +964,7 @@ export function App() {
       await runArtistProfileRequest(requestId, artistId);
     } catch (reason) {
       if (requestId !== artistRequestId.current) return;
-      const message = reasonText(reason, 'Не удалось определить автора трека');
+      const message = describeError(reason, 'Не удалось определить автора трека');
       console.error('[ui.artist.profile] track lookup failed', { trackId: track.id, error: message });
       setArtistProfileError(message);
       setArtistProfileLoading(false);
@@ -1006,11 +1004,11 @@ export function App() {
     if (requestId !== myProfileRequestId.current) return;
     const errors: string[] = [];
     if (detailsResult.status === 'fulfilled') setMyProfileDetails(detailsResult.value);
-    else errors.push(reasonText(detailsResult.reason, 'Не удалось загрузить данные профиля'));
+    else errors.push(describeError(detailsResult.reason, 'Не удалось загрузить данные профиля'));
     if (tracksResult.status === 'fulfilled') setMyProfileTracks(tracksResult.value);
-    else errors.push(reasonText(tracksResult.reason, 'Не удалось загрузить опубликованные треки'));
+    else errors.push(describeError(tracksResult.reason, 'Не удалось загрузить опубликованные треки'));
     if (playlistsResult.status === 'fulfilled') setMyProfilePlaylists(playlistsResult.value);
-    else errors.push(reasonText(playlistsResult.reason, 'Не удалось загрузить плейлисты профиля'));
+    else errors.push(describeError(playlistsResult.reason, 'Не удалось загрузить плейлисты профиля'));
     setMyProfileError(errors.join(' · '));
     setMyProfileLoading(false);
   }
@@ -1040,7 +1038,7 @@ export function App() {
       else setMyProfileFollowingsNext(result.next || '');
     } catch (reason) {
       if (requestId !== myProfileSocialRequestId.current) return;
-      setMyProfileSocialError(reasonText(reason, 'Не удалось загрузить список пользователей'));
+      setMyProfileSocialError(describeError(reason, 'Не удалось загрузить список пользователей'));
     } finally {
       if (requestId === myProfileSocialRequestId.current) setMyProfileSocialLoading(false);
     }
@@ -1157,7 +1155,7 @@ export function App() {
         } catch (reason) {
           // Falling through to the guest screen is the right outcome: a service that cannot be reached is
           // a service that cannot be used, and the switcher still shows it as disconnected.
-          console.warn('[ui.startup] restore failed', { service: remembered, error: reasonText(reason, 'unknown') });
+          console.warn('[ui.startup] restore failed', { service: remembered, error: describeError(reason, 'unknown') });
         }
         if (status.authorized) {
           void loadTracks();
@@ -1173,12 +1171,12 @@ export function App() {
                 setProfile(fresh.profile);
               }
             })
-            .catch((reason: unknown) => console.error('[ui.auth.refresh] failed', { error: reasonText(reason, 'unknown error') }));
+            .catch((reason: unknown) => console.error('[ui.auth.refresh] failed', { error: describeError(reason, 'unknown error') }));
         }
       })
       .catch((reason: unknown) => {
         if (!active) return;
-        const message = reasonText(reason, 'Локальный backend недоступен');
+        const message = describeError(reason, 'Локальный backend недоступен');
         console.error('[ui.startup] failed', { error: message });
         setError(message);
       });
@@ -1186,7 +1184,7 @@ export function App() {
       active = false;
       const stopBackend = () => {
         void appGateway.stop().catch((reason: unknown) => {
-          console.warn('[local-backend] stop failed during app cleanup', { error: reasonText(reason, String(reason)) });
+          console.warn('[local-backend] stop failed during app cleanup', { error: describeError(reason, String(reason)) });
         });
       };
       // Written on unmount as well as on switch, so a service chosen and then quit from is restored
@@ -1204,8 +1202,7 @@ export function App() {
 
   useEffect(() => {
     document.documentElement.style.setProperty('--accent', settings.accent);
-    document.documentElement.dataset.compact = String(settings.compact);
-  }, [settings.accent, settings.compact]);
+  }, [settings.accent]);
 
   // Load lyrics on the track page first so its lyrics button only appears when text is available.
   const lyricsPanelActive = lyricsPhase !== 'closed';
@@ -1231,8 +1228,8 @@ export function App() {
       })
       .catch((reason: unknown) => {
         if (requestId !== lyricsRequestId.current) return;
-        setLyricsError(reasonText(reason, 'Не удалось загрузить текст песни'));
-        console.error('[ui.lyrics] failed', { trackId, error: reasonText(reason, 'unknown error') });
+        setLyricsError(describeError(reason, 'Не удалось загрузить текст песни'));
+        console.error('[ui.lyrics] failed', { trackId, error: describeError(reason, 'unknown error') });
       })
       .finally(() => {
         if (requestId === lyricsRequestId.current) setLyricsLoading(false);
@@ -1250,7 +1247,7 @@ export function App() {
       setSettings(stored);
       setSaved(true);
     } catch (reason) {
-      const message = reasonText(reason, 'Не удалось сохранить настройки');
+      const message = describeError(reason, 'Не удалось сохранить настройки');
       console.error('[ui.settings.update] failed', { keys: Object.keys(patch), error: message });
       setError(message);
     }
@@ -1271,13 +1268,13 @@ export function App() {
           const stored = await appGateway.updateSettings({ clientId });
           setSettings(stored);
         } catch (reason) {
-          console.warn('[ui.auth.silent] client id save failed', { error: reasonText(reason, 'unknown error') });
+          console.warn('[ui.auth.silent] client id save failed', { error: describeError(reason, 'unknown error') });
         }
       }
       try {
         await invoke('finish_auth_flow');
       } catch (reason) {
-        console.warn('[ui.auth] could not close SoundCloud window', { error: reasonText(reason, 'unknown error') });
+        console.warn('[ui.auth] could not close SoundCloud window', { error: describeError(reason, 'unknown error') });
       }
       setProfile(result.profile);
       setAuth('authorized');
@@ -1285,7 +1282,7 @@ export function App() {
       void loadPlaylists();
       void loadMixedSelections();
     } catch (reason) {
-      const message = reasonText(reason, 'Не удалось подключить аккаунт');
+      const message = describeError(reason, 'Не удалось подключить аккаунт');
       console.error('[ui.auth.login] failed', { error: message });
       setLoginError(message);
     } finally {
@@ -1310,7 +1307,7 @@ export function App() {
       void loadMixedSelections();
       return true;
     } catch (reason) {
-      const message = reasonText(reason, 'Не удалось сохранить access token');
+      const message = describeError(reason, 'Не удалось сохранить access token');
       console.error('[ui.settings.token] save failed', { error: message });
       setLoginError(message);
       return false;
@@ -1322,6 +1319,13 @@ export function App() {
   async function logout(): Promise<boolean> {
     setLoginError('');
     setError('');
+    // The embedded webview keeps its own SoundCloud session. Without this, a later launch
+    // is signed back in by the auth script with no user action.
+    try {
+      await invoke('end_soundcloud_session');
+    } catch (reason) {
+      console.warn('[ui.auth.logout] could not clear the embedded session', { error: describeError(reason, 'unknown error') });
+    }
     try {
       // The service on screen, not always SoundCloud. With a Spotify library up, signing out of
       // SoundCloud would have ended an account the user was not even looking at.
@@ -1331,7 +1335,7 @@ export function App() {
         await serviceManager.active.authLogout();
       }
     } catch (reason) {
-      const message = reasonText(reason, 'Не удалось выйти');
+      const message = describeError(reason, 'Не удалось выйти');
       console.error('[ui.auth.logout] failed', { service: activeService, error: message });
       setError(message);
       return false;
@@ -1373,38 +1377,13 @@ export function App() {
     }
   }
 
-  async function clearAppData(): Promise<boolean> {
-    setError('');
-    try {
-      const resetSettings = await appGateway.clearAppData();
-      setSettings(resetSettings);
-      setSaved(true);
-      setProfile(null);
-      setTracks([]);
-      setPlaylists([]);
-      setQueueTracks([]);
-      setHistory([]);
-      setSelections([]);
-      setRelatedTracks([]);
-      setDetailsContext([]);
-      setArtistProfile(null);
-      setArtistTracks([]);
-      setLikedTracks({});
-      setCurrentTrack(null);
-      setPlayerVisible(false);
-      setCurrentTrackIndex(-1);
-      setShouldPlay(false);
-      setPlaybackError('');
-      setLoginError('');
-      setAuth('guest');
-      return true;
-    } catch (reason) {
-      const message = reasonText(reason, 'Не удалось очистить данные приложения');
-      setError(message);
-      console.error('[ui.settings.clear-data] failed', { error: message });
-      return false;
-    }
-  }
+  // The wallpaper arrives as a data URL, and Chrome refuses to load a URL longer than 2 MB. The
+  // hook hands back an object URL instead, which stays short however big the image is.
+  //
+  // It has to sit above every early return below. A hook called after one of them runs a
+  // different number of times depending on the state, which React rejects, and the whole view
+  // fails to render.
+  const backgroundUrl = useBackgroundUrl(settings.backgroundImage);
 
   if (!ready) {
     return (
@@ -1441,9 +1420,9 @@ export function App() {
 
   return (
     <div
-      className={`app-shell ${playerVisible && !isViewingPlayingTrack ? 'player-visible' : ''} ${settings.backgroundImage ? 'has-custom-background' : ''} ${lyricsPanelState}`}
+      className={`app-shell ${playerVisible && !isViewingPlayingTrack ? 'player-visible' : ''} ${backgroundUrl ? 'has-custom-background' : ''} ${lyricsPanelState}`}
       style={{
-        '--custom-background-image': settings.backgroundImage ? `url("${settings.backgroundImage}")` : 'none',
+        '--custom-background-image': backgroundUrl ? `url("${backgroundUrl}")` : 'none',
         '--custom-background-blur': `${settings.backgroundBlur}px`,
         '--content-panel-opacity': String(0.4 + Math.min(settings.backgroundBlur, 6) * (0.2 / 6)),
         '--sidebar-width': `${sidebarWidth}px`,
@@ -1451,7 +1430,7 @@ export function App() {
       } as CSSProperties}
     >
       <header className="topbar">
-        <div className="window-tools"><button className="icon-button" type="button" onClick={() => setPage('likes')} aria-label="Назад">‹</button></div>
+        <div className="window-tools"><button className="icon-button" type="button" onClick={() => setPage('likes')} aria-label="Назад"><FaChevronLeft /></button></div>
         <div className="global-search"><TrackSearch onSelect={selectTrack} /></div>
         <div className="top-actions">
           <ServiceSwitcher
@@ -1470,10 +1449,10 @@ export function App() {
           </button>
           <UpdaterNotification />
           <button className="icon-button header-settings" type="button" onClick={() => setPage('settings')} aria-label="Настройки" title="Настройки">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33h-.08a1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51h-.08a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82v-.08a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1v-.08a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.08a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.08a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.08a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
+            <FaGear aria-hidden="true" />
           </button>
           <button className="icon-button header-logout" type="button" onClick={() => { setError(''); setLogoutDialogOpen(true); }} title="Выйти из SoundCloud" aria-label="Выйти из SoundCloud">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4.75H6.5A1.75 1.75 0 0 0 4.75 6.5v11A1.75 1.75 0 0 0 6.5 19.25H10" /><path d="M13.5 8.25 17.25 12l-3.75 3.75M17 12H9" /></svg>
+            <FaArrowRightFromBracket aria-hidden="true" />
           </button>
         </div>
       </header>
@@ -1538,7 +1517,7 @@ export function App() {
               playbackLoading={playbackLoading}
             />
           : page === 'settings'
-            ? <SettingsPanel settings={settings} saved={saved} error={error} profile={profile} tokenError={loginError} tokenBusy={loginBusy} onSaveToken={saveAccessToken} onClearData={clearAppData} onUpdate={(patch) => void updateSettings(patch)} accountsSection={<ConnectedAccounts accounts={serviceAccounts} activeService={activeService} onSwitch={(service) => void switchService(service)} onSignOutSoundCloud={() => { setError(''); setLogoutDialogOpen(true); }} />} />
+            ? <SettingsPanel settings={settings} saved={saved} error={error} profile={profile} tokenError={loginError} tokenBusy={loginBusy} onSaveToken={saveAccessToken} onUpdate={(patch) => void updateSettings(patch)} accountsSection={<ConnectedAccounts accounts={serviceAccounts} activeService={activeService} onSwitch={(service) => void switchService(service)} onSignOutSoundCloud={() => { setError(''); setLogoutDialogOpen(true); }} />} />
           : page === 'profile' && profile
             ? <MyProfilePage
                 account={profile}
@@ -1665,7 +1644,7 @@ export function App() {
         error={lyricsError}
         isCurrentTrack={currentTrack !== null && detailsTrack !== null && currentTrack.id === detailsTrack.id}
         isPlaying={shouldPlay}
-        onTogglePlayback={togglePlayback}
+        onTogglePlayback={playDetailsTrack}
         onPreviousTrack={() => navigateLyricsTrack(-1)}
         onNextTrack={() => navigateLyricsTrack(1)}
         canPreviousTrack={currentTrackIndex > 0 && !manualQueueEnabled}
@@ -1728,7 +1707,11 @@ export function App() {
           handleTrackEnded();
         }}
         onReady={() => setPlaybackLoading(false)}
-        onProgress={setPlaybackPositionMs}
+        onProgress={(positionMs) => {
+          // The 4 Hz tick only feeds the lyrics panel and the detail-page waveform. With neither on
+          // screen, writing it to root state re-rendered the whole app for no reader.
+          if (lyricsPanelActive || page === 'track') setPlaybackPositionMs(positionMs);
+        }}
         onError={(message) => { setPlaybackError(message); setPlaybackLoading(false); setShouldPlay(false); }}
         onPlaybackStateChange={handlePlaybackStateChange}
       />

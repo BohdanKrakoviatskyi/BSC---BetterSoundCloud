@@ -1,4 +1,4 @@
-export type Settings = { accent: string; compact: boolean; volume: number; clientId: string; backgroundImage: string; backgroundBlur: number };
+export type Settings = { accent: string; volume: number; clientId: string; backgroundImage: string; backgroundBlur: number };
 
 /**
  * Which music service something belongs to.

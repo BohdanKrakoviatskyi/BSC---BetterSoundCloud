@@ -1,13 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::HashMap;
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
-/// Label of the webview used for SoundCloud authentication and session requests.
+/// Label of the webview used for SoundCloud authentication.
 const AUTH_WINDOW_LABEL: &str = "soundcloud-auth";
 const CAPTCHA_WINDOW_LABEL: &str = "soundcloud-captcha";
 /// Event delivered to the React frontend once credentials are captured.
@@ -15,38 +13,6 @@ const CREDENTIALS_EVENT: &str = "soundcloud:credentials";
 /// Open the dedicated sign-in route in the embedded webview so its requests
 /// remain observable by AUTH_INIT_SCRIPT for automatic credential capture.
 const SOUNDCLOUD_URL: &str = "https://soundcloud.com/signin";
-
-/// Label of the webview used for the Spotify authorization flow.
-const SPOTIFY_WINDOW_LABEL: &str = "spotify-auth";
-const SPOTIFY_AUTHORIZE_URL: &str = "https://accounts.spotify.com/authorize";
-/// The redirect must match the value registered in the Spotify dashboard character for character, or
-/// Spotify answers redirect_uri_mismatch and the flow never completes.
-const SPOTIFY_REDIRECT_HOST: &str = "localhost";
-const SPOTIFY_REDIRECT_PORT: u16 = 8888;
-const SPOTIFY_REDIRECT_PATH: &str = "/callback";
-/// Only the scopes needed to sign in and read the account. Every scope added is another permission
-/// the app asks for and another line on the authorization screen, so this starts deliberately small
-/// and grows when a feature that needs more actually lands. Playback scopes are not here yet,
-/// because nothing in the app can use them.
-const SPOTIFY_SCOPES: &str = "user-read-private user-read-email";
-
-/// Label of the webview used for the YouTube Music authorization flow.
-const YOUTUBE_WINDOW_LABEL: &str = "youtube-auth";
-const YOUTUBE_AUTHORIZE_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
-/// A different port from Spotify's on purpose: two windows both deciding to claim a callback on one
-/// port would break each other, and one service would take the other down with it.
-const YOUTUBE_REDIRECT_HOST: &str = "localhost";
-/// Google may answer on the numeric form of the same address. Accepting it costs nothing.
-const YOUTUBE_REDIRECT_LOOPBACK: &str = "127.0.0.1";
-const YOUTUBE_REDIRECT_PORT: u16 = 8889;
-const YOUTUBE_REDIRECT_PATH: &str = "/callback";
-/// youtube.readonly is what the library and playlists need. openid, email and profile are for the
-/// account name, which is the only piece of identity the app shows.
-///
-/// force-ssl is deliberately absent. It is what a rating write would need, and the app cannot play a
-/// YouTube track's audio anyway, so asking for write access to someone's YouTube account would be a bad
-/// trade for a feature that does not exist.
-const YOUTUBE_SCOPES: &str = "https://www.googleapis.com/auth/youtube.readonly openid email profile";
 
 const CAPTCHA_INIT_SCRIPT: &str = r#"
 (() => {
@@ -87,6 +53,38 @@ const CAPTCHA_INIT_SCRIPT: &str = r#"
 })();
 "#;
 
+/// Label of the webview used for the Spotify authorization flow.
+const SPOTIFY_WINDOW_LABEL: &str = "spotify-auth";
+const SPOTIFY_AUTHORIZE_URL: &str = "https://accounts.spotify.com/authorize";
+/// The redirect must match the value registered in the Spotify dashboard character for character, or
+/// Spotify answers redirect_uri_mismatch and the flow never completes.
+const SPOTIFY_REDIRECT_HOST: &str = "localhost";
+const SPOTIFY_REDIRECT_PORT: u16 = 8888;
+const SPOTIFY_REDIRECT_PATH: &str = "/callback";
+/// Only the scopes needed to sign in and read the account. Every scope added is another permission
+/// the app asks for and another line on the authorization screen, so this starts deliberately small
+/// and grows when a feature that needs more actually lands. Playback scopes are not here yet,
+/// because nothing in the app can use them.
+const SPOTIFY_SCOPES: &str = "user-read-private user-read-email";
+
+/// Label of the webview used for the YouTube Music authorization flow.
+const YOUTUBE_WINDOW_LABEL: &str = "youtube-auth";
+const YOUTUBE_AUTHORIZE_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
+/// A different port from Spotify's on purpose: two windows both deciding to claim a callback on one
+/// port would break each other, and one service would take the other down with it.
+const YOUTUBE_REDIRECT_HOST: &str = "localhost";
+/// Google may answer on the numeric form of the same address. Accepting it costs nothing.
+const YOUTUBE_REDIRECT_LOOPBACK: &str = "127.0.0.1";
+const YOUTUBE_REDIRECT_PORT: u16 = 8889;
+const YOUTUBE_REDIRECT_PATH: &str = "/callback";
+/// youtube.readonly is what the library and playlists need. openid, email and profile are for the
+/// account name, which is the only piece of identity the app shows.
+///
+/// force-ssl is deliberately absent. It is what a rating write would need, and the app cannot play a
+/// YouTube track's audio anyway, so asking for write access to someone's YouTube account would be a bad
+/// trade for a feature that does not exist.
+const YOUTUBE_SCOPES: &str = "https://www.googleapis.com/auth/youtube.readonly openid email profile";
+
 /// Credentials captured from the SoundCloud web session.
 ///
 /// Serialized as `{ "token": "...", "clientId": "..." }` for the frontend.
@@ -109,71 +107,6 @@ struct CaptchaChallengeStatus {
     completed: bool,
     closed: bool,
     datadome_cookie: Option<String>,
-}
-
-#[derive(Default)]
-struct AuthState {
-    token: Mutex<Option<String>>,
-    client_id: Mutex<Option<String>>,
-    user_id: Mutex<Option<i64>>,
-    session_ready: Mutex<bool>,
-}
-
-/// The authorization code, captured from the redirect, waiting for the frontend to exchange it.
-#[derive(Default)]
-struct YoutubeOAuthState {
-    code: Mutex<Option<String>>,
-    error: Mutex<Option<String>>,
-    done: Mutex<bool>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct YoutubeOAuthStatus {
-    completed: bool,
-    closed: bool,
-    code: Option<String>,
-    error: Option<String>,
-}
-
-#[derive(Default)]
-struct SpotifyOAuthState {
-    code: Mutex<Option<String>>,
-    error: Mutex<Option<String>>,
-    done: Mutex<bool>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct SpotifyOAuthStatus {
-    completed: bool,
-    closed: bool,
-    code: Option<String>,
-    error: Option<String>,
-}
-
-#[derive(Default)]
-struct LikeState {
-    next_req_id: AtomicU32,
-    pending: Mutex<HashMap<u32, tokio::sync::oneshot::Sender<TrackLikeResult>>>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct TrackLikeResult {
-    liked: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    captcha_url: Option<String>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[allow(dead_code)]
-struct LikeResultReport { req_id: u32,
-    liked: bool,
-    success: bool,
-    captcha_url: Option<String>,
-    error: Option<String>,
 }
 
 /// Inspect SoundCloud's own API requests inside the sign-in webview. The webview
@@ -258,6 +191,8 @@ const AUTH_INIT_SCRIPT: &str = r#"
       lastSent = null;
       if (String(error).includes('Tauri IPC is not available') && bridgeRetries++ < 8) {
         window.setTimeout(() => sendCredentials(token, clientId), 500);
+      } else {
+        console.warn('[bsc-auth] save_credentials failed', error);
       }
     });
   }
@@ -268,28 +203,30 @@ const AUTH_INIT_SCRIPT: &str = r#"
     if (!lastSent && token && clientId) sendCredentials(token, clientId);
   }
 
-  // Intercept XHR and fetch to snatch live credentials.
+  function inspectRequest(input, init) {
+    const url = asUrl(input, window.location.href);
+    if (!url || url.hostname !== API_HOST) return;
+    const clientId = url.searchParams.get('client_id') || storageGet(CLIENT_ID_CACHE_KEY);
+    if (clientId) storageSet(CLIENT_ID_CACHE_KEY, clientId);
+    const token = findToken(url, typeof Request !== 'undefined' && input instanceof Request ? input : null, init);
+    if (token && clientId) sendCredentials(token, clientId);
+  }
+
+  // 1. Patch fetch: SoundCloud keeps client_id in the query string of every api-v2 call.
   const originalFetch = window.fetch;
   if (typeof originalFetch === 'function') {
     window.fetch = function (input, init) {
-      try {
-        const url = asUrl(input, window.location.href);
-        if (url && url.hostname === API_HOST) {
-          const clientId = url.searchParams.get('client_id') || storageGet(CLIENT_ID_CACHE_KEY);
-          if (clientId) storageSet(CLIENT_ID_CACHE_KEY, clientId);
-          const token = findToken(url, init, null);
-          if (token && clientId) sendCredentials(token, clientId);
-        }
-      } catch (error) { /* ignore */ }
+      try { inspectRequest(input, init); } catch (error) { /* never break the page */ }
       return originalFetch.apply(this, arguments);
     };
   }
 
+  // 2. Fallback for XHR-based clients.
   const XHR = window.XMLHttpRequest;
-  if (XHR && XHR.prototype) {
+  if (typeof XHR === 'function' && XHR.prototype) {
     const originalOpen = XHR.prototype.open;
-    const originalSend = XHR.prototype.send;
     const originalSetRequestHeader = XHR.prototype.setRequestHeader;
+    const originalSend = XHR.prototype.send;
 
     XHR.prototype.open = function (method, url) {
       this.__bscRequestUrl = url;
@@ -316,49 +253,6 @@ const AUTH_INIT_SCRIPT: &str = r#"
     };
   }
 
-  // Like / Unlike handler running inside soundcloud.com context
-  window.__bscLikeTrack = async function (reqId, userId, trackId, clientId, token, liked) {
-    try {
-      const activeToken = token || storageGet('oauth_token') || cookieValue('oauth_token') || '';
-      const activeClientId = clientId || storageGet(CLIENT_ID_CACHE_KEY) || 'pmagYZKQF6mRtNmtRzPkXSQJ76jYHLN8';
-      const method = liked ? 'PUT' : 'DELETE';
-      const url = 'https://api-v2.soundcloud.com/users/' + userId + '/track_likes/' + trackId + '?client_id=' + encodeURIComponent(activeClientId);
-      const res = await window.fetch(url, {
-        method: method,
-        headers: {
-          'Authorization': 'OAuth ' + activeToken,
-          'Accept': 'application/json, text/javascript, */*; q=0.01'
-        },
-        credentials: 'include'
-      });
-      let captchaUrl = null;
-      if (res.status === 403) {
-        try {
-          const data = await res.json();
-          captchaUrl = data.url || data.blockScript || null;
-        } catch (_) {}
-      }
-      const success = res.status >= 200 && res.status < 300;
-      const errorText = success ? null : ('SoundCloud returned HTTP ' + res.status);
-      invoke('report_like_result', {
-        reqId: reqId,
-        liked: success ? liked : !liked,
-        success: success,
-        captchaUrl: captchaUrl,
-        error: errorText
-      }).catch(() => {});
-    } catch (err) {
-      invoke('report_like_result', {
-        reqId: reqId,
-        liked: !liked,
-        success: false,
-        captchaUrl: null,
-        error: String(err && err.message ? err.message : err)
-      }).catch(() => {});
-    }
-  };
-
-
   // Give live API requests a chance to reveal the current token first; then
   // check the saved session too. Keep polling so a later sign-in is detected.
   window.setTimeout(() => {
@@ -368,92 +262,62 @@ const AUTH_INIT_SCRIPT: &str = r#"
 })();
 "#;
 
-fn resolve_credentials(app: &AppHandle) -> (Option<String>, Option<String>, Option<i64>) {
-    let auth_state = app.state::<AuthState>();
-    let mut token = auth_state.token.lock().unwrap().clone();
-    let mut client_id = auth_state.client_id.lock().unwrap().clone();
-    let mut user_id = *auth_state.user_id.lock().unwrap();
-
-    let mut search_dirs = Vec::new();
-    #[cfg(windows)]
-    {
-        if let Ok(appdata) = std::env::var("APPDATA") {
-            search_dirs.push(PathBuf::from(appdata).join("BetterSoundCloud"));
-        }
-    }
-    if let Ok(config_dir) = app.path().app_config_dir() {
-        search_dirs.push(config_dir);
-    }
-
-    for dir in search_dirs {
-        if token.is_none() || user_id.is_none() {
-            let auth_file = dir.join("auth.json");
-            if let Ok(content) = std::fs::read_to_string(&auth_file) {
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                    if token.is_none() {
-                        if let Some(t) = json.get("token").and_then(|v| v.as_str()) {
-                            token = Some(t.to_string());
-                        }
-                    }
-                    if user_id.is_none() {
-                        if let Some(id) = json.pointer("/profile/id").and_then(|v| v.as_i64()) {
-                            user_id = Some(id);
-                        }
-                    }
-                }
-            }
-        }
-        if client_id.is_none() {
-            let settings_file = dir.join("settings.json");
-            if let Ok(content) = std::fs::read_to_string(&settings_file) {
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                    if let Some(cid) = json.get("clientId").and_then(|v| v.as_str()) {
-                        client_id = Some(cid.to_string());
-                    }
-                }
-            }
-        }
-    }
-
-    (token, client_id, user_id)
+/// The authorization code, captured from the redirect, waiting for the frontend to exchange it.
+#[derive(Default)]
+struct YoutubeOAuthState {
+    code: Mutex<Option<String>>,
+    error: Mutex<Option<String>>,
+    done: Mutex<bool>,
 }
 
-fn ensure_session_window(app: &AppHandle) -> Result<WebviewWindow, String> {
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct YoutubeOAuthStatus {
+    completed: bool,
+    closed: bool,
+    code: Option<String>,
+    error: Option<String>,
+}
+
+#[derive(Default)]
+struct SpotifyOAuthState {
+    code: Mutex<Option<String>>,
+    error: Mutex<Option<String>>,
+    done: Mutex<bool>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SpotifyOAuthStatus {
+    completed: bool,
+    closed: bool,
+    code: Option<String>,
+    error: Option<String>,
+}
+
+
+/// Opens the sign-in webview. A visible window avoids a permanently hidden
+/// flow when the SoundCloud page changes or only part of a session is present.
+#[tauri::command]
+async fn start_auth_flow(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(AUTH_WINDOW_LABEL) {
-        return Ok(window);
+        return show_window(&window);
     }
 
     let url = SOUNDCLOUD_URL
         .parse::<tauri::Url>()
         .map_err(|error| format!("некорректный URL SoundCloud: {error}"))?;
 
-    let window = WebviewWindowBuilder::new(app, AUTH_WINDOW_LABEL, WebviewUrl::External(url))
+    WebviewWindowBuilder::new(&app, AUTH_WINDOW_LABEL, WebviewUrl::External(url))
         .title("SoundCloud — вход")
         .inner_size(800.0, 700.0)
         .min_inner_size(600.0, 500.0)
-        .visible(false)
-        .incognito(false)
+        .visible(true)
+        .incognito(false) // keep the embedded webview's cookies between launches
         .initialization_script(AUTH_INIT_SCRIPT)
         .build()
-        .map_err(|error| format!("не удалось открыть окно входа SoundCloud: {error}"))?;
-
-    let win_clone = window.clone();
-    window.on_window_event(move |event| {
-        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-            api.prevent_close();
-            let _ = win_clone.hide();
-        }
-    });
-
-    Ok(window)
-}
-
-/// Opens the sign-in webview. A visible window avoids a permanently hidden
-/// flow when the SoundCloud page changes or only part of a session is present.
-#[tauri::command]
-async fn start_auth_flow(app: AppHandle) -> Result<(), String> {
-    let window = ensure_session_window(&app)?;
-    show_window(&window)
+        .map(|_| ())
+        .map_err(|error| format!("не удалось открыть окно входа SoundCloud: {error}"))
 }
 
 /// Opens the SoundCloud anti-bot challenge in an interactive in-app webview.
@@ -467,15 +331,23 @@ async fn show_captcha_window(app: AppHandle, url: String) -> Result<(), String> 
         || host.ends_with(".captcha-delivery.com")
         || host == "soundcloud.com"
         || host.ends_with(".soundcloud.com");
+    // The port is checked too: the host allowlist above says nothing about
+    // `https://soundcloud.com:8443`, which is a different origin serving a different page.
     if url.scheme() != "https"
         || !allowed_host
         || !url.username().is_empty()
         || url.password().is_some()
+        || url.port().is_some_and(|port| port != 443)
     {
         return Err("SoundCloud вернул небезопасную ссылку проверки".to_owned());
     }
 
-    let baseline_cookie = match app.get_webview_window("main") {
+    // The session lives in the auth webview, not in main: main never loads
+    // soundcloud.com, so reading its cookie store always came up empty.
+    let baseline_cookie = match app
+        .get_webview_window(AUTH_WINDOW_LABEL)
+        .or_else(|| app.get_webview_window("main"))
+    {
         Some(window) => datadome_cookie_for(&window)?,
         None => None,
     };
@@ -530,14 +402,13 @@ async fn poll_captcha_challenge(app: AppHandle) -> Result<CaptchaChallengeStatus
         .challenge_passed
         .lock()
         .map_err(|_| "не удалось проверить состояние капчи".to_owned())?;
-    let cookie_changed = match (&current_cookie, &baseline_cookie) {
-        (Some(current), Some(baseline)) => current != baseline,
-        (Some(_), None) => true,
-        _ => false,
-    };
-
+    let cookie_changed = current_cookie
+        .as_deref()
+        .is_some_and(|cookie| baseline_cookie.as_deref() != Some(cookie));
     if challenge_passed || cookie_changed {
-        let _ = window.hide();
+        window
+            .close()
+            .map_err(|error| format!("не удалось закрыть проверку SoundCloud: {error}"))?;
         return Ok(CaptchaChallengeStatus {
             completed: true,
             closed: false,
@@ -545,27 +416,21 @@ async fn poll_captcha_challenge(app: AppHandle) -> Result<CaptchaChallengeStatus
         });
     }
 
-    let is_visible = window
-        .is_visible()
-        .map_err(|error| format!("не удалось проверить окно проверки: {error}"))?;
-    if !is_visible {
-        return Ok(CaptchaChallengeStatus {
-            completed: false,
-            closed: true,
-            datadome_cookie: None,
-        });
-    }
-
     Ok(CaptchaChallengeStatus {
         completed: false,
         closed: false,
-        datadome_cookie: current_cookie,
+        datadome_cookie: None,
     })
 }
 
 #[tauri::command]
-fn mark_captcha_challenge_completed(app: AppHandle) -> Result<(), String> {
-    let state = app.state::<CaptchaState>();
+fn mark_captcha_challenge_completed(
+    window: WebviewWindow,
+    state: State<'_, CaptchaState>,
+) -> Result<(), String> {
+    if window.label() != CAPTCHA_WINDOW_LABEL {
+        return Err("сигнал проверки получен не из окна капчи".to_owned());
+    }
     *state
         .challenge_passed
         .lock()
@@ -589,19 +454,44 @@ fn datadome_cookie_for(window: &WebviewWindow) -> Result<Option<String>, String>
 /// Makes the auth window visible when manual sign-in is required.
 #[tauri::command]
 fn show_auth_window(app: AppHandle) -> Result<(), String> {
-    let window = ensure_session_window(&app)?;
+    let window = app
+        .get_webview_window(AUTH_WINDOW_LABEL)
+        .ok_or_else(|| "окно входа SoundCloud ещё не создано".to_owned())?;
+
     show_window(&window)
 }
 
 /// Forward captured credentials for validation; do not close the window until
 /// the Go backend confirms that the token actually belongs to a user.
 #[tauri::command]
-fn save_credentials(app: AppHandle, token: String, client_id: String) -> Result<(), String> {
-    let auth_state = app.state::<AuthState>();
-    *auth_state.token.lock().unwrap() = Some(token.clone());
-    *auth_state.client_id.lock().unwrap() = Some(client_id.clone());
+fn save_credentials(
+    app: AppHandle,
+    window: tauri::Window,
+    token: String,
+    client_id: String,
+) -> Result<(), String> {
+    // `mark_captcha_challenge_completed` right above this already checks its label; this one
+    // did not, so any *.soundcloud.com page the window navigated to could hand over a token.
+    if window.label() != AUTH_WINDOW_LABEL {
+        return Err("сигнал входа получен не из окна авторизации".to_owned());
+    }
+    let token = token.trim().to_owned();
+    let client_id = client_id.trim().to_owned();
 
-    app.emit(
+    if token.is_empty()
+        || token.len() > 4096
+        || token.chars().any(char::is_control)
+        || client_id.len() < 8
+        || client_id.len() > 128
+        || !client_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err("SoundCloud вернул некорректные учётные данные".to_owned());
+    }
+
+    app.emit_to(
+        "main",
         CREDENTIALS_EVENT,
         SoundCloudCredentials { token, client_id },
     )
@@ -613,152 +503,55 @@ fn save_credentials(app: AppHandle, token: String, client_id: String) -> Result<
 fn finish_auth_flow(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(AUTH_WINDOW_LABEL) {
         window
-            .hide()
-            .map_err(|error| format!("не удалось скрыть окно входа: {error}"))?;
+            .close()
+            .map_err(|error| format!("не удалось закрыть окно входа: {error}"))?;
     }
     Ok(())
 }
 
+/// Ends the embedded SoundCloud session on logout.
+///
+/// The auth webview runs with `incognito(false)` so sign-in can persist across launches.
+/// That also means `soundcloud_session` outlives a logout, and the auth init script keeps
+/// polling localStorage, so the next launch is signed back in with no user action. This
+/// closes the window and deletes the cookies for the SoundCloud hosts.
 #[tauri::command]
-fn report_session_ready(app: AppHandle) -> Result<(), String> {
-    let auth_state = app.state::<AuthState>();
-    *auth_state.session_ready.lock().unwrap() = true;
-    Ok(())
-}
-
-#[tauri::command]
-fn sync_session_window(
-    app: AppHandle,
-    user_id: Option<i64>,
-    client_id: Option<String>,
-) -> Result<(), String> {
-    let auth_state = app.state::<AuthState>();
-    if let Some(id) = user_id {
-        *auth_state.user_id.lock().unwrap() = Some(id);
+fn end_soundcloud_session(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(AUTH_WINDOW_LABEL) {
+        window
+            .close()
+            .map_err(|error| format!("не удалось закрыть окно SoundCloud: {error}"))?;
     }
-    if let Some(cid) = client_id {
-        *auth_state.client_id.lock().unwrap() = Some(cid);
-    }
-    let _ = ensure_session_window(&app);
-    Ok(())
-}
-
-#[tauri::command]
-fn report_like_result(app: AppHandle, result: LikeResultReport) -> Result<(), String> {
-    let like_state = app.state::<LikeState>();
-    let mut pending = like_state
-        .pending
-        .lock()
-        .map_err(|_| "like state lock error".to_owned())?;
-    if let Some(tx) = pending.remove(&result.req_id) {
-        let _ = tx.send(TrackLikeResult {
-            liked: result.liked,
-            captcha_url: result.captcha_url,
-        });
-    }
-    Ok(())
-}
-
-/// Performs track like/unlike requests directly within the authenticated soundcloud.com webview context.
-#[tauri::command]
-async fn like_track_webview(
-    app: AppHandle,
-    track_id: i64,
-    user_id: Option<i64>,
-    client_id: Option<String>,
-    liked: bool,
-) -> Result<TrackLikeResult, String> {
-    let window = ensure_session_window(&app)?;
-
-    let (saved_token, saved_client_id, saved_user_id) = resolve_credentials(&app);
-    let resolved_user_id = user_id.or(saved_user_id).unwrap_or(0);
-    if resolved_user_id <= 0 {
-        return Err("не удалось определить ID пользователя для изменения лайка".to_owned());
-    }
-    let resolved_client_id = client_id
-        .or(saved_client_id)
-        .unwrap_or_else(|| "pmagYZKQF6mRtNmtRzPkXSQJ76jYHLN8".to_owned());
-    let resolved_token = saved_token.unwrap_or_default();
-
-    let like_state = app.state::<LikeState>();
-    let req_id = like_state.next_req_id.fetch_add(1, Ordering::SeqCst);
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    {
-        let mut pending = like_state
-            .pending
-            .lock()
-            .map_err(|_| "like state lock error".to_owned())?;
-        pending.insert(req_id, tx);
-    }
-
-    let script = format!(
-        r#"
-        if (typeof window.__bscLikeTrack === 'function') {{
-            window.__bscLikeTrack({}, {}, {}, "{}", "{}", {});
-        }} else {{
-            (async () => {{
-                try {{
-                    const m = {} ? 'PUT' : 'DELETE';
-                    const u = 'https://api-v2.soundcloud.com/users/{}/track_likes/{}?client_id=' + encodeURIComponent('{}');
-                    const r = await window.fetch(u, {{
-                        method: m,
-                        headers: {{
-                            'Authorization': 'OAuth {}',
-                            'Accept': 'application/json, text/javascript, */*; q=0.01'
-                        }},
-                        credentials: 'include'
-                    }});
-                    let cUrl = null;
-                    if (r.status === 403) {{
-                        try {{ const d = await r.json(); cUrl = d.url || d.blockScript || null; }} catch(_) {{}}
-                    }}
-                    const s = r.status >= 200 && r.status < 300;
-                    const err = s ? null : ('HTTP ' + r.status);
-                    if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke) {{
-                        window.__TAURI_INTERNALS__.invoke('report_like_result', {{
-                            reqId: {},
-                            liked: s ? {} : !{},
-                            success: s,
-                            captchaUrl: cUrl,
-                            error: err
-                        }});
-                    }}
-                }} catch(e) {{
-                    if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke) {{
-                        window.__TAURI_INTERNALS__.invoke('report_like_result', {{
-                            reqId: {},
-                            liked: !{},
-                            success: false,
-                            captchaUrl: null,
-                            error: String(e)
-                        }});
-                    }}
-                }}
-            }})();
-        }}
-        "#,
-        req_id, resolved_user_id, track_id, resolved_client_id, resolved_token, liked,
-        liked, resolved_user_id, track_id, resolved_client_id, resolved_token,
-        req_id, liked, liked,
-        req_id, liked
-    );
-
-    window
-        .eval(&script)
-        .map_err(|error| format!("не удалось выполнить запрос лайка в окне SoundCloud: {error}"))?;
-
-    match tokio::time::timeout(tokio::time::Duration::from_secs(20), rx).await {
-        Ok(Ok(res)) => Ok(res),
-        Ok(Err(_)) => Err("канал ответа SoundCloud закрыт".to_owned()),
-        Err(_) => {
-            let mut pending = like_state
-                .pending
-                .lock()
-                .map_err(|_| "like state lock error".to_owned())?;
-            pending.remove(&req_id);
-            Err("таймаут ожидания ответа SoundCloud (20c)".to_owned())
+    let Some(window) = app.get_webview_window("main") else {
+        return Ok(());
+    };
+    // The session cookie and the anonymous id are the two that let the auth init script
+    // recognise a signed-in page. Both are set on .soundcloud.com, so both are addressed
+    // by domain rather than by host.
+    //
+    // Failures are logged and ignored on purpose: the Go side already dropped the token, and
+    // refusing to sign out because a cookie could not be removed is the worse outcome.
+    match window.cookies() {
+        Ok(cookies) => {
+            for cookie in cookies {
+                let host = cookie.domain().unwrap_or_default().to_ascii_lowercase();
+                if !(host == "soundcloud.com" || host.ends_with(".soundcloud.com")) {
+                    continue;
+                }
+                let name = cookie.name().to_owned();
+                if let Err(error) = window.delete_cookie(cookie) {
+                    eprintln!("[session] delete {name} failed: {error}");
+                }
+            }
         }
+        Err(error) => eprintln!("[session] could not read cookies: {error}"),
     }
+    Ok(())
+}
+
+fn show_window(window: &WebviewWindow) -> Result<(), String> {
+    window.show().map_err(|error| error.to_string())?;
+    window.set_focus().map_err(|error| error.to_string())
 }
 
 /// Whether a URL is the callback Google was told to redirect to.
@@ -1071,25 +864,14 @@ async fn poll_spotify_auth(app: AppHandle) -> Result<SpotifyOAuthStatus, String>
     })
 }
 
-fn show_window(window: &WebviewWindow) -> Result<(), String> {
-    window.show().map_err(|error| error.to_string())?;
-    window.set_focus().map_err(|error| error.to_string())
-}
-
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(CaptchaState::default())
-        .manage(AuthState::default())
-        .manage(LikeState::default())
         .manage(SpotifyOAuthState::default())
         .manage(YoutubeOAuthState::default())
-        .setup(|app| {
-            let _ = ensure_session_window(&app.handle());
-            Ok(())
-        })
         .invoke_handler(tauri::generate_handler![
             start_auth_flow,
             show_auth_window,
@@ -1098,14 +880,11 @@ fn main() {
             mark_captcha_challenge_completed,
             save_credentials,
             finish_auth_flow,
-            report_session_ready,
-            sync_session_window,
-            report_like_result,
-            like_track_webview,
+            end_soundcloud_session,
             start_spotify_auth,
             poll_spotify_auth,
             start_youtube_auth,
-            poll_youtube_auth
+            poll_youtube_auth,
         ])
         .run(tauri::generate_context!())
         .expect("error while running BetterSoundCloud");

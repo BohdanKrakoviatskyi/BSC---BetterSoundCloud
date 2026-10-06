@@ -5,8 +5,30 @@ export type UserBackgroundPreset = {
   createdAt: number;
 };
 
+/** True for a preset whose image carries its own animation. */
+export function isAnimatedPreset(image: string): boolean {
+  return image.startsWith('data:image/gif;base64,');
+}
+
 const DATABASE_NAME = 'better-soundcloud-background-presets';
 const STORE_NAME = 'presets';
+/**
+ * Formats a preset may hold. Kept in step with the validator in `main.go`, which refuses any
+ * data URL outside this list.
+ */
+const PRESET_IMAGE_PREFIXES = [
+  'data:image/jpeg;base64,',
+  'data:image/png;base64,',
+  'data:image/webp;base64,',
+  'data:image/gif;base64,',
+] as const;
+/**
+ * An animation is stored as the untouched file, because a canvas would flatten it to one
+ * frame, so it needs a much larger ceiling than a redrawn still image.
+ */
+const MAX_PRESET_FILE_BYTES = 12 * 1024 * 1024;
+/** Derived from the file limit for the same reason as in `SettingsPanel.tsx`. */
+const MAX_PRESET_LENGTH = 'data:image/gif;base64,'.length + Math.ceil((MAX_PRESET_FILE_BYTES * 4) / 3) + 64;
 let databasePromise: Promise<IDBDatabase> | null = null;
 
 function openDatabase(): Promise<IDBDatabase> {
@@ -52,8 +74,11 @@ export async function loadUserBackgroundPresets(): Promise<UserBackgroundPreset[
 export async function createUserBackgroundPreset(name: string, image: string): Promise<UserBackgroundPreset> {
   const normalizedName = name.trim();
   if (!normalizedName || normalizedName.length > 32) throw new Error('Название пресета должно содержать от 1 до 32 символов.');
-  if (!image.startsWith('data:image/jpeg;base64,') || image.length > 700_000) {
-    throw new Error('Изображение пресета имеет неподдерживаемый формат или слишком большой размер.');
+  if (!PRESET_IMAGE_PREFIXES.some((prefix) => image.startsWith(prefix))) {
+    throw new Error('Изображение пресета имеет неподдерживаемый формат. Сохрани можно JPEG, PNG, WebP или GIF.');
+  }
+  if (image.length > MAX_PRESET_LENGTH) {
+    throw new Error('Изображение пресета слишком большое. Выбери файл поменьше.');
   }
 
   const preset: UserBackgroundPreset = {

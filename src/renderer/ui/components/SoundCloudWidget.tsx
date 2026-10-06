@@ -249,6 +249,11 @@ export function SoundCloudWidget({ track, volume, onControlsReady, onReady, onPl
         style={{ display: 'block', width: 400, height: 166, border: 0 }}
         allow="autoplay"
         scrolling="no"
+        // The widget only needs to run its own player and reach its own origin. Without a
+        // sandbox the frame could navigate this window, which is a privileged surface that
+        // holds the OAuth token in localStorage.
+        sandbox="allow-scripts allow-same-origin allow-popups"
+        referrerPolicy="no-referrer"
       />
     </div>
   );

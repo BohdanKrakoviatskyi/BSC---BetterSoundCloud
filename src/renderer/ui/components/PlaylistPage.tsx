@@ -1,6 +1,8 @@
 import type { Playlist, Track } from '../../domain/models';
 import { ErrorMessage } from './ErrorMessage';
 import './PlaylistPage.css';
+import { FaArrowLeft, FaHeadphones, FaMusic, FaPlay } from '../lib/icons';
+import { formatCount } from '../lib/format';
 
 type Props = {
   playlist: Playlist;
@@ -14,22 +16,22 @@ type Props = {
 export function PlaylistPage({ playlist, tracks, loading, error, onBack, onPlay }: Props) {
   return (
     <section className="page-content playlist-page" aria-labelledby="playlist-page-title">
-      <button className="text-action" type="button" onClick={onBack}>‹ Назад к медиатеке</button>
+      <button className="text-action" type="button" onClick={onBack}><FaArrowLeft aria-hidden="true" /> Назад к медиатеке</button>
       <div className="playlist-dialog-heading">
-        {playlist.artwork ? <img src={playlist.artwork} alt="" /> : <span className="playlist-dialog-art-fallback">♫</span>}
-        <div><div className="eyebrow">ПЛЕЙЛИСТ SOUNDCLOUD</div><h1 id="playlist-page-title">{playlist.title}</h1><p>{playlist.artist} · {playlist.trackCount} треков</p></div>
+        {playlist.artwork ? <img src={playlist.artwork} alt="" /> : <span className="playlist-dialog-art-fallback"><FaMusic /></span>}
+        <div><div className="eyebrow">ПЛЕЙЛИСТ SOUNDCLOUD</div><h1 id="playlist-page-title">{playlist.title}</h1><p>{playlist.artist} · {formatCount(playlist.trackCount)} треков</p></div>
       </div>
-      <div className="playlist-dialog-actions"><button className="primary-button" type="button" disabled={!tracks.length || loading} onClick={() => onPlay(0)}>▶ Слушать плейлист</button></div>
+      <div className="playlist-dialog-actions"><button className="primary-button" type="button" disabled={!tracks.length || loading} onClick={() => onPlay(0)}><FaPlay /> Слушать плейлист</button></div>
       <div className="playlist-dialog-list">
         {loading ? <p className="tracks-empty">Загружаю треки плейлиста…</p>
           : error ? <ErrorMessage message={error} />
           : tracks.length === 0 ? <p className="tracks-empty">В этом плейлисте нет доступных треков.</p>
           : tracks.map((track, index) => <button type="button" className="playlist-dialog-track" key={`${track.id}-${index}`} onClick={() => onPlay(index)}>
-            {track.artwork ? <img src={track.artwork} alt="" /> : <span className="playlist-dialog-track-fallback">♫</span>}
+            {track.artwork ? <img src={track.artwork} alt="" /> : <span className="playlist-dialog-track-fallback"><FaMusic /></span>}
             <span className="playlist-dialog-track-index">{index + 1}</span>
             <span className="playlist-dialog-track-copy"><b>{track.title}</b><small>{track.artist.name || 'SoundCloud'}</small></span>
-            {track.playCount !== undefined && <span className="playlist-dialog-track-plays">▶ {track.playCount.toLocaleString('ru-RU')}</span>}
-            <span className="playlist-dialog-track-play" aria-hidden="true">▶</span>
+            {track.playCount !== undefined && <span className="playlist-dialog-track-plays"><FaHeadphones /> {formatCount(track.playCount)}</span>}
+            <FaPlay className="playlist-dialog-track-play" aria-hidden="true" />
           </button>)}
       </div>
     </section>

@@ -132,49 +132,33 @@ type RGB = [number, number, number]
 
 const colorCache = new Map<string, RGB | null>()
 
+// The browser already parses every CSS color format (hex 3/4/6/8, rgb/rgba, hsl/hsla,
+// color-mix, named colors). Validate with CSS.supports, then let the canvas serialise the
+// value back. Note it normalises opaque colours to #rrggbb and keeps alpha as rgba(), so both
+// shapes have to be read. Alpha is ignored, matching the shader, which has no opacity input.
+const colorProbe = document.createElement('canvas').getContext('2d')
+
 function parseColor(input: string | undefined): RGB | null {
-  if (!input) return null
+  if (!input || !colorProbe) return null
   const key = String(input)
-  if (colorCache.has(key)) return colorCache.get(key) ?? null
+  const cached = colorCache.get(key)
+  if (cached !== undefined) return cached
   let s = key.trim()
   const v = s.match(/^var\(\s*--[^,]+,\s*(.+)\)$/)
   if (v) s = v[1].trim()
   let out: RGB | null = null
-  if (s.charAt(0) === '#') {
-    let h = s.slice(1)
-    if (h.length === 3 || h.length === 4) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2]
-    if (h.length >= 6) {
-      const r = parseInt(h.slice(0, 2), 16)
-      const g = parseInt(h.slice(2, 4), 16)
-      const b = parseInt(h.slice(4, 6), 16)
-      if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)) out = [r / 255, g / 255, b / 255]
-    }
-  } else {
-    const m = s.match(/^(rgba?|hsla?)\(([^)]*)\)/i)
-    if (m) {
-      const parts = m[2].split(/[\s,/]+/).filter(Boolean)
-      const f = (i: number) => parseFloat(parts[i])
-      if (parts.length >= 3 && [0, 1, 2].every((i) => Number.isFinite(f(i)))) {
-        if (m[1].toLowerCase().startsWith('rgb')) {
-          const ch = (i: number) => (parts[i].endsWith('%') ? f(i) / 100 : f(i) / 255)
-          out = [ch(0), ch(1), ch(2)]
-        } else {
-          const hh = (((f(0) % 360) + 360) % 360) / 360
-          const ss = f(1) / 100
-          const ll = f(2) / 100
-          const q = ll < 0.5 ? ll * (1 + ss) : ll + ss - ll * ss
-          const p = 2 * ll - q
-          const hue = (t: number) => {
-            t = t < 0 ? t + 1 : t > 1 ? t - 1 : t
-            if (t < 1 / 6) return p + (q - p) * 6 * t
-            if (t < 1 / 2) return q
-            if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6
-            return p
-          }
-          out = [hue(hh + 1 / 3), hue(hh), hue(hh - 1 / 3)]
-        }
-        out = out.map((c) => Math.min(1, Math.max(0, c))) as RGB
-      }
+  if (typeof CSS !== 'undefined' && CSS.supports('color', s)) {
+    colorProbe.fillStyle = s
+    const serialized = String(colorProbe.fillStyle)
+    const hex = serialized.match(/^#([0-9a-f]{6})[0-9a-f]{0,2}$/i)
+    const rgb = serialized.match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,/\s]+([\d.%]+))?/i)
+    if (hex) {
+      out = [parseInt(hex[1].slice(0, 2), 16) / 255, parseInt(hex[1].slice(2, 4), 16) / 255, parseInt(hex[1].slice(4, 6), 16) / 255]
+    } else if (rgb) {
+      const alpha = rgb[4] === undefined ? 1 : Number(rgb[4])
+      // A fully transparent colour has no RGB meaning for the shader, and the previous
+      // parser rejected it too; returning null keeps the caller falling back.
+      if (alpha > 0) out = [Number(rgb[1]) / 255, Number(rgb[2]) / 255, Number(rgb[3]) / 255]
     }
   }
   colorCache.set(key, out)

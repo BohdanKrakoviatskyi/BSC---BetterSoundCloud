@@ -20,8 +20,26 @@ const tripleMap = {
   'x86_64-unknown-linux-gnu': ['linux', 'amd64'],
   'aarch64-unknown-linux-gnu': ['linux', 'arm64'],
 };
+/**
+ * Reads an environment value, treating blank as absent.
+ *
+ * This started as a fix for the release build. The workflow passed the target triple as
+ * `env: TAURI_ENV_TARGET_TRIPLE: ${{ matrix.target }}` while matrix.target was only declared for
+ * the macOS runners, so on ubuntu and windows GitHub Actions set the variable to an empty string
+ * rather than leaving it unset. `??` falls through only on null and undefined, so the empty string
+ * won the coalesce, was rejected as an unknown triple, and the build exited before Go ran.
+ *
+ * The workflow no longer passes a triple at all, so the bug cannot come back that way. This stays
+ * because the hazard is not the workflow, it is the assumption: a variable that a template renders
+ * as nothing is an empty string, and reading one with `??` looks correct until it is not.
+ */
+const fromEnv = (name) => {
+  const value = process.env[name];
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
+};
+
 const [hostTriple] = platformMap[`${process.platform}-${process.arch}`] ?? [];
-const targetTriple = process.env.TAURI_ENV_TARGET_TRIPLE ?? process.env.TARGET ?? hostTriple;
+const targetTriple = fromEnv('TAURI_ENV_TARGET_TRIPLE') ?? fromEnv('TARGET') ?? hostTriple;
 const [goos, goarch] = tripleMap[targetTriple] ?? [];
 
 if (!targetTriple || !goos || !goarch) {

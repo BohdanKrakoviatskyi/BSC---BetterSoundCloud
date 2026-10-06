@@ -38,13 +38,14 @@ Go sidecar общается с frontend построчным JSON-RPC через
 npm run test:go                              # или: cd backend && go test ./...
 ```
 
-Swagger UI для локального Go JSON-RPC sidecar доступен в режиме разработки:
+Swagger UI и HTTP-мост для sidecar удалены. Тот же протокол `method`/`params` доступен через REPL-консоль без Tauri:
 
 ```bash
-BSC_SWAGGER=1 npm run dev
+npm run backend                              # REPL поверх stdin/stdout sidecar
+npm run backend -- status                    # одна команда и выход
 ```
 
-Откройте адрес `Swagger UI:` из stderr backend в браузере. Сервер слушает только loopback на случайном порту и запускается только при `BSC_SWAGGER=1`; его HTTP-маршрут `/rpc` описывает тот же протокол `method`/`params`, который desktop использует через stdin/stdout. OpenAPI JSON автоматически находит экспортированные методы `RPC...` у Go service и строит схемы запросов и результатов из их сигнатур, структур и JSON-тегов. Чтобы добавить метод, реализуйте `RPC<Имя>` на `service` с сигнатурой `(params Тип) (result Тип, error)` — отдельная регистрация не нужна. Swagger UI загружается с unpkg CDN.
+Чтобы добавить метод, реализуйте `RPC<Имя>` на `service` с сигнатурой `(params Тип) (result Тип, error)` — диспетчер находит такие методы рефлексией, отдельная регистрация не нужна.
 
 Живой тест против настоящего SoundCloud (читает `TOKEN=...` из `.env`, проверяет `GET /me` и восстановление сессии из `auth.json`):
 

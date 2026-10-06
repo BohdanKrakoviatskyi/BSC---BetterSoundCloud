@@ -1,8 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import { appConfigDir } from '@tauri-apps/api/path';
 import { Command, type Child } from '@tauri-apps/plugin-shell';
+import type { Settings } from '../domain/models';
 
-export type Settings = { accent: string; compact: boolean; volume: number; clientId: string; backgroundImage: string; backgroundBlur: number };
 type AppInfo = { name: string; version: string; backend: string };
 export type SoundCloudProfile = {
   id: number;
@@ -180,9 +180,18 @@ class LocalBackend {
   private buffer = '';
   private pending = new Map<number, PendingRequest>();
   private starting: Promise<void> | null = null;
+  /** Consecutive failed respawns, used to back off instead of spinning. */
+  private restartAttempts = 0;
+  /** Set once the sidecar is deliberately stopped, so stop() is not undone by a restart. */
+  private stopping = false;
 
   start(): Promise<void> {
-    if (this.child) return Promise.resolve();
+    this.stopping = false;
+    return this.spawnSidecar();
+  }
+
+  private async spawnSidecar(): Promise<void> {
+    if (this.child) return;
     if (this.starting) return this.starting;
 
     this.starting = (async () => {
@@ -200,6 +209,7 @@ class LocalBackend {
         console.error('[local-backend] process closed', { exitCode: code });
         this.child = null;
         this.failAll(new Error(`Локальный Go backend завершился (${code ?? 'signal'})`));
+        if (!this.stopping) void this.restartAfterExit(code ?? 'signal');
       });
       try {
         this.child = await command.spawn();
@@ -209,6 +219,7 @@ class LocalBackend {
       }
       console.info('[local-backend] sidecar started');
       await this.request<AppInfo>('app.info');
+      this.restartAttempts = 0;
     })().finally(() => {
       this.starting = null;
     });
@@ -216,7 +227,40 @@ class LocalBackend {
     return this.starting;
   }
 
+  /**
+   * Brings the sidecar back after an unexpected exit.
+   *
+   * The delay grows with each failure so a sidecar that cannot start does not spin, and the
+   * attempt count is capped: past the cap the app stays down and says so, rather than
+   * restarting forever behind a spinner.
+   */
+  private async restartAfterExit(reason: string | number): Promise<void> {
+    const maxAttempts = 5;
+    if (this.restartAttempts >= maxAttempts) {
+      console.error('[local-backend] giving up after repeated crashes', {
+        attempts: this.restartAttempts,
+        reason,
+      });
+      return;
+    }
+    const delay = Math.min(4000, 250 * 2 ** this.restartAttempts);
+    this.restartAttempts += 1;
+    console.warn('[local-backend] restarting sidecar', {
+      attempt: this.restartAttempts,
+      delayMs: delay,
+      reason,
+    });
+    await new Promise((resolveDelay) => window.setTimeout(resolveDelay, delay));
+    if (this.stopping) return;
+    try {
+      await this.spawnSidecar();
+    } catch (error) {
+      console.error('[local-backend] restart failed', { error });
+    }
+  }
+
   async stop(): Promise<void> {
+    this.stopping = true;
     const child = this.child;
     this.child = null;
     try {
@@ -224,10 +268,6 @@ class LocalBackend {
     } finally {
       this.failAll(new Error('Локальный backend остановлен'));
     }
-  }
-
-  async getInfo(): Promise<AppInfo> {
-    return this.request<AppInfo>('app.info');
   }
 
   async getSettings(): Promise<Settings> {
@@ -478,7 +518,7 @@ class LocalBackend {
     return this.request<SpotifySaveResult>('spotify.track.unsave', { id }, 30_000);
   }
 
-  private async request<T>(method: string, params: object = {}, timeoutMs = 5000): Promise<T> {
+  private async request<T>(method: string, params: Record<string, unknown> = {}, timeoutMs = 5000): Promise<T> {
     if (!this.child) {
       const error = new Error('Локальный backend не запущен');
       console.error('[local-backend] request rejected', { method, error: error.message });
@@ -490,7 +530,7 @@ class LocalBackend {
     const response = new Promise<T>((resolve, reject) => {
       const timer = window.setTimeout(() => {
         this.pending.delete(id);
-        const error = new Error(`Локальный backend не ответил вовремя: ${method}`);
+        const error = new Error(`Локальный backend не ответил вовремя. Попробуйте ещё раз.`);
         console.error('[local-backend] request timed out', { id, method, elapsedMs: Date.now() - startedAt, timeoutMs });
         reject(error);
       }, timeoutMs);
@@ -550,64 +590,4 @@ class LocalBackend {
   }
 }
 
-const backend = new LocalBackend();
-
-export const desktop = {
-  start: () => backend.start(),
-  stop: () => backend.stop(),
-  getInfo: () => backend.getInfo(),
-  getSettings: () => backend.getSettings(),
-  updateSettings: (patch: Partial<Settings>) => backend.updateSettings(patch),
-  historyList: () => backend.historyList(),
-  historyRecord: (track: SoundCloudTrack) => backend.historyRecord(track),
-  historyClear: () => backend.historyClear(),
-  clearAppData: () => backend.clearAppData(),
-  authStatus: () => backend.authStatus(),
-  authLogin: (token: string) => backend.authLogin(token),
-  authRefresh: () => backend.authRefresh(),
-  authLogout: () => backend.authLogout(),
-  myTracks: () => backend.myTracks(),
-  myPlaylists: () => backend.myPlaylists(),
-  playlistTracks: (playlistUrn: string) => backend.playlistTracks(playlistUrn),
-  trackDetails: (trackId: number) => backend.trackDetails(trackId),
-  trackLyrics: (trackId: number, title: string, artist: string, durationMs: number) => backend.trackLyrics(trackId, title, artist, durationMs),
-  trackStream: (trackUrn: string) => backend.trackStream(trackUrn),
-  searchTracks: (query: string) => backend.searchTracks(query),
-  relatedTracks: (trackId: number) => backend.relatedTracks(trackId),
-  mixedSelections: () => backend.mixedSelections(),
-  userProfile: (userId: number) => backend.userProfile(userId),
-  userTracks: (userId: number) => backend.userTracks(userId),
-  userLikes: (userId: number, next?: string) => backend.userLikes(userId, next),
-  userFollowers: (userId: number, next?: string) => backend.userFollowers(userId, next),
-  userFollowings: (userId: number, next?: string) => backend.userFollowings(userId, next),
-  userPlaylists: (userId: number) => backend.userPlaylists(userId),
-  likeTrack: (trackId: number, trackUrn: string, userId?: number, clientId?: string, datadomeCookie?: string) => backend.likeTrack(trackId, trackUrn, userId, clientId, datadomeCookie),
-  unlikeTrack: (trackId: number, trackUrn: string, userId?: number, clientId?: string, datadomeCookie?: string) => backend.unlikeTrack(trackId, trackUrn, userId, clientId, datadomeCookie),
-  spotifyAuthStart: (clientId: string, redirectUri: string) => backend.spotifyAuthStart(clientId, redirectUri),
-  spotifyAuthPoll: () => backend.spotifyAuthPoll(),
-  youtubeAuthStart: (clientId: string, redirectUri: string) => backend.youtubeAuthStart(clientId, redirectUri),
-  youtubeAuthPoll: () => backend.youtubeAuthPoll(),
-  youtubeAuthStatus: () => backend.youtubeAuthStatus(),
-  youtubeAuthExchange: (code: string, clientId: string, clientSecret: string, redirectUri: string) => backend.youtubeAuthExchange(code, clientId, clientSecret, redirectUri),
-  youtubeAuthRefresh: () => backend.youtubeAuthRefresh(),
-  youtubeAuthLogout: () => backend.youtubeAuthLogout(),
-  youtubeMyTracks: (pageToken?: string, limit?: number, musicOnly?: boolean) => backend.youtubeMyTracks(pageToken, limit, musicOnly),
-  youtubeMyPlaylists: (pageToken?: string, limit?: number) => backend.youtubeMyPlaylists(pageToken, limit),
-  youtubePlaylistTracks: (id: string, pageToken?: string, limit?: number) => backend.youtubePlaylistTracks(id, pageToken, limit),
-  youtubeTrackDetails: (id: string) => backend.youtubeTrackDetails(id),
-  youtubeSearchTracks: (query: string, pageToken?: string, limit?: number) => backend.youtubeSearchTracks(query, pageToken, limit),
-  youtubeUserProfile: () => backend.youtubeUserProfile(),
-  spotifyAuthStatus: () => backend.spotifyAuthStatus(),
-  spotifyAuthExchange: (code: string, clientId: string, clientSecret: string, redirectUri: string) => backend.spotifyAuthExchange(code, clientId, clientSecret, redirectUri),
-  spotifyAuthRefresh: (clientId: string, clientSecret: string) => backend.spotifyAuthRefresh(clientId, clientSecret),
-  spotifyAuthLogout: () => backend.spotifyAuthLogout(),
-  spotifyMyTracks: (next?: string, limit?: number) => backend.spotifyMyTracks(next, limit),
-  spotifyMyPlaylists: (next?: string, limit?: number) => backend.spotifyMyPlaylists(next, limit),
-  spotifyPlaylistTracks: (id: string, next?: string, limit?: number) => backend.spotifyPlaylistTracks(id, next, limit),
-  spotifyTrackDetails: (id: string) => backend.spotifyTrackDetails(id),
-  spotifySearchTracks: (query: string, limit?: number) => backend.spotifySearchTracks(query, limit),
-  spotifyRecommendations: (request: SpotifyRecommendRequest) => backend.spotifyRecommendations(request),
-  spotifyUserProfile: () => backend.spotifyUserProfile(),
-  spotifySaveTrack: (id: string) => backend.spotifySaveTrack(id),
-  spotifyUnsaveTrack: (id: string) => backend.spotifyUnsaveTrack(id),
-};
+export const desktop = new LocalBackend();

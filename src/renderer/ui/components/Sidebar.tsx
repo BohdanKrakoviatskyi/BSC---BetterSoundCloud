@@ -3,6 +3,7 @@ import { CloudGlyph, SpotifyGlyph, YouTubeGlyph } from './AuthIcons';
 import './Sidebar.css';
 import type { Profile, Page } from '../types';
 import { ResizeHandle } from './ResizeHandle';
+import { FaHeadphones, FaHeart, FaListUl, FaMusic } from '../lib/icons';
 
 const SERVICE_LABELS: Record<ServiceProvider, string> = {
   soundcloud: 'SoundCloud',
@@ -53,21 +54,18 @@ export function Sidebar({ profile, page, tracks, activeService, onNavigate, onPl
         </div>
       ) : null}
       <nav className="primary-nav" aria-label="Главная навигация">
-        <button type="button" className={`nav-link ${page === 'home' ? 'active' : ''}`} onClick={() => onNavigate('home')}><span className="nav-glyph">⌂</span>Главная</button>
+        <button type="button" className={`nav-link ${page === 'home' ? 'active' : ''}`} onClick={() => onNavigate('home')}><FaHeadphones aria-hidden="true" />Главная</button>
       </nav>
       <section className="library-block">
         <div className="library-heading">
-          <button type="button" className={`library-title ${page === 'library' ? 'active' : ''}`} onClick={() => onNavigate('library')}><span className="nav-glyph">▤</span>Моя медиатека</button>
+          <button type="button" className={`nav-link ${page === 'library' ? 'active' : ''}`} onClick={() => onNavigate('library')}><FaListUl aria-hidden="true" />Моя медиатека</button>
+          <button type="button" className={`nav-link ${page === 'likes' ? 'active' : ''}`} onClick={() => onNavigate('likes')} aria-current={page === 'likes' ? 'page' : undefined}><FaHeart aria-hidden="true" />Лайканые</button>
         </div>
-        <button type="button" className={`nav-link liked-nav-link ${page === 'likes' ? 'active' : ''}`} onClick={() => onNavigate('likes')} aria-current={page === 'likes' ? 'page' : undefined}>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 8.8c0 5.3-8.8 10-8.8 10s-8.8-4.7-8.8-10a4.8 4.8 0 0 1 8.8-2.5 4.8 4.8 0 0 1 8.8 2.5Z" /></svg>
-          Лайканые
-        </button>
 
         <div className="library-list">
           {uniqueTracks.slice(0, 60).map((track) => (
             <button className="library-item" type="button" key={track.id} onClick={() => openTrackFromSidebar(track)} title={onOpenTrack ? `Открыть страницу трека «${track.title}»` : `Воспроизвести ${track.title}`}>
-              {track.artwork ? <img className="mini-art" src={track.artwork} alt="" loading="lazy" /> : <span className="mini-art mini-art-fallback">♫</span>}
+              {track.artwork ? <img className="mini-art" src={track.artwork} alt="" loading="lazy" /> : <span className="mini-art mini-art-fallback"><FaMusic aria-hidden="true" /></span>}
               <span className="library-copy"><b>{track.title}</b><small onClick={(e) => { e.stopPropagation(); if (onOpenArtist) onOpenArtist(track); }} title="Открыть профиль автора" style={{ cursor: onOpenArtist ? 'pointer' : 'default' }}>{track.artist.name || profile?.username || (activeService ? SERVICE_LABELS[activeService] : '—')}</small></span>
             </button>
           ))}
