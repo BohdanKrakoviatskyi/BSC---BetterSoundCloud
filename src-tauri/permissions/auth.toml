@@ -55,3 +55,23 @@ commands.allow = ["report_like_result"]
 identifier = "allow-report-session-ready"
 description = "Allows the soundcloud webview to report that it has initialized and is ready to process requests."
 commands.allow = ["report_session_ready"]
+
+[[permission]]
+identifier = "allow-start-spotify-auth"
+description = "Allows the main window to open Spotify's authorization page in an in-app webview."
+commands.allow = ["start_spotify_auth"]
+
+[[permission]]
+identifier = "allow-poll-spotify-auth"
+description = "Allows the main window to poll for the authorization code the Spotify webview intercepted."
+commands.allow = ["poll_spotify_auth"]
+
+[[permission]]
+identifier = "allow-start-youtube-auth"
+description = "Allows the main window to open Google's authorization page in an in-app webview."
+commands.allow = ["start_youtube_auth"]
+
+[[permission]]
+identifier = "allow-poll-youtube-auth"
+description = "Allows the main window to poll for the authorization code the Google webview intercepted."
+commands.allow = ["poll_youtube_auth"]
