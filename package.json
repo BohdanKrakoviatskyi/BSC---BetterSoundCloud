@@ -17,7 +17,8 @@
     "package": "npm run build:go && tauri build",
     "package:mac": "npm run build:go && tauri build --bundles app,dmg",
     "package:win": "npm run build:go && tauri build --bundles nsis,msi",
-    "release": "node scripts/trigger-release.mjs"
+    "release": "node scripts/trigger-release.mjs",
+    "test:node": "node scripts/run-node-tests.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.8.0",

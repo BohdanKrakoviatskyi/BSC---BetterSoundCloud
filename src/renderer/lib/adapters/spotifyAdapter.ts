@@ -9,6 +9,7 @@ import type {
   SpotifyTrackPage,
 } from '../desktop';
 import type { AdapterTrackStream, AuthResult, LikeResult, ServiceAdapter } from '../serviceAdapter';
+import { loadCredentials, saveCredentials } from '../credentialStore';
 import { identityFor } from '../serviceIdentity';
 
 const SPOTIFY_REDIRECT_URI = 'http://localhost:8888/callback';
@@ -134,22 +135,38 @@ export const spotifyAdapter: ServiceAdapter = {
     await desktop.spotifyAuthStart(clientId, SPOTIFY_REDIRECT_URI);
     const code = await waitForSpotifyCode();
     const status = await desktop.spotifyAuthExchange(code, clientId, clientSecret, SPOTIFY_REDIRECT_URI);
+
+    // Only once the exchange has succeeded. Storing credentials that turned out to be wrong would
+    // leave them sitting there being handed to every later refresh attempt.
+    if (status.authorized) {
+      saveCredentials('spotify', { clientId, clientSecret });
+    }
+
     return { authorized: status.authorized, profile: status.profile ? toProfile(status.profile) : null };
   },
 
   async authLogout(): Promise<void> {
     await desktop.spotifyAuthLogout();
+    // The stored client id and secret stay. They identify the app the user registered, not the
+    // session that just ended, and the refresh below needs them — dropping them would mean signing
+    // in again from scratch after every sign-out.
   },
 
   async authRefresh(): Promise<AuthResult> {
-    // The client id and secret are the user's own app credentials, not part of the session, and
-    // this signature carries none, so there is nothing to refresh with.
-    //
-    // What that costs is specific: the refresh token is sitting in the sidecar, and a restart that
-    // outlives the hour-long access token means sending the user through the consent screen again.
-    // Storing the app credentials closes that, and is the same missing piece as choosing where
-    // secrets live.
-    throw new Error('Обновление токена Spotify требует Client ID и Client Secret, которых у адаптера нет');
+    // The client id and secret are the user's own app registration rather than part of the session,
+    // which is why they are not in this signature and are read from the credential store instead —
+    // authLogin puts them there after a successful exchange.
+    const stored = loadCredentials('spotify');
+    const clientId = stored?.clientId;
+    const clientSecret = stored?.clientSecret;
+    if (!clientId || !clientSecret) {
+      throw new Error(
+        'Нет сохранённых учётных данных Spotify: войдите заново, чтобы приложение запомнило Client ID и Client Secret',
+      );
+    }
+
+    const status = await desktop.spotifyAuthRefresh(clientId, clientSecret);
+    return { authorized: status.authorized, profile: status.profile ? toProfile(status.profile) : null };
   },
 
   async myTracks(): Promise<Track[]> {

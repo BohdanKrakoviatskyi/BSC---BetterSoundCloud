@@ -9,14 +9,19 @@ import {
  * Per-service session storage.
  *
  * ══ SECURITY ══
- * These functions keep credentials in the webview's localStorage, which the plan specifies. That is
- * acceptable only while nothing real is written here — and right now nothing is: no Spotify or YouTube
- * flow exists yet, so this module holds no secrets at all.
+ * These functions keep credentials in the webview's localStorage, which is what the plan specifies,
+ * and it now holds something real: since Phase 1 the Spotify adapter writes the app’s client id
+ * and client secret here after a successful exchange, so that a later token refresh has them.
  *
- * Before Phase 1 writes a real refresh token it has to move. localStorage is readable by any script
- * that reaches the webview, so an OAuth refresh token parked there is one XSS away from being
- * replayed, and it outlives the session. The sidecar already does this properly: auth.json goes
- * through writeSecretFile with a 0600 mode. Tokens belong beside it.
+ * What that costs, stated plainly: localStorage is readable by any script that reaches the webview,
+ * and a client secret is a credential — one injection away from being read and replayed against
+ * the Spotify token endpoint. It is scoped to the app the user registered rather than to their
+ * account, which limits the damage but does not remove it. This was decided knowingly, not
+ * overlooked.
+ *
+ * Tokens themselves are NOT stored here and must not be. The refresh token lives in the sidecar’s
+ * spotify.json, written through writeSecretFile with a 0600 mode, and anything able to read
+ * localStorage would be able to replay a token for the life of the grant.
  *
  * localStorage is still the right home for getLastActiveService and setLastActiveService — that is a
  * preference, not a secret, and the app already keeps sidebar widths there.
