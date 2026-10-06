@@ -12,6 +12,56 @@ import type { AdapterTrackStream, AuthResult, LikeResult, ServiceAdapter } from 
 import { identityFor } from '../serviceIdentity';
 
 const SPOTIFY_REDIRECT_URI = 'http://localhost:8888/callback';
+/** How often to ask the Rust side what the authorization window has produced. */
+const SPOTIFY_POLL_INTERVAL_MS = 700;
+
+/**
+ * How long to wait for the person in front of the screen.
+ *
+ * Generous, because this is someone reading a consent screen and possibly creating an account. It
+ * still has to end: a wait that never returns leaves the caller awaiting forever with the window
+ * open and no way back.
+ */
+const SPOTIFY_POLL_TIMEOUT_MS = 5 * 60_000;
+
+/**
+ * Waits for the authorization window to produce a code.
+ *
+ * The three things that can happen are kept apart on purpose. Declining is not a failure and
+ * reports Spotify's own wording; a window closed without answering is a different thing and says
+ * so; a timeout is named as one, because someone who walked away from a consent screen should not
+ * be told their credentials are wrong.
+ */
+async function waitForSpotifyCode(): Promise<string> {
+  const deadline = Date.now() + SPOTIFY_POLL_TIMEOUT_MS;
+
+  for (;;) {
+    const status = await desktop.spotifyAuthPoll();
+
+    if (status.completed) {
+      if (status.error) {
+        throw new Error('Spotify: ' + status.error);
+      }
+      if (!status.code) {
+        throw new Error('Spotify не вернул код авторизации');
+      }
+      return status.code;
+    }
+
+    // The window is gone and nothing was reported: closed rather than answered.
+    if (status.closed) {
+      throw new Error('Окно входа Spotify закрыто, авторизация не завершена');
+    }
+
+    if (Date.now() >= deadline) {
+      throw new Error('Вход в Spotify не завершён за 5 минут');
+    }
+
+    await new Promise((resolve) => {
+      window.setTimeout(resolve, SPOTIFY_POLL_INTERVAL_MS);
+    });
+  }
+}
 
 function toTrack(source: SpotifyTrack): Track {
   return {
@@ -81,11 +131,10 @@ export const spotifyAdapter: ServiceAdapter = {
     if (!clientId || !clientSecret) {
       throw new Error('Для входа через Spotify нужны Client ID и Client Secret');
     }
-    // desktop.spotifyAuthExchange(code, ...) takes these and trades an authorization code for
-    // tokens. The code comes from the OAuth window, which is step 1.2 and is not here yet.
-    // The authorization code comes from the OAuth window, which step 1.2 adds. Until that exists
-    // there is nothing to exchange, and saying so plainly beats a confusing failure from Spotify.
-    throw new Error('Окно авторизации Spotify ещё не подключено: код доступа не получен');
+    await desktop.spotifyAuthStart(clientId, SPOTIFY_REDIRECT_URI);
+    const code = await waitForSpotifyCode();
+    const status = await desktop.spotifyAuthExchange(code, clientId, clientSecret, SPOTIFY_REDIRECT_URI);
+    return { authorized: status.authorized, profile: status.profile ? toProfile(status.profile) : null };
   },
 
   async authLogout(): Promise<void> {
@@ -93,9 +142,14 @@ export const spotifyAdapter: ServiceAdapter = {
   },
 
   async authRefresh(): Promise<AuthResult> {
-    // The client id and secret are the user's own app credentials, not part of the session, so they
-    // are not held here. Without them a refresh cannot be performed and that is worth saying.
-    throw new Error('Обновление токена Spotify требует Client ID и Client Secret');
+    // The client id and secret are the user's own app credentials, not part of the session, and
+    // this signature carries none, so there is nothing to refresh with.
+    //
+    // What that costs is specific: the refresh token is sitting in the sidecar, and a restart that
+    // outlives the hour-long access token means sending the user through the consent screen again.
+    // Storing the app credentials closes that, and is the same missing piece as choosing where
+    // secrets live.
+    throw new Error('Обновление токена Spotify требует Client ID и Client Secret, которых у адаптера нет');
   },
 
   async myTracks(): Promise<Track[]> {

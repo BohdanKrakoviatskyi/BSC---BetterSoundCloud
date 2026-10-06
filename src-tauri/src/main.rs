@@ -16,6 +16,20 @@ const CREDENTIALS_EVENT: &str = "soundcloud:credentials";
 /// remain observable by AUTH_INIT_SCRIPT for automatic credential capture.
 const SOUNDCLOUD_URL: &str = "https://soundcloud.com/signin";
 
+/// Label of the webview used for the Spotify authorization flow.
+const SPOTIFY_WINDOW_LABEL: &str = "spotify-auth";
+const SPOTIFY_AUTHORIZE_URL: &str = "https://accounts.spotify.com/authorize";
+/// The redirect must match the value registered in the Spotify dashboard character for character, or
+/// Spotify answers redirect_uri_mismatch and the flow never completes.
+const SPOTIFY_REDIRECT_HOST: &str = "localhost";
+const SPOTIFY_REDIRECT_PORT: u16 = 8888;
+const SPOTIFY_REDIRECT_PATH: &str = "/callback";
+/// Only the scopes needed to sign in and read the account. Every scope added is another permission
+/// the app asks for and another line on the authorization screen, so this starts deliberately small
+/// and grows when a feature that needs more actually lands. Playback scopes are not here yet,
+/// because nothing in the app can use them.
+const SPOTIFY_SCOPES: &str = "user-read-private user-read-email";
+
 const CAPTCHA_INIT_SCRIPT: &str = r#"
 (() => {
   const bridge = window.__TAURI_INTERNALS__;
@@ -85,6 +99,23 @@ struct AuthState {
     client_id: Mutex<Option<String>>,
     user_id: Mutex<Option<i64>>,
     session_ready: Mutex<bool>,
+}
+
+/// The authorization code, captured from the redirect, waiting for the frontend to exchange it.
+#[derive(Default)]
+struct SpotifyOAuthState {
+    code: Mutex<Option<String>>,
+    error: Mutex<Option<String>>,
+    done: Mutex<bool>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SpotifyOAuthStatus {
+    completed: bool,
+    closed: bool,
+    code: Option<String>,
+    error: Option<String>,
 }
 
 #[derive(Default)]
@@ -696,6 +727,163 @@ async fn like_track_webview(
     }
 }
 
+/// Whether a URL is the callback Spotify was told to redirect to.
+///
+/// The port is part of the test, not an accident: the app has other localhost traffic, and blocking a
+/// navigation to a different port would break it for no reason. A wrong port here also means the
+/// dashboard and the app disagree, and that should fail loudly rather than hang.
+fn is_spotify_redirect(url: &tauri::Url) -> bool {
+    url.scheme() == "http"
+        && url.host_str() == Some(SPOTIFY_REDIRECT_HOST)
+        && url.port() == Some(SPOTIFY_REDIRECT_PORT)
+        && url.path() == SPOTIFY_REDIRECT_PATH
+}
+
+/// Records what the redirect carried, or why it did not carry a code.
+///
+/// Declining the consent screen is not a failure to hide: Spotify sends error=access_denied, and
+/// reporting that as its own outcome is what lets the settings panel say the user cancelled rather
+/// than sitting there looking like the flow is still running.
+fn capture_spotify_redirect(app: &AppHandle, url: &tauri::Url) {
+    let state = app.state::<SpotifyOAuthState>();
+    let Ok(mut code) = state.code.lock() else { return };
+    let Ok(mut error) = state.error.lock() else { return };
+    let Ok(mut done) = state.done.lock() else { return };
+
+    let params: HashMap<String, String> = url.query_pairs().into_owned().collect();
+    if let Some(reason) = params.get("error") {
+        let detail = params
+            .get("error_description")
+            .cloned()
+            .unwrap_or_else(|| reason.clone());
+        *error = Some(detail);
+    } else if let Some(value) = params.get("code") {
+        if value.trim().is_empty() {
+            *error = Some("Spotify вернул пустой код авторизации".to_owned());
+        } else {
+            *code = Some(value.clone());
+        }
+    } else {
+        *error = Some("Spotify вернул перенаправление без кода и без ошибки".to_owned());
+    }
+    *done = true;
+}
+
+/// Opens Spotify's authorization page in its own webview.
+#[tauri::command]
+async fn start_spotify_auth(
+    app: AppHandle,
+    client_id: String,
+    redirect_uri: String,
+) -> Result<(), String> {
+    let client_id = client_id.trim().to_owned();
+    if client_id.is_empty() {
+        return Err("не передан Client ID Spotify".to_owned());
+    }
+    let redirect_uri = redirect_uri.trim();
+    if redirect_uri.is_empty() {
+        return Err("не передан Redirect URI Spotify".to_owned());
+    }
+
+    // Built with the URL parser rather than by gluing strings together, so a client id holding an
+    // unexpected character comes out escaped instead of producing a URL Spotify rejects with a
+    // complaint about something else entirely.
+    let mut url = SPOTIFY_AUTHORIZE_URL
+        .parse::<tauri::Url>()
+        .map_err(|error| format!("некорректный адрес авторизации Spotify: {error}"))?;
+    url.query_pairs_mut()
+        .append_pair("client_id", &client_id)
+        .append_pair("response_type", "code")
+        .append_pair("redirect_uri", redirect_uri)
+        .append_pair("scope", SPOTIFY_SCOPES)
+        .append_pair("show_dialog", "true");
+
+    {
+        let state = app.state::<SpotifyOAuthState>();
+        let failure = "не удалось подготовить вход Spotify".to_owned();
+        *state.code.lock().map_err(|_| failure.clone())? = None;
+        *state.error.lock().map_err(|_| failure.clone())? = None;
+        *state.done.lock().map_err(|_| failure)? = false;
+    }
+
+    if let Some(window) = app.get_webview_window(SPOTIFY_WINDOW_LABEL) {
+        window
+            .navigate(url)
+            .map_err(|error| format!("не удалось загрузить страницу входа Spotify: {error}"))?;
+        return show_window(&window);
+    }
+
+    // Creating a window deadlocks on Windows from a synchronous command, which is why this one is
+    // async; the existing auth and captcha windows are async for the same reason.
+    let handle = app.clone();
+    let window = WebviewWindowBuilder::new(&app, SPOTIFY_WINDOW_LABEL, WebviewUrl::External(url))
+        .title("Spotify — вход")
+        .inner_size(520.0, 720.0)
+        .min_inner_size(420.0, 560.0)
+        .visible(true)
+        .on_navigation(move |target| {
+            if !is_spotify_redirect(target) {
+                return true;
+            }
+            capture_spotify_redirect(&handle, target);
+            // Cancelled on purpose. Nothing is listening on the port, and letting it through would
+            // put a connection error page over the window moments before it closes.
+            false
+        })
+        .build()
+        .map_err(|error| format!("не удалось открыть окно входа Spotify: {error}"))?;
+    show_window(&window)
+}
+
+/// Reports what the authorization window has produced, and puts the window away once it has.
+///
+/// The code is handed out once and then cleared. It is a single-use credential and it is about to be
+/// exchanged in the sidecar; leaving it in memory for a second poll would hand the same code out
+/// twice.
+#[tauri::command]
+async fn poll_spotify_auth(app: AppHandle) -> Result<SpotifyOAuthStatus, String> {
+    let state = app.state::<SpotifyOAuthState>();
+    let done = *state
+        .done
+        .lock()
+        .map_err(|_| "не удалось прочитать состояние входа Spotify".to_owned())?;
+
+    if !done {
+        return Ok(SpotifyOAuthStatus {
+            completed: false,
+            closed: app.get_webview_window(SPOTIFY_WINDOW_LABEL).is_none(),
+            code: None,
+            error: None,
+        });
+    }
+
+    let code = state
+        .code
+        .lock()
+        .map_err(|_| "не удалось прочитать состояние входа Spotify".to_owned())?
+        .take();
+    let error = state
+        .error
+        .lock()
+        .map_err(|_| "не удалось прочитать состояние входа Spotify".to_owned())?
+        .take();
+
+    // Hiding from here rather than from inside on_navigation: touching the window while it is
+    // deciding whether to navigate is how the captcha window got its own separate poll command.
+    if let Some(window) = app.get_webview_window(SPOTIFY_WINDOW_LABEL) {
+        let _ = window.hide();
+    }
+    let failure = "не удалось сохранить результат входа Spotify".to_owned();
+    *state.done.lock().map_err(|_| failure.clone())? = false;
+
+    Ok(SpotifyOAuthStatus {
+        completed: true,
+        closed: true,
+        code,
+        error,
+    })
+}
+
 fn show_window(window: &WebviewWindow) -> Result<(), String> {
     window.show().map_err(|error| error.to_string())?;
     window.set_focus().map_err(|error| error.to_string())
@@ -709,6 +897,7 @@ fn main() {
         .manage(CaptchaState::default())
         .manage(AuthState::default())
         .manage(LikeState::default())
+        .manage(SpotifyOAuthState::default())
         .setup(|app| {
             let _ = ensure_session_window(&app.handle());
             Ok(())
@@ -724,7 +913,9 @@ fn main() {
             report_session_ready,
             sync_session_window,
             report_like_result,
-            like_track_webview
+            like_track_webview,
+            start_spotify_auth,
+            poll_spotify_auth
         ])
         .run(tauri::generate_context!())
         .expect("error while running BetterSoundCloud");

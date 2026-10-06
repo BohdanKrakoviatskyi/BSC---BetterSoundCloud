@@ -119,6 +119,7 @@ export type SpotifyPlaylist = {
 };
 export type SpotifyPlaylistPage = { playlists: SpotifyPlaylist[]; nextHref?: string };
 export type SpotifySaveResult = { id: string; saved: boolean };
+export type SpotifyOAuthStatus = { completed: boolean; closed: boolean; code?: string; error?: string };
 export type SpotifySearchRequest = { query: string; limit?: number };
 export type SpotifyPageRequest = { next?: string; limit?: number };
 export type SpotifyRecommendRequest = { seedTrackIds?: string[]; seedArtists?: string[]; limit?: number };
@@ -315,6 +316,17 @@ class LocalBackend {
   // on this side of the bridge: a stale token that is believed to be good produces failures that look
   // like a network problem.
 
+  // ---- Spotify OAuth window. These go to the Rust side, which owns the window and intercepts the
+  // redirect; there is no local server listening on the callback port.
+
+  async spotifyAuthStart(clientId: string, redirectUri: string): Promise<void> {
+    await invoke('start_spotify_auth', { clientId, redirectUri });
+  }
+
+  async spotifyAuthPoll(): Promise<SpotifyOAuthStatus> {
+    return invoke<SpotifyOAuthStatus>('poll_spotify_auth');
+  }
+
   async spotifyAuthStatus(): Promise<SpotifyAuthStatus> {
     return this.request<SpotifyAuthStatus>('spotify.auth.status', {}, 10_000);
   }
@@ -472,6 +484,8 @@ export const desktop = {
   userPlaylists: (userId: number) => backend.userPlaylists(userId),
   likeTrack: (trackId: number, trackUrn: string, userId?: number, clientId?: string, datadomeCookie?: string) => backend.likeTrack(trackId, trackUrn, userId, clientId, datadomeCookie),
   unlikeTrack: (trackId: number, trackUrn: string, userId?: number, clientId?: string, datadomeCookie?: string) => backend.unlikeTrack(trackId, trackUrn, userId, clientId, datadomeCookie),
+  spotifyAuthStart: (clientId: string, redirectUri: string) => backend.spotifyAuthStart(clientId, redirectUri),
+  spotifyAuthPoll: () => backend.spotifyAuthPoll(),
   spotifyAuthStatus: () => backend.spotifyAuthStatus(),
   spotifyAuthExchange: (code: string, clientId: string, clientSecret: string, redirectUri: string) => backend.spotifyAuthExchange(code, clientId, clientSecret, redirectUri),
   spotifyAuthRefresh: (clientId: string, clientSecret: string) => backend.spotifyAuthRefresh(clientId, clientSecret),
