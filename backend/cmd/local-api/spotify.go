@@ -168,7 +168,7 @@ func (s *service) RPCSpotifyAuthRefresh(params spotifyRefreshParams) (spotifyAut
 
 // RPCSpotifyAuthStatus reports the stored session. It does not touch the network: the caller decides
 // when to spend a round trip, and a status check that fails offline should still say "signed in".
-func (s *service) RPCSpotifyAuthStatus() (spotifyAuthStatus, error) {
+func (s *service) RPCSpotifyAuthStatus(_ emptyParams) (spotifyAuthStatus, error) {
 	if strings.TrimSpace(s.spotifyAuth.AccessToken) == "" {
 		return spotifyAuthStatus{Authorized: false}, nil
 	}
@@ -176,7 +176,7 @@ func (s *service) RPCSpotifyAuthStatus() (spotifyAuthStatus, error) {
 }
 
 // RPCSpotifyAuthLogout clears the stored session.
-func (s *service) RPCSpotifyAuthLogout() (spotifyAuthStatus, error) {
+func (s *service) RPCSpotifyAuthLogout(_ emptyParams) (spotifyAuthStatus, error) {
 	s.spotifyAuth = spotifyAuthState{}
 	if s.spotifyPath == "" {
 		return spotifyAuthStatus{Authorized: false}, nil

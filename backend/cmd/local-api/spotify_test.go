@@ -192,7 +192,7 @@ func TestSpotifyAuthStatusAndLogout(t *testing.T) {
 		return spotifyJSONResponse(request, http.StatusBadRequest, `{}`), nil
 	})}
 
-	if status, err := svc.RPCSpotifyAuthStatus(); err != nil || status.Authorized {
+	if status, err := svc.RPCSpotifyAuthStatus(emptyParams{}); err != nil || status.Authorized {
 		t.Fatalf("expected signed out on a fresh service: %#v %v", status, err)
 	}
 
@@ -201,7 +201,7 @@ func TestSpotifyAuthStatusAndLogout(t *testing.T) {
 		t.Fatalf("save: %v", err)
 	}
 
-	status, err := svc.RPCSpotifyAuthStatus()
+	status, err := svc.RPCSpotifyAuthStatus(emptyParams{})
 	if err != nil {
 		t.Fatalf("status: %v", err)
 	}
@@ -212,10 +212,10 @@ func TestSpotifyAuthStatusAndLogout(t *testing.T) {
 		t.Errorf("status did not report the expiry: %d", status.ExpiresAt)
 	}
 
-	if _, err := svc.RPCSpotifyAuthLogout(); err != nil {
+	if _, err := svc.RPCSpotifyAuthLogout(emptyParams{}); err != nil {
 		t.Fatalf("logout: %v", err)
 	}
-	if status, _ := svc.RPCSpotifyAuthStatus(); status.Authorized {
+	if status, _ := svc.RPCSpotifyAuthStatus(emptyParams{}); status.Authorized {
 		t.Error("logout left the service authorized")
 	}
 	if _, err := os.Stat(svc.spotifyPath); !os.IsNotExist(err) {
@@ -223,7 +223,7 @@ func TestSpotifyAuthStatusAndLogout(t *testing.T) {
 	}
 
 	// Signing out twice must be fine; the panel can be closed and reopened.
-	if _, err := svc.RPCSpotifyAuthLogout(); err != nil {
+	if _, err := svc.RPCSpotifyAuthLogout(emptyParams{}); err != nil {
 		t.Errorf("second logout failed: %v", err)
 	}
 }
