@@ -1,5 +1,9 @@
-export type { Profile, Settings, TrackLyrics } from '../domain/models';
-export type Page = 'home' | 'search' | 'library' | 'playlist' | 'likes' | 'settings' | 'track' | 'artist' | 'profile' | 'followers' | 'followings' | 'artist-tracks-all' | 'artist-likes-all';
+export type { Profile, ServiceCredentials, ServiceProvider, Settings, TrackLyrics } from '../domain/models';
+import type { ServiceProvider } from '../domain/models';
+
+/** The service the interface is currently showing. */
+export type ActiveService = ServiceProvider;
+export type Page = 'home' | 'search' | 'library' | 'playlist' | 'likes' | 'settings' | 'track' | 'artist' | 'profile' | 'followers' | 'followings' | 'artist-tracks-all' | 'artist-likes-all' | 'service-picker';
 
 /**
  * Lifecycle of the lyrics sidebar. The panel stays mounted for the whole flight in both directions,
