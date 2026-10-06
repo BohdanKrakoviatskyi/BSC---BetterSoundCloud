@@ -381,15 +381,22 @@ type service struct {
 	// Spotify keeps its own token file rather than sharing the SoundCloud one: they are
 	// independent services with independent lifetimes, and one being cleared must not sign the
 	// other out.
-	spotifyPath    string
-	spotifyAuth    spotifyAuthState
+	spotifyPath string
+	spotifyAuth spotifyAuthState
 	// A field so tests can point at an httptest server.
 	spotifyAPIBase string
 	spotifyAuthURL string
-	historyPath  string
-	history      []soundcloudTrackCard
-	apiBase      string
-	httpClient   *http.Client
+	// YouTube Music keeps its own token file too. Three services, three independent sessions: signing
+	// out of one must never touch another, and a Google token means nothing to a Spotify session.
+	youtubePath string
+	youtubeAuth youtubeAuthState
+	// Fields so tests can point at a stub.
+	youtubeAPIBase string
+	youtubeAuthURL string
+	historyPath    string
+	history        []soundcloudTrackCard
+	apiBase        string
+	httpClient     *http.Client
 	// Lyrics are cached separately from everything else and behind their own lock: mu is held
 	// across disk writes and settings updates, so borrowing it for a cache that outlives an HTTP
 	// lookup would queue unrelated work behind the network.
@@ -414,16 +421,19 @@ func run(input io.Reader, output io.Writer) error {
 	}
 
 	svc := &service{
-		settingsPath: filepath.Join(dataDir, "settings.json"),
-		settings:     defaultSettings(),
-		authPath:     filepath.Join(dataDir, "auth.json"),
-		spotifyPath:  filepath.Join(dataDir, "spotify.json"),
+		settingsPath:   filepath.Join(dataDir, "settings.json"),
+		settings:       defaultSettings(),
+		authPath:       filepath.Join(dataDir, "auth.json"),
+		spotifyPath:    filepath.Join(dataDir, "spotify.json"),
 		spotifyAPIBase: spotifyDefaultAPIBase,
 		spotifyAuthURL: spotifyDefaultAuthURL,
-		historyPath:  filepath.Join(dataDir, "history.json"),
-		apiBase:      apiBase(),
-		httpClient:   &http.Client{Timeout: 15 * time.Second},
-		lyricsCache:  make(map[int64]cachedLyrics),
+		youtubePath:    filepath.Join(dataDir, "youtube.json"),
+		youtubeAPIBase: youtubeDefaultAPIBase,
+		youtubeAuthURL: youtubeDefaultAuthURL,
+		historyPath:    filepath.Join(dataDir, "history.json"),
+		apiBase:        apiBase(),
+		httpClient:     &http.Client{Timeout: 15 * time.Second},
+		lyricsCache:    make(map[int64]cachedLyrics),
 	}
 	if err := svc.loadSettings(); err != nil {
 		return err
@@ -431,6 +441,9 @@ func run(input io.Reader, output io.Writer) error {
 	// Повреждённое или нечитаемое хранилище токена не должно мешать запуску:
 	// работаем как неавторизованные, диагностика уходит в stderr.
 	// Spotify's session is independent of SoundCloud's and must not fail the launch on its own.
+	if err := svc.loadYoutubeAuth(); err != nil {
+		log.Printf("youtube.auth stage=load_failed error=%q", err.Error())
+	}
 	if err := svc.loadSpotifyAuth(); err != nil {
 		log.Printf("spotify.auth stage=load_failed error=%q", err.Error())
 	}
