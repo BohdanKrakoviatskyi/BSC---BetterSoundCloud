@@ -120,9 +120,51 @@ export type SpotifyPlaylist = {
 export type SpotifyPlaylistPage = { playlists: SpotifyPlaylist[]; nextHref?: string };
 export type SpotifySaveResult = { id: string; saved: boolean };
 export type SpotifyOAuthStatus = { completed: boolean; closed: boolean; code?: string; error?: string };
+export type YouTubeOAuthStatus = { completed: boolean; closed: boolean; code?: string; error?: string };
 export type SpotifySearchRequest = { query: string; limit?: number };
 export type SpotifyPageRequest = { next?: string; limit?: number };
 export type SpotifyRecommendRequest = { seedTrackIds?: string[]; seedArtists?: string[]; limit?: number };
+
+// ---- YouTube Music
+//
+// Pagination is a pageToken rather than a next URL. YouTube's continuation is an opaque token that only
+// means anything together with the request that produced it, so the field is not called nextHref.
+
+export type YouTubeAuthProfile = { id: string; email?: string; name?: string; picture?: string };
+export type YouTubeAuthStatus = { authorized: boolean; profile?: YouTubeAuthProfile; expiresAt?: number };
+export type YouTubeTrack = {
+  nativeId: string;
+  source: string;
+  urn: string;
+  title: string;
+  permalink?: string;
+  artworkUrl?: string;
+  durationMs: number;
+  viewCount?: number;
+  categoryId?: string;
+  artist: string;
+  publishedAt?: string;
+};
+export type YouTubeTrackPage = {
+  tracks: YouTubeTrack[];
+  nextPageToken?: string;
+  /** True when the service holds more liked videos than it will page through. */
+  capped?: boolean;
+};
+export type YouTubePlaylist = {
+  nativeId: string;
+  source: string;
+  urn: string;
+  title: string;
+  permalink?: string;
+  artworkUrl?: string;
+  description?: string;
+  trackCount: number;
+  artist: string;
+};
+export type YouTubePlaylistPage = { playlists: YouTubePlaylist[]; nextPageToken?: string };
+export type YouTubeSearchRequest = { query: string; pageToken?: string; limit?: number };
+export type YouTubePageRequest = { pageToken?: string; limit?: number; musicOnly?: boolean };
 type BackendResponse<T> = { id: number; result?: T; error?: string };
 type PendingRequest = {
   method: string;
@@ -327,6 +369,63 @@ class LocalBackend {
     return invoke<SpotifyOAuthStatus>('poll_spotify_auth');
   }
 
+  // ---- YouTube Music
+  //
+  // A page token is accepted rather than ignored. YouTube's continuation is opaque and cannot be
+  // rebuilt by the caller, so a caller following pages has to pass it straight back.
+
+  // ---- YouTube OAuth window. A Tauri command rather than sidecar RPC, because the Rust side owns
+  // the window and intercepts the redirect.
+
+  async youtubeAuthStart(clientId: string, redirectUri: string): Promise<void> {
+    await invoke('start_youtube_auth', { clientId, redirectUri });
+  }
+
+  async youtubeAuthPoll(): Promise<YouTubeOAuthStatus> {
+    return invoke<YouTubeOAuthStatus>('poll_youtube_auth');
+  }
+
+  async youtubeAuthStatus(): Promise<YouTubeAuthStatus> {
+    return this.request<YouTubeAuthStatus>('youtube.auth.status', {}, 10_000);
+  }
+
+  async youtubeAuthExchange(code: string, clientId: string, clientSecret: string, redirectUri: string): Promise<YouTubeAuthStatus> {
+    return this.request<YouTubeAuthStatus>('youtube.auth.exchange', { code, clientId, clientSecret, redirectUri }, 30_000);
+  }
+
+  // Google needs no credentials here: its refresh grant is authorized by the refresh token alone.
+  async youtubeAuthRefresh(): Promise<YouTubeAuthStatus> {
+    return this.request<YouTubeAuthStatus>('youtube.auth.refresh', {}, 30_000);
+  }
+
+  async youtubeAuthLogout(): Promise<YouTubeAuthStatus> {
+    return this.request<YouTubeAuthStatus>('youtube.auth.logout', {}, 10_000);
+  }
+
+  async youtubeMyTracks(pageToken?: string, limit?: number, musicOnly?: boolean): Promise<YouTubeTrackPage> {
+    return this.request<YouTubeTrackPage>('youtube.tracks.mine', { pageToken, limit, musicOnly }, 30_000);
+  }
+
+  async youtubeMyPlaylists(pageToken?: string, limit?: number): Promise<YouTubePlaylistPage> {
+    return this.request<YouTubePlaylistPage>('youtube.playlists.mine', { pageToken, limit }, 30_000);
+  }
+
+  async youtubePlaylistTracks(id: string, pageToken?: string, limit?: number): Promise<YouTubeTrackPage> {
+    return this.request<YouTubeTrackPage>('youtube.playlist.tracks', { id, pageToken, limit }, 30_000);
+  }
+
+  async youtubeTrackDetails(id: string): Promise<YouTubeTrack> {
+    return this.request<YouTubeTrack>('youtube.track.details', { id }, 30_000);
+  }
+
+  async youtubeSearchTracks(query: string, pageToken?: string, limit?: number): Promise<YouTubeTrackPage> {
+    return this.request<YouTubeTrackPage>('youtube.search.tracks', { query, pageToken, limit }, 30_000);
+  }
+
+  async youtubeUserProfile(): Promise<YouTubeAuthProfile> {
+    return this.request<YouTubeAuthProfile>('youtube.user.profile', {}, 20_000);
+  }
+
   async spotifyAuthStatus(): Promise<SpotifyAuthStatus> {
     return this.request<SpotifyAuthStatus>('spotify.auth.status', {}, 10_000);
   }
@@ -486,6 +585,18 @@ export const desktop = {
   unlikeTrack: (trackId: number, trackUrn: string, userId?: number, clientId?: string, datadomeCookie?: string) => backend.unlikeTrack(trackId, trackUrn, userId, clientId, datadomeCookie),
   spotifyAuthStart: (clientId: string, redirectUri: string) => backend.spotifyAuthStart(clientId, redirectUri),
   spotifyAuthPoll: () => backend.spotifyAuthPoll(),
+  youtubeAuthStart: (clientId: string, redirectUri: string) => backend.youtubeAuthStart(clientId, redirectUri),
+  youtubeAuthPoll: () => backend.youtubeAuthPoll(),
+  youtubeAuthStatus: () => backend.youtubeAuthStatus(),
+  youtubeAuthExchange: (code: string, clientId: string, clientSecret: string, redirectUri: string) => backend.youtubeAuthExchange(code, clientId, clientSecret, redirectUri),
+  youtubeAuthRefresh: () => backend.youtubeAuthRefresh(),
+  youtubeAuthLogout: () => backend.youtubeAuthLogout(),
+  youtubeMyTracks: (pageToken?: string, limit?: number, musicOnly?: boolean) => backend.youtubeMyTracks(pageToken, limit, musicOnly),
+  youtubeMyPlaylists: (pageToken?: string, limit?: number) => backend.youtubeMyPlaylists(pageToken, limit),
+  youtubePlaylistTracks: (id: string, pageToken?: string, limit?: number) => backend.youtubePlaylistTracks(id, pageToken, limit),
+  youtubeTrackDetails: (id: string) => backend.youtubeTrackDetails(id),
+  youtubeSearchTracks: (query: string, pageToken?: string, limit?: number) => backend.youtubeSearchTracks(query, pageToken, limit),
+  youtubeUserProfile: () => backend.youtubeUserProfile(),
   spotifyAuthStatus: () => backend.spotifyAuthStatus(),
   spotifyAuthExchange: (code: string, clientId: string, clientSecret: string, redirectUri: string) => backend.spotifyAuthExchange(code, clientId, clientSecret, redirectUri),
   spotifyAuthRefresh: (clientId: string, clientSecret: string) => backend.spotifyAuthRefresh(clientId, clientSecret),

@@ -1,4 +1,4 @@
-import type { AuthStatus, SoundCloudMixedSelection, SoundCloudPlaylist, SoundCloudSearchTrack, SoundCloudSocialPage, SoundCloudTrack, SoundCloudTrackDetails, SoundCloudTrackPage, SoundCloudUserProfile, SpotifyAuthProfile, SpotifyAuthStatus, SpotifyPlaylistPage, SpotifyRecommendRequest, SpotifySaveResult, SpotifyTrack, SpotifyTrackPage, TrackLikeResult, TrackLyricsDTO, TrackStream } from '../renderer/lib/desktop';
+import type { AuthStatus, SoundCloudMixedSelection, SoundCloudPlaylist, SoundCloudSearchTrack, SoundCloudSocialPage, SoundCloudTrack, SoundCloudTrackDetails, SoundCloudTrackPage, SoundCloudUserProfile, SpotifyAuthProfile, SpotifyAuthStatus, SpotifyPlaylistPage, SpotifyRecommendRequest, SpotifySaveResult, SpotifyTrack, SpotifyTrackPage, TrackLikeResult, YouTubeAuthProfile, YouTubeAuthStatus, YouTubePlaylistPage, YouTubeTrack, YouTubeTrackPage, TrackLyricsDTO, TrackStream } from '../renderer/lib/desktop';
 
 export {};
 
@@ -60,6 +60,18 @@ declare global {
       spotifyUserProfile(): Promise<SpotifyAuthProfile>;
       spotifySaveTrack(id: string): Promise<SpotifySaveResult>;
       spotifyUnsaveTrack(id: string): Promise<SpotifySaveResult>;
+
+      // ---- YouTube Music
+      youtubeAuthStatus(): Promise<YouTubeAuthStatus>;
+      youtubeAuthExchange(code: string, clientId: string, clientSecret: string, redirectUri: string): Promise<YouTubeAuthStatus>;
+      youtubeAuthRefresh(): Promise<YouTubeAuthStatus>;
+      youtubeAuthLogout(): Promise<YouTubeAuthStatus>;
+      youtubeMyTracks(pageToken?: string, limit?: number, musicOnly?: boolean): Promise<YouTubeTrackPage>;
+      youtubeMyPlaylists(pageToken?: string, limit?: number): Promise<YouTubePlaylistPage>;
+      youtubePlaylistTracks(id: string, pageToken?: string, limit?: number): Promise<YouTubeTrackPage>;
+      youtubeTrackDetails(id: string): Promise<YouTubeTrack>;
+      youtubeSearchTracks(query: string, pageToken?: string, limit?: number): Promise<YouTubeTrackPage>;
+      youtubeUserProfile(): Promise<YouTubeAuthProfile>;
     };
   }
 }

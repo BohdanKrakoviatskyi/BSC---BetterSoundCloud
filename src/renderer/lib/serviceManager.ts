@@ -2,6 +2,7 @@ import { DEFAULT_SERVICE, type ServiceProvider } from '../domain/models';
 import type { ServiceAdapter } from './serviceAdapter';
 import { soundcloudAdapter } from './adapters/soundcloudAdapter';
 import { spotifyAdapter } from './adapters/spotifyAdapter';
+import { youtubeMusicAdapter } from './adapters/youtubeMusicAdapter';
 
 /**
  * Registry of the available services and which one the interface is showing.
@@ -24,6 +25,7 @@ class ServiceManager {
     // nothing changes for the user until the call sites are migrated; having it in the registry means
     // the service picker can offer it as soon as there is a picker to offer it from.
     if (!this.adapters.has('spotify')) this.register(spotifyAdapter);
+    if (!this.adapters.has('youtube-music')) this.register(youtubeMusicAdapter);
   }
 
   register(adapter: ServiceAdapter): void {

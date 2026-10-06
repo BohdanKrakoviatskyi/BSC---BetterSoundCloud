@@ -30,6 +30,24 @@ const SPOTIFY_REDIRECT_PATH: &str = "/callback";
 /// because nothing in the app can use them.
 const SPOTIFY_SCOPES: &str = "user-read-private user-read-email";
 
+/// Label of the webview used for the YouTube Music authorization flow.
+const YOUTUBE_WINDOW_LABEL: &str = "youtube-auth";
+const YOUTUBE_AUTHORIZE_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
+/// A different port from Spotify's on purpose: two windows both deciding to claim a callback on one
+/// port would break each other, and one service would take the other down with it.
+const YOUTUBE_REDIRECT_HOST: &str = "localhost";
+/// Google may answer on the numeric form of the same address. Accepting it costs nothing.
+const YOUTUBE_REDIRECT_LOOPBACK: &str = "127.0.0.1";
+const YOUTUBE_REDIRECT_PORT: u16 = 8889;
+const YOUTUBE_REDIRECT_PATH: &str = "/callback";
+/// youtube.readonly is what the library and playlists need. openid, email and profile are for the
+/// account name, which is the only piece of identity the app shows.
+///
+/// force-ssl is deliberately absent. It is what a rating write would need, and the app cannot play a
+/// YouTube track's audio anyway, so asking for write access to someone's YouTube account would be a bad
+/// trade for a feature that does not exist.
+const YOUTUBE_SCOPES: &str = "https://www.googleapis.com/auth/youtube.readonly openid email profile";
+
 const CAPTCHA_INIT_SCRIPT: &str = r#"
 (() => {
   const bridge = window.__TAURI_INTERNALS__;
@@ -102,6 +120,22 @@ struct AuthState {
 }
 
 /// The authorization code, captured from the redirect, waiting for the frontend to exchange it.
+#[derive(Default)]
+struct YoutubeOAuthState {
+    code: Mutex<Option<String>>,
+    error: Mutex<Option<String>>,
+    done: Mutex<bool>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct YoutubeOAuthStatus {
+    completed: bool,
+    closed: bool,
+    code: Option<String>,
+    error: Option<String>,
+}
+
 #[derive(Default)]
 struct SpotifyOAuthState {
     code: Mutex<Option<String>>,
@@ -727,6 +761,159 @@ async fn like_track_webview(
     }
 }
 
+/// Whether a URL is the callback Google was told to redirect to.
+fn is_youtube_redirect(url: &tauri::Url) -> bool {
+    // Google sends loopback redirects as http://localhost:PORT or http://127.0.0.1:PORT, and which of
+    // the two arrives is not something to rely on — accepting both costs nothing and refusing the
+    // wrong one leaves the user staring at an error page.
+    let host_matches = matches!(url.host_str(), Some(YOUTUBE_REDIRECT_HOST) | Some(YOUTUBE_REDIRECT_LOOPBACK));
+    host_matches
+        && url.port() == Some(YOUTUBE_REDIRECT_PORT)
+        && url.path() == YOUTUBE_REDIRECT_PATH
+}
+
+/// Records what the redirect carried, or why it did not carry a code.
+///
+/// Google reports a declined consent screen as error=access_denied, the same as Spotify, and it is
+/// reported as its own outcome so the panel can say the user cancelled rather than look stuck.
+fn capture_youtube_redirect(app: &AppHandle, url: &tauri::Url) {
+    let state = app.state::<YoutubeOAuthState>();
+    let Ok(mut code) = state.code.lock() else { return };
+    let Ok(mut error) = state.error.lock() else { return };
+    let Ok(mut done) = state.done.lock() else { return };
+
+    let params: HashMap<String, String> = url.query_pairs().into_owned().collect();
+    if let Some(reason) = params.get("error") {
+        let detail = params
+            .get("error_description")
+            .cloned()
+            .unwrap_or_else(|| reason.clone());
+        *error = Some(detail);
+    } else if let Some(value) = params.get("code") {
+        if value.trim().is_empty() {
+            *error = Some("Google вернул пустой код авторизации".to_owned());
+        } else {
+            *code = Some(value.clone());
+        }
+    } else {
+        *error = Some("Google вернул перенаправление без кода и без ошибки".to_owned());
+    }
+    *done = true;
+}
+
+/// Opens Google's authorization page in its own webview.
+#[tauri::command]
+async fn start_youtube_auth(
+    app: AppHandle,
+    client_id: String,
+    redirect_uri: String,
+) -> Result<(), String> {
+    let client_id = client_id.trim().to_owned();
+    if client_id.is_empty() {
+        return Err("не передан Client ID Google".to_owned());
+    }
+    if redirect_uri.trim().is_empty() {
+        return Err("не передан Redirect URI Google".to_owned());
+    }
+
+    let mut url = YOUTUBE_AUTHORIZE_URL
+        .parse::<tauri::Url>()
+        .map_err(|error| format!("некорректный адрес авторизации Google: {error}"))?;
+    {
+        let mut query = url.query_pairs_mut();
+        query.append_pair("client_id", &client_id);
+        query.append_pair("response_type", "code");
+        query.append_pair("redirect_uri", redirect_uri.trim());
+        query.append_pair("scope", YOUTUBE_SCOPES);
+        // Offline access is what produces a refresh token at all; without it Google hands over an
+        // access token that dies in an hour and the user consents again every hour.
+        query.append_pair("access_type", "offline");
+        // Also needed on a repeat sign-in: Google will not re-issue a refresh token unless asked, so
+        // signing out and back in would quietly leave the app unable to recover the session.
+        query.append_pair("prompt", "consent");
+        query.append_pair("include_granted_scopes", "true");
+    }
+
+    {
+        let state = app.state::<YoutubeOAuthState>();
+        let failure = "не удалось подготовить вход YouTube".to_owned();
+        *state.code.lock().map_err(|_| failure.clone())? = None;
+        *state.error.lock().map_err(|_| failure.clone())? = None;
+        *state.done.lock().map_err(|_| failure)? = false;
+    }
+
+    if let Some(window) = app.get_webview_window(YOUTUBE_WINDOW_LABEL) {
+        window
+            .navigate(url)
+            .map_err(|error| format!("не удалось загрузить страницу входа YouTube: {error}"))?;
+        return show_window(&window);
+    }
+
+    // Async because creating a window deadlocks on Windows from a synchronous command.
+    let handle = app.clone();
+    let window = WebviewWindowBuilder::new(&app, YOUTUBE_WINDOW_LABEL, WebviewUrl::External(url))
+        .title("YouTube Music — вход")
+        .inner_size(560.0, 760.0)
+        .min_inner_size(440.0, 560.0)
+        .visible(true)
+        .on_navigation(move |target| {
+            if !is_youtube_redirect(target) {
+                return true;
+            }
+            capture_youtube_redirect(&handle, target);
+            // Cancelled: nothing is listening on the port, and loading it would flash a connection
+            // error over the window moments before it closes.
+            false
+        })
+        .build()
+        .map_err(|error| format!("не удалось открыть окно входа YouTube: {error}"))?;
+    show_window(&window)
+}
+
+/// Reports what the authorization window produced, and puts the window away once it has.
+#[tauri::command]
+async fn poll_youtube_auth(app: AppHandle) -> Result<YoutubeOAuthStatus, String> {
+    let state = app.state::<YoutubeOAuthState>();
+    let done = *state
+        .done
+        .lock()
+        .map_err(|_| "не удалось прочитать состояние входа YouTube".to_owned())?;
+
+    if !done {
+        return Ok(YoutubeOAuthStatus {
+            completed: false,
+            closed: app.get_webview_window(YOUTUBE_WINDOW_LABEL).is_none(),
+            code: None,
+            error: None,
+        });
+    }
+
+    let code = state
+        .code
+        .lock()
+        .map_err(|_| "не удалось прочитать состояние входа YouTube".to_owned())?
+        .take();
+    let error = state
+        .error
+        .lock()
+        .map_err(|_| "не удалось прочитать состояние входа YouTube".to_owned())?
+        .take();
+
+    // Hidden from here rather than from inside on_navigation, for the same reason as the Spotify window.
+    if let Some(window) = app.get_webview_window(YOUTUBE_WINDOW_LABEL) {
+        let _ = window.hide();
+    }
+    let failure = "не удалось сохранить результат входа YouTube".to_owned();
+    *state.done.lock().map_err(|_| failure.clone())? = false;
+
+    Ok(YoutubeOAuthStatus {
+        completed: true,
+        closed: true,
+        code,
+        error,
+    })
+}
+
 /// Whether a URL is the callback Spotify was told to redirect to.
 ///
 /// The port is part of the test, not an accident: the app has other localhost traffic, and blocking a
@@ -898,6 +1085,7 @@ fn main() {
         .manage(AuthState::default())
         .manage(LikeState::default())
         .manage(SpotifyOAuthState::default())
+        .manage(YoutubeOAuthState::default())
         .setup(|app| {
             let _ = ensure_session_window(&app.handle());
             Ok(())
@@ -915,7 +1103,9 @@ fn main() {
             report_like_result,
             like_track_webview,
             start_spotify_auth,
-            poll_spotify_auth
+            poll_spotify_auth,
+            start_youtube_auth,
+            poll_youtube_auth
         ])
         .run(tauri::generate_context!())
         .expect("error while running BetterSoundCloud");
