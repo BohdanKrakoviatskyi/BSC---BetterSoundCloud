@@ -96,6 +96,13 @@ jobs:
         # triple is correct. Pinning it was what broke when a runner changed architecture.
         run: npm run build:go
 
+      - name: Fetch yt-dlp sidecar
+        shell: bash
+        # externalBin fails the bundle when binaries/yt-dlp-<triple> is absent — that file is
+        # gitignored, so each runner fetches its own (pinned version, curl is preinstalled
+        # everywhere). Same native-triple reasoning as the Go sidecar above.
+        run: npm run fetch:ytdlp
+
       # Apple Developer signing and notarisation. These steps run only when the secrets
       # exist, so a fork still builds, but an unsigned build is no longer silent: the
       # report below names the mode the build actually used.
