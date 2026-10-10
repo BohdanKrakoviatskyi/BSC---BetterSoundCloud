@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { SERVICE_PROVIDERS, type ServiceAccount, type ServiceProvider } from '../../domain/models';
+import { desktop } from '../../lib/desktop';
 import { clearCredentials, loadCredentials, saveCredentials } from '../../lib/credentialStore';
 import { useServiceAuth } from '../../lib/useServiceAuth';
 import { CloudGlyph, SpotifyGlyph, YouTubeGlyph } from './AuthIcons';
@@ -56,6 +57,113 @@ function isOAuthService(service: ServiceProvider): service is OAuthService {
  * SoundCloud's row is status only. Its sign-in needs a pasted access token and lives in the form directly
  * below, which is untouched.
  */
+type YoutubeBlockProps = {
+  target: ReturnType<typeof useServiceAuth>;
+  values: { clientId: string; clientSecret: string };
+  remembered: boolean;
+  bundledConfigured: boolean;
+  showKeys: boolean;
+  onToggleKeys: () => void;
+  onChange: (values: { clientId: string; clientSecret: string }) => void;
+  onSave: (values: { clientId: string; clientSecret: string }) => void;
+  onForget: () => void;
+};
+
+/**
+ * YouTube sign-in: one click when the build carries bundled keys or stored ones, hand-typed keys
+ * behind a text toggle. Typing means editing, and editing belongs to Save — sign-in then needs
+ * stored or bundled keys, never half-typed fields.
+ */
+function YoutubeOauthBlock({ target, values, remembered, bundledConfigured, showKeys, onToggleKeys, onChange, onSave, onForget }: YoutubeBlockProps) {
+  const isEditing = values.clientId.trim() !== '' || values.clientSecret.trim() !== '';
+  const canSignIn = !target.busy && (remembered || bundledConfigured) && !isEditing;
+
+  const signIn = () => {
+    if (remembered && !isEditing) {
+      const stored = loadCredentials('youtube-music');
+      if (!stored?.clientId || !stored.clientSecret) return;
+      void target.signIn({ ...stored, service: 'youtube-music' });
+      return;
+    }
+    // No explicit keys: the adapter resolves stored-then-bundled on its own.
+    void target.signIn({ service: 'youtube-music' });
+  };
+
+  return (
+    <div className="accounts-oauth-row">
+      <div className="accounts-copy">
+        <b>{SERVICE_LABELS['youtube-music']}</b>
+        <small>
+          {bundledConfigured && !remembered
+            ? 'Вход в один клик — общие ключи уже в приложении.'
+            : remembered
+              ? 'Вход по сохранённым ключам.'
+              : <>Вход идёт через OAuth и требует приложения, которое ты зарегистрировал сам — см. <code>{SERVICE_DOCS['youtube-music']}</code>.</>}
+        </small>
+      </div>
+
+      <div className="accounts-actions">
+        <button
+          type="button"
+          className="primary-button"
+          disabled={!canSignIn}
+          onClick={signIn}
+        >
+          {target.busy ? 'Открываем окно…' : 'Войти через YouTube'}
+        </button>
+        <button type="button" className="text-action" onClick={onToggleKeys} aria-expanded={showKeys}>
+          {showKeys ? 'Скрыть свои ключи' : remembered ? 'Заменить ключи своими' : 'У меня свои ключи'}
+        </button>
+      </div>
+
+      {showKeys ? (
+        <>
+          <label className="accounts-field">
+            <span>Client ID</span>
+            <input
+              value={values.clientId}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder={remembered ? 'Сохранён — введи, чтобы заменить' : 'Из консоли разработчика'}
+              onChange={(event) => onChange({ ...values, clientId: event.currentTarget.value })}
+            />
+          </label>
+
+          <label className="accounts-field">
+            <span>Client Secret</span>
+            <input
+              type="password"
+              value={values.clientSecret}
+              autoComplete="new-password"
+              spellCheck={false}
+              placeholder={remembered ? 'Сохранён — введи, чтобы заменить' : 'Показывается один раз'}
+              onChange={(event) => onChange({ ...values, clientSecret: event.currentTarget.value })}
+            />
+          </label>
+
+          <div className="accounts-actions">
+            <button
+              type="button"
+              className="outline-button"
+              disabled={!values.clientId.trim() || !values.clientSecret.trim()}
+              onClick={() => onSave({ clientId: values.clientId.trim(), clientSecret: values.clientSecret.trim() })}
+            >
+              Сохранить
+            </button>
+            {remembered ? (
+              <button type="button" className="outline-button" onClick={onForget}>
+                Забыть учётные данные
+              </button>
+            ) : null}
+          </div>
+        </>
+      ) : null}
+
+      {target.error ? <ErrorMessage message={target.error} /> : null}
+    </div>
+  );
+}
+
 export function ConnectedAccounts({ accounts, activeService, onSwitch, onSignOutSoundCloud }: Props) {
   const spotify = useServiceAuth('spotify');
   const youtube = useServiceAuth('youtube-music');
@@ -67,6 +175,29 @@ export function ConnectedAccounts({ accounts, activeService, onSwitch, onSignOut
   });
   const [remembered, setRemembered] = useState<Record<OAuthService, boolean>>({ spotify: false, 'youtube-music': false });
   const [notice, setNotice] = useState('');
+  const [bundledYoutube, setBundledYoutube] = useState(false);
+  const [showYoutubeKeys, setShowYoutubeKeys] = useState(false);
+
+  // One local invoke per mount: bundled keys are build-time constants, so this never changes
+  // within a session. A failure reads as unconfigured — the hand-typed path still works.
+  // The keys block always starts closed: one-click login is the default view, hand-typed keys
+  // open on demand through the toggle.
+  useEffect(() => {
+    let cancelled = false;
+    void desktop.youtubeBundledCredentials().then(
+      (bundled) => {
+        if (cancelled) return;
+        setBundledYoutube(bundled.configured);
+      },
+      () => {
+        if (cancelled) return;
+        setBundledYoutube(false);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Read once on mount rather than on every render: this is a snapshot of what is stored, and the hooks
   // above already report the live connection state.
@@ -150,6 +281,22 @@ export function ConnectedAccounts({ accounts, activeService, onSwitch, onSignOut
 
       <div className="accounts-oauth">
         {SERVICE_PROVIDERS.filter(isOAuthService).map((service) => {
+          if (service === 'youtube-music') {
+            return (
+              <YoutubeOauthBlock
+                key={service}
+                target={auth[service]}
+                values={entered[service]}
+                remembered={remembered[service]}
+                bundledConfigured={bundledYoutube}
+                showKeys={showYoutubeKeys}
+                onToggleKeys={() => setShowYoutubeKeys((shown) => !shown)}
+                onChange={(values) => setEntered((current) => ({ ...current, [service]: values }))}
+                onSave={(values) => remember(service, values)}
+                onForget={() => forget(service)}
+              />
+            );
+          }
           const target = auth[service];
           const values = entered[service];
           // Signing in uses whatever is stored, so both fields must be empty. Typing either one means

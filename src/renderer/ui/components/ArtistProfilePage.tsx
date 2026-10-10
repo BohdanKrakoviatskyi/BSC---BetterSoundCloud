@@ -29,6 +29,10 @@ type Props = {
   onViewTracks: () => void;
   onViewLikes: () => void;
   onBack: () => void;
+  /** YouTube channels have no followers/followings endpoints: chips render as plain text. */
+  hideSocial?: boolean;
+  /** Section kicker above the author's tracks. Defaults to the SoundCloud wording. */
+  tracksKicker?: string;
 };
 
 function ArtistProfileSkeleton() {
@@ -46,7 +50,7 @@ function ArtistProfileSkeleton() {
   </article>;
 }
 
-export function ArtistProfilePage({ profile, loading, error, tracks, tracksLoading, tracksError, likedTracks, likedTracksLoading, likedTracksError, playlists, playlistsLoading, playlistsError, currentTrackId, isPlaying, playbackLoading, onPlayTrack, onOpenTrack, onOpenPlaylist, onSocialTab, onViewTracks, onViewLikes, onBack }: Props) {
+export function ArtistProfilePage({ profile, loading, error, tracks, tracksLoading, tracksError, likedTracks, likedTracksLoading, likedTracksError, playlists, playlistsLoading, playlistsError, currentTrackId, isPlaying, playbackLoading, onPlayTrack, onOpenTrack, onOpenPlaylist, onSocialTab, onViewTracks, onViewLikes, onBack, hideSocial, tracksKicker }: Props) {
   if (loading && !profile) return <ArtistProfileSkeleton />;
   if (!profile) return <div className="track-details-error"><p>{error || 'Не удалось загрузить профиль автора.'}</p><button type="button" onClick={onBack}>Назад</button></div>;
 
@@ -86,8 +90,12 @@ export function ArtistProfilePage({ profile, loading, error, tracks, tracksLoadi
         </div>
         <div className="artist-stat-chips" aria-label="Статистика автора">
           <span className="chip"><strong>{formatCount(profile.trackCount)}</strong> треков</span>
-          <button className="chip artist-social-chip" type="button" onClick={() => onSocialTab('followers')}><strong>{formatCount(profile.followersCount)}</strong> подписчиков</button>
-          <button className="chip artist-social-chip" type="button" onClick={() => onSocialTab('followings')}><strong>{formatCount(profile.followingsCount)}</strong> подписок</button>
+          {hideSocial
+            ? <span className="chip"><strong>{formatCount(profile.followersCount)}</strong> подписчиков</span>
+            : <>
+              <button className="chip artist-social-chip" type="button" onClick={() => onSocialTab('followers')}><strong>{formatCount(profile.followersCount)}</strong> подписчиков</button>
+              <button className="chip artist-social-chip" type="button" onClick={() => onSocialTab('followings')}><strong>{formatCount(profile.followingsCount)}</strong> подписок</button>
+            </>}
         </div>
       </section>
 
@@ -110,7 +118,7 @@ export function ArtistProfilePage({ profile, loading, error, tracks, tracksLoadi
       />}
       <TrackCarouselSection
         title="Треки автора"
-        kicker="ЗАГРУЖЕНО НА SOUNDCLOUD"
+        kicker={tracksKicker ?? "ЗАГРУЖЕНО НА SOUNDCLOUD"}
         tracks={tracks}
         loading={tracksLoading}
         error={tracksError}

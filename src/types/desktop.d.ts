@@ -1,4 +1,4 @@
-import type { AuthStatus, SoundCloudMixedSelection, SoundCloudPlaylist, SoundCloudSearchTrack, SoundCloudSocialPage, SoundCloudTrack, SoundCloudTrackDetails, SoundCloudTrackPage, SoundCloudUserProfile, SpotifyAuthProfile, SpotifyAuthStatus, SpotifyPlaylistPage, SpotifyRecommendRequest, SpotifySaveResult, SpotifyTrack, SpotifyTrackPage, TrackLikeResult, YouTubeAuthProfile, YouTubeAuthStatus, YouTubePlaylistPage, YouTubeTrack, YouTubeTrackPage, TrackLyricsDTO, TrackStream } from '../renderer/lib/desktop';
+import type { AuthStatus, SoundCloudMixedSelection, SoundCloudPlaylist, SoundCloudSearchTrack, SoundCloudSocialPage, SoundCloudTrack, SoundCloudTrackDetails, SoundCloudTrackPage, SoundCloudUserProfile, SpotifyAuthProfile, SpotifyAuthStatus, SpotifyPlaylistPage, SpotifyRecommendRequest, SpotifySaveResult, SpotifyTrack, SpotifyTrackPage, TrackLikeResult, YouTubeAuthProfile, YouTubeAuthStatus, YouTubeBundledCredentials, YouTubePlaylistPage, YouTubeTrack, YouTubeTrackPage, TrackLyricsDTO, TrackStream } from '../renderer/lib/desktop';
 
 import type { Settings } from '../renderer/domain/models';
 
@@ -58,7 +58,8 @@ declare global {
       // ---- YouTube Music
       youtubeAuthStatus(): Promise<YouTubeAuthStatus>;
       youtubeAuthExchange(code: string, clientId: string, clientSecret: string, redirectUri: string): Promise<YouTubeAuthStatus>;
-      youtubeAuthRefresh(): Promise<YouTubeAuthStatus>;
+      youtubeAuthRefresh(clientId: string, clientSecret: string): Promise<YouTubeAuthStatus>;
+      youtubeBundledCredentials(): Promise<YouTubeBundledCredentials>;
       youtubeAuthLogout(): Promise<YouTubeAuthStatus>;
       youtubeMyTracks(pageToken?: string, limit?: number, musicOnly?: boolean): Promise<YouTubeTrackPage>;
       youtubeMyPlaylists(pageToken?: string, limit?: number): Promise<YouTubePlaylistPage>;

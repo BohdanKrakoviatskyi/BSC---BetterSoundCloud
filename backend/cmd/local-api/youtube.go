@@ -101,11 +101,9 @@ func (s *service) RPCYoutubeAuthExchange(params youtubeExchangeParams) (youtubeA
 	values.Set("code", strings.TrimSpace(params.Code))
 	values.Set("client_id", params.ClientID)
 	values.Set("client_secret", params.ClientSecret)
-	// redirect_uri is deliberately not sent. A Desktop app client in the Cloud Console has no
-	// registered redirect URIs at all — it authenticates by loopback address — and sending the
-	// parameter is what produces redirect_uri_mismatch. The value the frontend passes is still
-	// accepted on the signature, because the OAuth window needs it to know what to intercept, and
-	// quietly accepting an argument that must not be forwarded is clearer than rejecting the call.
+	// redirect_uri repeats the authorize request value. Google requires it in the token
+	// request and answers invalid_request: Missing parameter: redirect_uri when omitted.
+	values.Set("redirect_uri", strings.TrimSpace(params.RedirectURI))
 
 	token, err := s.youtubePostToken(values)
 	if err != nil {
@@ -145,16 +143,21 @@ func (s *service) RPCYoutubeAuthExchange(params youtubeExchangeParams) (youtubeA
 
 // RPCYoutubeAuthRefresh renews the access token.
 //
-// Unlike the Spotify exchange this needs no client credentials: Google's refresh grant is authorized
-// by the refresh token alone, so the stored session is enough to recover from an expired access token.
-func (s *service) RPCYoutubeAuthRefresh(_ emptyParams) (youtubeAuthStatus, error) {
+// Google's refresh grant for this client needs the same credentials as the exchange: the stored
+// session alone is not enough, so the frontend passes what it kept at sign-in (like Spotify).
+func (s *service) RPCYoutubeAuthRefresh(params youtubeRefreshParams) (youtubeAuthStatus, error) {
 	if strings.TrimSpace(s.youtubeAuth.RefreshToken) == "" {
 		return youtubeAuthStatus{}, errors.New("нет сохранённого refresh token YouTube")
+	}
+	if strings.TrimSpace(params.ClientID) == "" || strings.TrimSpace(params.ClientSecret) == "" {
+		return youtubeAuthStatus{}, errors.New("не заданы Client ID или Client Secret Google")
 	}
 
 	values := url.Values{}
 	values.Set("grant_type", "refresh_token")
 	values.Set("refresh_token", s.youtubeAuth.RefreshToken)
+	values.Set("client_id", params.ClientID)
+	values.Set("client_secret", params.ClientSecret)
 
 	token, err := s.youtubePostToken(values)
 	if err != nil {
@@ -181,6 +184,9 @@ func (s *service) RPCYoutubeAuthRefresh(_ emptyParams) (youtubeAuthStatus, error
 // RPCYoutubeAuthStatus reports the stored session without touching the network.
 func (s *service) RPCYoutubeAuthStatus(_ emptyParams) (youtubeAuthStatus, error) {
 	if strings.TrimSpace(s.youtubeAuth.AccessToken) == "" {
+		return youtubeAuthStatus{Authorized: false}, nil
+	}
+	if s.youtubeAuth.ExpiresAt > 0 && time.Now().UnixMilli() >= s.youtubeAuth.ExpiresAt {
 		return youtubeAuthStatus{Authorized: false}, nil
 	}
 	return youtubeStatusFrom(s.youtubeAuth), nil

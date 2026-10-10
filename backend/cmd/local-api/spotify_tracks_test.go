@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -422,6 +423,30 @@ func TestSpotifyUserProfile(t *testing.T) {
 	}
 	if profile.ID != "spotify-user" || profile.DisplayName != "Test User" || profile.Product != "premium" {
 		t.Errorf("profile = %#v", profile)
+	}
+}
+
+// The frontend reads camelCase keys. The backend once sent snake_case here, which left every
+// Spotify track without artwork or duration while the mapping code looked correct.
+func TestSpotifyTrackJSONUsesCamelCase(t *testing.T) {
+	raw, err := json.Marshal(spotifyTrack{
+		NativeID: "s1", Source: "spotify", URN: "spotify:track:s1", Title: "T",
+		ArtworkURL: "https://img", DurationMs: 1000, PreviewURL: "https://p.scdn.co/x",
+		Artists: []spotifyArtist{{ID: "a", Name: "A"}}, Album: spotifyAlbum{ID: "b", Name: "B"},
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	body := string(raw)
+	for _, key := range []string{`"artworkUrl"`, `"durationMs"`, `"previewUrl"`} {
+		if !strings.Contains(body, key+":") {
+			t.Errorf("track JSON missing %s: %s", key, body)
+		}
+	}
+	for _, key := range []string{`"artwork_url"`, `"duration_ms"`, `"preview_url"`} {
+		if strings.Contains(body, key) {
+			t.Errorf("track JSON uses snake_case %s: %s", key, body)
+		}
 	}
 }
 

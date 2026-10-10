@@ -55,7 +55,6 @@ export function PlayerBar({ track, seekRequest, onSeekRequestHandled, repeatOne,
   // Resolved from the track rather than passed separately for the playing path, because a mismatched
   // pair would show SoundCloud's iframe for a Spotify track.
   const trackService: ServiceProvider = track?.source ?? source ?? 'soundcloud';
-  const canPlayInApp = trackService !== 'youtube-music';
 
   // Bumped to rebuild the audio engine from scratch; also retries a track that never started.
   const [engineKey, setEngineKey] = useState(0);
@@ -106,7 +105,10 @@ export function PlayerBar({ track, seekRequest, onSeekRequestHandled, repeatOne,
   }, []);
 
   useEffect(() => {
-    if (!track || playbackMode !== 'widget' || !shouldPlay) return;
+    // SoundCloud only: the iframe widget is the first mode there, and a start that never comes
+    // means falling back to the direct stream. Other services start on the direct engine, where
+    // clearing controls would orphan a player that is already working.
+    if (!track || trackService !== 'soundcloud' || playbackMode !== 'widget' || !shouldPlay) return;
     playbackObservedRef.current = false;
     const timeout = window.setTimeout(() => {
       if (playbackObservedRef.current) return;
@@ -115,7 +117,7 @@ export function PlayerBar({ track, seekRequest, onSeekRequestHandled, repeatOne,
       setWidgetControls(null);
     }, 12_000);
     return () => window.clearTimeout(timeout);
-  }, [track?.id, playbackMode, widgetControls, shouldPlay]);
+  }, [track?.id, trackService, playbackMode, widgetControls, shouldPlay]);
 
   useEffect(() => {
     widgetControls?.setVolume(Math.max(0, Math.min(100, volumeValue)));
@@ -140,8 +142,15 @@ export function PlayerBar({ track, seekRequest, onSeekRequestHandled, repeatOne,
     playbackObservedRef.current = false;
     setCurrentTime(0);
     setDuration(track ? track.durationMs / 1000 : 0);
-    setWidgetControls(null);
-    setEngineKey((key) => key + 1);
+    // Only the widget engine remounts by key; clearing controls here would strand the direct
+    // engine (SoundCloud-fallback, Spotify, YouTube) with nothing to drive it.
+    if (trackService === 'soundcloud' && playbackMode === 'widget') {
+      setWidgetControls(null);
+      setEngineKey((key) => key + 1);
+    } else {
+      widgetControls?.seekTo(0);
+      widgetControls?.play();
+    }
   }
 
   useEffect(() => {
@@ -159,7 +168,15 @@ export function PlayerBar({ track, seekRequest, onSeekRequestHandled, repeatOne,
 
   function commitSeek() {
     const requestedSeconds = scrubPositionRef.current;
-    if (requestedSeconds === null || !widgetControls) return;
+    // Without controls there is nothing to seek with: drop the drag visuals instead of freezing
+    // the timeline at the dragged position, which reads as a duration bug.
+    if (requestedSeconds === null) return;
+    if (!widgetControls) {
+      scrubPositionRef.current = null;
+      isScrubbingRef.current = false;
+      setScrubPosition(null);
+      return;
+    }
     scrubPositionRef.current = null;
     isScrubbingRef.current = false;
     pendingSeekRef.current = requestedSeconds;
@@ -207,6 +224,7 @@ export function PlayerBar({ track, seekRequest, onSeekRequestHandled, repeatOne,
   }
 
   function handleTrackEnded() {
+    console.info('[ui.player] track ended', { trackId: track?.id, positionSec: currentTime, durationSec: duration, repeatOne, hasControls: Boolean(widgetControls) });
     if (!repeatOne || !widgetControls) {
       // The stream is now in its terminal state. Remember that, so the next play rewinds and
       // replays instead of asking a finished widget to play itself, and park the bar at 0 so the
@@ -245,12 +263,13 @@ export function PlayerBar({ track, seekRequest, onSeekRequestHandled, repeatOne,
           }}
         />
       )}
-      {track && canPlayInApp && trackService !== 'soundcloud' && (
+      {track && trackService !== 'soundcloud' && (
         <DirectStreamPlayer
           key={`${track.id}:${directRetryKey}`}
           track={track}
           volume={volumeValue}
           shouldPlay={shouldPlay}
+          exactDurationMs={trackService === 'youtube-music' ? track.durationMs : undefined}
           onControlsReady={setWidgetControls}
           onReady={onReady}
           onPlaybackStateChange={(playing) => {

@@ -429,7 +429,7 @@ export function App() {
     setPlaybackLoading(true);
     setPlaybackError('');
     setShouldPlay(true);
-    console.info('[ui.player] loading official SoundCloud widget', { trackId: track.id, permalinkUrl: track.permalink });
+    console.info('[ui.player] loading track', { trackId: track.id, permalinkUrl: track.permalink });
   }
 
   function playRandomLikedTrack() {
@@ -573,9 +573,8 @@ export function App() {
       }
 
       // An expired token is worth one recovery attempt before giving up, whenever the service can
-      // refresh at all. No condition on stored credentials: Google's grant is authorized by the refresh
-      // token alone, and Spotify's throws a clear message when its credentials are missing, which the
-      // catch below turns into signed-out rather than into a failure.
+      // refresh at all. Both Spotify and YouTube throw a clear message when their stored credentials
+      // are missing, which the catch below turns into signed-out rather than into a failure.
       if (!session.authorized && adapter.authRefresh) {
         try {
           session = await adapter.authRefresh();
@@ -782,12 +781,27 @@ export function App() {
 
   async function runArtistProfileRequest(requestId: number, artistId: number) {
     console.info('[ui.artist.profile] loading', { artistId });
-    const [profileResult, tracksResult, likesResult, playlistsResult] = await Promise.allSettled([
-      appGateway.artistProfile(artistId),
-      appGateway.artistTracks(artistId),
-      appGateway.artistLikes(artistId),
-      appGateway.artistPlaylists(artistId),
-    ]);
+    // YouTube channels are served by the service adapter, not the SoundCloud gateway. Likes and
+    // socials do not exist there: likes resolve empty (the section hides itself) and the social
+    // chips are hidden by prop, so their loaders must never run against SoundCloud ids.
+    // Destructured inside the guard: optional-method narrowing does not survive the await below.
+    const youtube = activeService === 'youtube-music' ? serviceManager.getAdapter('youtube-music') : undefined;
+    const youtubeArtist = youtube?.artistProfile && youtube.artistTracks && youtube.artistPlaylists
+      ? { profile: youtube.artistProfile, tracks: youtube.artistTracks, playlists: youtube.artistPlaylists }
+      : null;
+    const [profileResult, tracksResult, likesResult, playlistsResult] = youtubeArtist
+      ? await Promise.allSettled([
+        youtubeArtist.profile(String(artistId)),
+        youtubeArtist.tracks(String(artistId)),
+        Promise.resolve({ tracks: [] as Track[], next: '' }),
+        youtubeArtist.playlists(String(artistId)),
+      ])
+      : await Promise.allSettled([
+        appGateway.artistProfile(artistId),
+        appGateway.artistTracks(artistId),
+        appGateway.artistLikes(artistId),
+        appGateway.artistPlaylists(artistId),
+      ]);
     if (requestId !== artistRequestId.current) {
       console.debug('[ui.artist.profile] ignored stale response', { artistId, requestId });
       return;
@@ -954,7 +968,7 @@ export function App() {
       if (requestId !== artistRequestId.current) return;
       const artistId = details.artist.id;
       if (!artistId) {
-        setArtistProfileError('SoundCloud не вернул ID автора для этого трека');
+        setArtistProfileError('Не удалось определить автора этого трека');
         setArtistProfileLoading(false);
         setArtistTracksLoading(false);
         setArtistLikedTracksLoading(false);
@@ -1074,7 +1088,7 @@ export function App() {
     setPlaybackLoading(true);
     setPlaybackError('');
     setShouldPlay(true);
-    console.info('[ui.player] loading official SoundCloud widget from details', { trackId: track.id, permalinkUrl: track.permalink });
+    console.info('[ui.player] loading track from details', { trackId: track.id, permalinkUrl: track.permalink });
   }
 
   // The lyrics sidebar is opened only by the track page button, which passes the current rectangle
@@ -1594,6 +1608,8 @@ export function App() {
                 onViewTracks={() => setPage('artist-tracks-all')}
                 onViewLikes={() => setPage('artist-likes-all')}
                 onBack={backFromArtistProfile}
+                hideSocial={activeService === 'youtube-music'}
+                tracksKicker={activeService === 'youtube-music' ? 'ВИДЕО КАНАЛА' : undefined}
               />
           : <TrackDetailsPage
                 track={detailsTrack}

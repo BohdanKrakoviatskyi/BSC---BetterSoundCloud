@@ -39,10 +39,10 @@ type spotifyTrack struct {
 	URN        string          `json:"urn"`
 	Title      string          `json:"title"`
 	Permalink  string          `json:"permalink,omitempty"`
-	ArtworkURL string          `json:"artwork_url,omitempty"`
-	DurationMs int64           `json:"duration_ms"`
+	ArtworkURL string          `json:"artworkUrl,omitempty"`
+	DurationMs int64           `json:"durationMs"`
 	Popularity int             `json:"popularity,omitempty"`
-	PreviewURL string          `json:"preview_url,omitempty"`
+	PreviewURL string          `json:"previewUrl,omitempty"`
 	Artists    []spotifyArtist `json:"artists"`
 	Album      spotifyAlbum    `json:"album"`
 }
@@ -60,7 +60,7 @@ type spotifyPlaylist struct {
 	URN        string         `json:"urn"`
 	Title      string         `json:"title"`
 	Permalink  string         `json:"permalink,omitempty"`
-	ArtworkURL string         `json:"artwork_url,omitempty"`
+	ArtworkURL string         `json:"artworkUrl,omitempty"`
 	TrackCount int            `json:"trackCount"`
 	Artist     string         `json:"artist"`
 	Tracks     []spotifyTrack `json:"tracks,omitempty"`

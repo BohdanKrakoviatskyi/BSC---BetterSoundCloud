@@ -1,46 +1,52 @@
-/* The row of service buttons in the topbar.
+/* Single segmented control for switching services.
  *
- * Colours come from the project's own variables rather than literals, so the row follows the accent and
- * the panel theme the way the rest of the UI does. */
+ * One pill block, logo-only segments. The active segment reads as selected through the service
+ * accent; a dim logo means the service will ask for a sign-in when chosen.
+ * Colours come from the project's own variables rather than literals. */
 
 .service-switcher {
   display: flex;
-  align-items: stretch;
-  gap: 6px;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 8%, transparent);
 }
 
 .service-switcher__item {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  /* The row sits in a crowded topbar; a transparent hit area would swallow clicks meant for the
-     neighbouring buttons. */
-  padding: 5px 9px 7px;
-  min-width: 62px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 30px;
+  border: 0;
+  border-radius: 999px;
   background: transparent;
   color: var(--muted);
   font: inherit;
   cursor: pointer;
+  opacity: 0.55;
   transition:
-    transform 0.2s var(--ease-out),
-    border-color 0.2s var(--ease-out),
-    color 0.2s var(--ease-out);
+    background 0.2s var(--ease-out),
+    color 0.2s var(--ease-out),
+    opacity 0.2s var(--ease-out);
+}
+
+.service-switcher__item.is-connected {
+  opacity: 0.85;
 }
 
 .service-switcher__item:hover:not(:disabled) {
   color: var(--soft);
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  opacity: 1;
 }
 
-/* Active is accent-coloured and slightly larger, so the current service is findable without reading. */
+/* Active reads as the selected segment of the control. */
 .service-switcher__item.is-active {
   color: var(--service-accent, var(--accent));
-  border-color: var(--service-accent, var(--accent));
-  transform: scale(1.05);
+  background: color-mix(in srgb, var(--service-accent, var(--accent)) 18%, transparent);
+  opacity: 1;
 }
 
 .service-switcher__item:focus-visible {
@@ -50,53 +56,33 @@
 
 .service-switcher__item:disabled {
   cursor: progress;
-  opacity: 0.6;
 }
 
-/* During a switch the button that is working pulses, and the others are dimmed. Without this a two-second
-   wait looks like a dropped click. */
+/* During a switch the segments that are not working dim, so a short wait
+   does not look like a dropped click. */
 .service-switcher__item:disabled:not(.is-active) {
-  opacity: 0.4;
+  opacity: 0.35;
 }
 
-.service-switcher__glyph,
-.service-switcher__avatar {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  object-fit: cover;
+.service-switcher__glyph {
+  width: 20px;
+  height: 20px;
   display: block;
-}
-
-.service-switcher__placeholder {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--muted) 22%, transparent);
-}
-
-.service-switcher__label {
-  font-size: 10px;
-  line-height: 1.1;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
 }
 
 .service-switcher__dot {
   position: absolute;
   top: 4px;
-  right: 4px;
-  width: 7px;
-  height: 7px;
+  right: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--muted) 55%, transparent);
+  background: color-mix(in srgb, var(--muted) 50%, transparent);
   transition: background 0.2s var(--ease-out);
 }
 
 /* Connected reads green rather than merely "not grey", because on a dark panel two greys are hard to
-   tell apart at seven pixels. */
+   tell apart at five pixels. */
 .service-switcher__dot.is-on {
   background: #2fbf71;
 }
@@ -124,25 +110,8 @@
     transition: none;
   }
 
-  .service-switcher__item.is-active {
-    transform: none;
-  }
-
   .service-switcher__dot[data-busy='true'] {
     animation: none;
     opacity: 1;
-  }
-}
-
-/* Narrow windows: the labels are the first thing to go. The marks and the dots still identify the
-   services, and the accessible name carries the full text. */
-@media (max-width: 860px) {
-  .service-switcher__label {
-    display: none;
-  }
-
-  .service-switcher__item {
-    min-width: 34px;
-    padding: 5px 7px;
   }
 }

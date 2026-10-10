@@ -80,7 +80,7 @@ func TestSpotifyAuthExchangeStoresTokensAndProfile(t *testing.T) {
 	})}
 
 	status, err := svc.RPCSpotifyAuthExchange(spotifyExchangeParams{
-		Code: "the-code", ClientID: "cid", ClientSecret: "secret", RedirectURI: "http://localhost:8888/callback",
+		Code: "the-code", ClientID: "cid", ClientSecret: "secret", RedirectURI: "http://127.0.0.1:8888/callback",
 	})
 	if err != nil {
 		t.Fatalf("exchange: %v", err)

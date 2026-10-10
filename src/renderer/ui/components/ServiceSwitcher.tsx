@@ -27,15 +27,12 @@ function ServiceGlyph({ service }: { service: ServiceProvider }) {
 }
 
 /**
- * The row of service buttons in the topbar.
+ * Single segmented control for switching services. Logo-only: each segment shows just the
+ * service mark, the active one reads as the selected segment, and a dot marks a usable
+ * session. A service with no account still gets a segment — it is how the user gets to the
+ * sign-in for it.
  *
- * Each button shows the mark, the account avatar when that service is connected, and a dot for the
- * connection state. A service with no account still gets a button — it is how the user gets to the
- * sign-in for it — so the row never hides a service just because it is not connected yet.
- *
- * The avatar is decorative here. It is there to make it obvious at a glance which account a service is
- * signed in as, and the accessible name carries the same information in words, because a 24px circle
- * tells a screen reader nothing.
+ * Accessible names carry the full text, because a logo alone tells a screen reader nothing.
  */
 export function ServiceSwitcher({ activeService, accounts, switching, onSwitch, busyService }: Props) {
   return (
@@ -63,19 +60,11 @@ export function ServiceSwitcher({ activeService, accounts, switching, onSwitch, 
             title={name}
             onClick={() => onSwitch(service)}
           >
-            {account?.profile?.avatarUrl ? (
-              <img className="service-switcher__avatar" src={account.profile.avatarUrl} alt="" loading="lazy" />
-            ) : (
-              <span className="service-switcher__placeholder" aria-hidden="true">
-                <ServiceGlyph service={service} />
-              </span>
-            )}
-
-            <span className="service-switcher__label">{SERVICE_LABELS[service]}</span>
+            <ServiceGlyph service={service} />
 
             {/*
               The dot carries the connection state rather than only being decoration: green is a service
-              with a usable session, grey is one that will ask for a sign-in when chosen.
+              with a usable session, dim is one that will ask for a sign-in when chosen.
             */}
             <span
               className={`service-switcher__dot${connected ? ' is-on' : ''}`}

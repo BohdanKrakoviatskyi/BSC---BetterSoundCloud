@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ServiceAccount, ServiceProvider } from '../../domain/models';
+import { desktop } from '../../lib/desktop';
 import type { SoundCloudCredentials } from '../../lib/useSoundCloudAuth';
 import { useServiceAuth } from '../../lib/useServiceAuth';
 import { AuthScreen } from './AuthScreen';
@@ -75,6 +76,26 @@ export function MultiAuthScreen({ accounts, lastService, error, soundCloud, onSi
 
   const spotify = useServiceAuth('spotify');
   const youtube = useServiceAuth('youtube-music');
+  // One-click sign-in needs bundled build-time keys. One local invoke per mount; a failure reads
+  // as unconfigured and the hand-typed path below still works.
+  const [bundledYoutube, setBundledYoutube] = useState(false);
+  // The keys block always starts closed: one-click login is the default view, hand-typed keys
+  // open on demand through the toggle.
+  const [showYoutubeKeys, setShowYoutubeKeys] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void desktop.youtubeBundledCredentials().then(
+      (bundled) => {
+        if (!cancelled) setBundledYoutube(bundled.configured);
+      },
+      () => {
+        if (!cancelled) setBundledYoutube(false);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const auth = useMemo(
     () => ({ spotify, 'youtube-music': youtube }) as Record<'spotify' | 'youtube-music', typeof spotify>,
@@ -130,6 +151,18 @@ export function MultiAuthScreen({ accounts, lastService, error, soundCloud, onSi
     if (signedIn) onSignedIn(service);
   }
 
+  // YouTube one-click sign-in: no fields needed. Typed values win when present (and are
+  // remembered by the adapter on success); otherwise stored-then-bundled keys resolve inside.
+  async function submitYoutube() {
+    const entered = credentials['youtube-music'];
+    const clientId = entered.clientId.trim();
+    const clientSecret = entered.clientSecret.trim();
+    const signedIn = clientId && clientSecret
+      ? await youtube.signIn({ service: 'youtube-music', clientId, clientSecret })
+      : await youtube.signIn({ service: 'youtube-music' });
+    if (signedIn) onSignedIn('youtube-music');
+  }
+
   return (
     <div className="multi-auth">
       <video className="background" autoPlay muted loop playsInline disablePictureInPicture aria-hidden="true">
@@ -164,6 +197,63 @@ export function MultiAuthScreen({ accounts, lastService, error, soundCloud, onSi
                   <button type="button" className="multi-auth__action" onClick={() => setChosen('soundcloud')}>
                     {connected ? 'Открыть настройки входа' : 'Войти'}
                   </button>
+                ) : service === 'youtube-music' ? (
+                  <>
+                    <p className="multi-auth__hint">
+                      {bundledYoutube
+                        ? 'Вход в один клик — общие ключи уже в приложении.'
+                        : 'Вход без своих ключей недоступен в этой сборке — введи их ниже.'}
+                    </p>
+                    <button
+                      type="button"
+                      className="multi-auth__action"
+                      disabled={youtube.busy}
+                      onClick={() => void submitYoutube()}
+                    >
+                      {youtube.busy ? 'Открываем окно…' : 'Войти'}
+                    </button>
+                    <button
+                      type="button"
+                      className="text-action"
+                      onClick={() => setShowYoutubeKeys((shown) => !shown)}
+                      aria-expanded={showYoutubeKeys}
+                    >
+                      {showYoutubeKeys ? 'Скрыть свои ключи' : 'У меня свои ключи'}
+                    </button>
+                    {showYoutubeKeys ? (
+                      <form
+                        className="multi-auth__form"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          void submitYoutube();
+                        }}
+                      >
+                        <label className="multi-auth__field">
+                          <span>Client ID</span>
+                          <input
+                            value={credentials[service].clientId}
+                            onChange={(event) => updateCredential(service, 'clientId', event.target.value)}
+                            autoComplete="off"
+                            spellCheck={false}
+                          />
+                        </label>
+                        <label className="multi-auth__field">
+                          <span>Client Secret</span>
+                          <input
+                            type="password"
+                            value={credentials[service].clientSecret}
+                            onChange={(event) => updateCredential(service, 'clientSecret', event.target.value)}
+                            autoComplete="off"
+                            spellCheck={false}
+                          />
+                        </label>
+                        <p className="multi-auth__hint">{SERVICE_HINTS[service]}</p>
+                      </form>
+                    ) : null}
+                    {youtube.error ? (
+                      <ErrorMessage message={youtube.error} className="multi-auth__error" />
+                    ) : null}
+                  </>
                 ) : (
                   <form
                     className="multi-auth__form"

@@ -7,10 +7,9 @@ import { youtubeMusicAdapter } from './adapters/youtubeMusicAdapter';
 /**
  * What a service can do, as far as the interface is concerned.
  *
- * Artists and social are false for Spotify and YouTube Music because neither API has the concept: the
- * YouTube Data API knows channels, and a channel is not an artist page with an avatar and a follower
- * count. Saying so is what lets the screens hide those links rather than offer something that goes
- * nowhere.
+ * Artists and social are false for Spotify because its API has no such concept. YouTube Music
+ * exposes channels as artist pages (profile, uploads, playlists) through the adapter, but not
+ * followers, followings or public likes — the Data API does not disclose those.
  */
 export type ServiceCapabilities = {
   /** A track's artist leads to a profile page. */

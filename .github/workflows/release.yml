@@ -154,6 +154,8 @@ jobs:
         uses: tauri-apps/tauri-action@action-v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BSC_YOUTUBE_CLIENT_ID: ${{ secrets.BSC_YOUTUBE_CLIENT_ID }}
+          BSC_YOUTUBE_CLIENT_SECRET: ${{ secrets.BSC_YOUTUBE_CLIENT_SECRET }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ steps.apple.outputs.identity }}
@@ -177,6 +179,8 @@ jobs:
         uses: tauri-apps/tauri-action@action-v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BSC_YOUTUBE_CLIENT_ID: ${{ secrets.BSC_YOUTUBE_CLIENT_ID }}
+          BSC_YOUTUBE_CLIENT_SECRET: ${{ secrets.BSC_YOUTUBE_CLIENT_SECRET }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
           APPLE_SIGNING_IDENTITY: '-'

@@ -55,6 +55,7 @@ type youtubeContentDetailsWire struct {
 
 type youtubeStatisticsWire struct {
 	ViewCount string `json:"viewCount"`
+	LikeCount string `json:"likeCount"`
 }
 
 type youtubeVideoWire struct {
@@ -73,6 +74,41 @@ type youtubeVideoListWire struct {
 	Items         []youtubeVideoWire  `json:"items"`
 	NextPageToken string              `json:"nextPageToken"`
 	PageInfo      youtubePageInfoWire `json:"pageInfo"`
+}
+
+type youtubeChannelBrandingWire struct {
+	Image struct {
+		BannerExternalURL string `json:"bannerExternalUrl"`
+	} `json:"image"`
+}
+
+type youtubeChannelContentDetailsWire struct {
+	RelatedPlaylists struct {
+		Uploads string `json:"uploads"`
+	} `json:"relatedPlaylists"`
+}
+
+type youtubeChannelStatisticsWire struct {
+	SubscriberCount string `json:"subscriberCount"`
+	VideoCount      string `json:"videoCount"`
+}
+
+type youtubeChannelWire struct {
+	ID             string                           `json:"id"`
+	Snippet        youtubeChannelSnippetWire        `json:"snippet"`
+	Statistics     youtubeChannelStatisticsWire     `json:"statistics"`
+	Branding       youtubeChannelBrandingWire       `json:"brandingSettings"`
+	ContentDetails youtubeChannelContentDetailsWire `json:"contentDetails"`
+}
+
+type youtubeChannelSnippetWire struct {
+	Title       string                          `json:"title"`
+	Description string                          `json:"description"`
+	Thumbnails  map[string]youtubeThumbnailWire `json:"thumbnails"`
+}
+
+type youtubeChannelListWire struct {
+	Items []youtubeChannelWire `json:"items"`
 }
 
 type youtubePlaylistSnippetWire struct {
@@ -130,12 +166,17 @@ type youtubeTrack struct {
 	URN        string `json:"urn"`
 	Title      string `json:"title"`
 	Permalink  string `json:"permalink,omitempty"`
-	ArtworkURL string `json:"artwork_url,omitempty"`
-	DurationMs int64  `json:"duration_ms"`
-	ViewCount  int64  `json:"view_count,omitempty"`
-	CategoryID string `json:"category_id,omitempty"`
-	Artist     string `json:"artist"`
-	Published  string `json:"published_at,omitempty"`
+	ArtworkURL string `json:"artworkUrl,omitempty"`
+	DurationMs int64  `json:"durationMs"`
+	ViewCount  int64  `json:"viewCount,omitempty"`
+	LikeCount  int64  `json:"likeCount,omitempty"`
+	CategoryID string `json:"categoryId,omitempty"`
+	// Channel id and subscriber count come from snippet and a channels.list lookup. Lists leave
+	// the count unset: one lookup per row would burn quota for a screen nobody reads that closely.
+	ChannelID       string `json:"channelId,omitempty"`
+	SubscriberCount int64  `json:"subscriberCount,omitempty"`
+	Artist          string `json:"artist"`
+	Published       string `json:"publishedAt,omitempty"`
 }
 
 type youtubeTrackPage struct {
@@ -152,7 +193,7 @@ type youtubePlaylist struct {
 	URN         string `json:"urn"`
 	Title       string `json:"title"`
 	Permalink   string `json:"permalink,omitempty"`
-	ArtworkURL  string `json:"artwork_url,omitempty"`
+	ArtworkURL  string `json:"artworkUrl,omitempty"`
 	Description string `json:"description,omitempty"`
 	TrackCount  int    `json:"trackCount"`
 	Artist      string `json:"artist"`
@@ -161,6 +202,25 @@ type youtubePlaylist struct {
 type youtubePlaylistPage struct {
 	Playlists     []youtubePlaylist `json:"playlists"`
 	NextPageToken string            `json:"nextPageToken,omitempty"`
+}
+
+// youtubeArtistProfile is a channel as the app shows it: the uploads playlist id rides along
+// because the tracks tab needs it and refetching the channel for it would waste a quota unit.
+type youtubeArtistProfile struct {
+	ChannelID         string `json:"channelId"`
+	Title             string `json:"title"`
+	Description       string `json:"description,omitempty"`
+	AvatarURL         string `json:"avatarUrl,omitempty"`
+	BannerURL         string `json:"bannerUrl,omitempty"`
+	SubscriberCount   int64  `json:"subscriberCount,omitempty"`
+	VideoCount        int    `json:"videoCount,omitempty"`
+	UploadsPlaylistID string `json:"uploadsPlaylistId,omitempty"`
+}
+
+type youtubeArtistPageParams struct {
+	ID        string `json:"id"`
+	PageToken string `json:"pageToken,omitempty"`
+	Limit     int    `json:"limit,omitempty"`
 }
 
 type youtubePageParams struct {
@@ -289,14 +349,16 @@ func (s *service) RPCYoutubeSearchTracks(params youtubeSearchParams) (youtubeTra
 		return page, nil
 	}
 
-	durations, err := s.youtubeDurations(token, ids)
+	metas, err := s.youtubeVideoMeta(token, ids)
 	if err != nil {
 		// A search that found results but could not read their lengths is still a useful search. The
 		// tracks come back with an unknown duration rather than the whole query failing.
-		durations = nil
+		metas = nil
 	}
 	for _, id := range ids {
-		page.Tracks = append(page.Tracks, mapYoutubeSearchTrack(id, snippets[id], durations[id]))
+		track := mapYoutubeSearchTrack(id, snippets[id], metas[id].DurationMs)
+		track.LikeCount = metas[id].LikeCount
+		page.Tracks = append(page.Tracks, track)
 	}
 	return page, nil
 }
@@ -322,7 +384,15 @@ func (s *service) RPCYoutubeTrackDetails(params youtubeIdParams) (youtubeTrack, 
 	if len(wire.Items) == 0 {
 		return youtubeTrack{}, fmt.Errorf("видео YouTube %s не найдено или недоступно", id)
 	}
-	return mapYoutubeTrack(wire.Items[0]), nil
+	track := mapYoutubeTrack(wire.Items[0])
+	// A bonus, not a requirement: the track is usable without the channel count, and failing the
+	// whole lookup over it would send the user round the loop for nothing.
+	if channelID := strings.TrimSpace(track.ChannelID); channelID != "" {
+		if subs, err := s.youtubeChannelSubscribers(token, channelID); err == nil {
+			track.SubscriberCount = subs
+		}
+	}
+	return track, nil
 }
 
 // RPCYoutubePlaylistsMine lists the user's playlists.
@@ -348,7 +418,13 @@ func (s *service) RPCYoutubePlaylistsMine(params youtubePageParams) (youtubePlay
 	}
 	page := youtubePlaylistPage{NextPageToken: wire.NextPageToken, Playlists: []youtubePlaylist{}}
 	for _, item := range wire.Items {
-		page.Playlists = append(page.Playlists, mapYoutubePlaylist(item))
+		playlist := mapYoutubePlaylist(item)
+		if playlist.ArtworkURL == "" && strings.TrimSpace(item.ID) != "" {
+			if cover := s.youtubePlaylistCover(token, item.ID); cover != "" {
+				playlist.ArtworkURL = cover
+			}
+		}
+		page.Playlists = append(page.Playlists, playlist)
 	}
 	return page, nil
 }
@@ -405,6 +481,166 @@ func (s *service) RPCYoutubeUserProfile(_ emptyParams) (youtubeAuthProfile, erro
 	}, nil
 }
 
+// RPCYoutubeArtistProfile returns a channel: name, avatar, banner, subscribers, video count.
+// Subscriptions are deliberately absent: чужie subscriptions YouTube does not disclose, and the
+// only list it allows is the viewer's own.
+func (s *service) RPCYoutubeArtistProfile(params youtubeIdParams) (youtubeArtistProfile, error) {
+	id := strings.TrimSpace(params.ID)
+	if id == "" {
+		return youtubeArtistProfile{}, errors.New("не передан id канала YouTube")
+	}
+	token, err := s.youtubeAccessToken()
+	if err != nil {
+		return youtubeArtistProfile{}, err
+	}
+	values := url.Values{
+		"part": {"snippet,statistics,brandingSettings,contentDetails"},
+		"id":   {id},
+	}
+	var wire youtubeChannelListWire
+	if err := s.youtubeGet(token, s.youtubeURL("/channels", values), "канал YouTube", &wire); err != nil {
+		return youtubeArtistProfile{}, err
+	}
+	if len(wire.Items) == 0 {
+		return youtubeArtistProfile{}, fmt.Errorf("канал YouTube %s не найден", id)
+	}
+	return mapYoutubeArtist(wire.Items[0]), nil
+}
+
+// RPCYoutubeArtistTracks lists a channel's uploads, newest first.
+//
+// The uploads playlist id comes from the channel itself, so this costs three quota units:
+// channels, playlistItems and one videos.list that fills durations, views and likes for the
+// whole page at once (the same batching the search follow-up uses).
+func (s *service) RPCYoutubeArtistTracks(params youtubeArtistPageParams) (youtubeTrackPage, error) {
+	id := strings.TrimSpace(params.ID)
+	if id == "" {
+		return youtubeTrackPage{}, errors.New("не передан id канала YouTube")
+	}
+	token, err := s.youtubeAccessToken()
+	if err != nil {
+		return youtubeTrackPage{}, err
+	}
+	uploads, err := s.youtubeUploadsPlaylist(token, id)
+	if err != nil {
+		return youtubeTrackPage{}, err
+	}
+	values := url.Values{
+		"part":       {"snippet"},
+		"playlistId": {uploads},
+		"maxResults": {strconv.Itoa(youtubeLimit(params.Limit, youtubePageSize))},
+	}
+	if params.PageToken != "" {
+		values.Set("pageToken", params.PageToken)
+	}
+	var items youtubePlaylistItemListWire
+	if err := s.youtubeGet(token, s.youtubeURL("/playlistItems", values), "загрузки канала YouTube", &items); err != nil {
+		return youtubeTrackPage{}, err
+	}
+
+	ids := make([]string, 0, len(items.Items))
+	for _, item := range items.Items {
+		if videoID := strings.TrimSpace(item.Snippet.ResourceID.VideoID); videoID != "" {
+			ids = append(ids, videoID)
+		}
+	}
+	page := youtubeTrackPage{NextPageToken: items.NextPageToken, Tracks: []youtubeTrack{}}
+	if len(ids) == 0 {
+		return page, nil
+	}
+	values = url.Values{
+		"part": {"snippet,contentDetails,statistics"},
+		"id":   {strings.Join(ids, ",")},
+	}
+	var wire youtubeVideoListWire
+	if err := s.youtubeGet(token, s.youtubeURL("/videos", values), "видео канала YouTube", &wire); err != nil {
+		return youtubeTrackPage{}, err
+	}
+	byID := make(map[string]youtubeVideoWire, len(wire.Items))
+	for _, item := range wire.Items {
+		byID[item.ID] = item
+	}
+	// In playlist order, not API order: the uploads list is newest-first and must stay that way.
+	for _, id := range ids {
+		item, ok := byID[id]
+		if !ok {
+			continue
+		}
+		page.Tracks = append(page.Tracks, mapYoutubeTrack(item))
+	}
+	return page, nil
+}
+
+// RPCYoutubeArtistPlaylists lists a channel's playlists, with the same first-video cover fallback
+// as the library.
+func (s *service) RPCYoutubeArtistPlaylists(params youtubeArtistPageParams) (youtubePlaylistPage, error) {
+	id := strings.TrimSpace(params.ID)
+	if id == "" {
+		return youtubePlaylistPage{}, errors.New("не передан id канала YouTube")
+	}
+	token, err := s.youtubeAccessToken()
+	if err != nil {
+		return youtubePlaylistPage{}, err
+	}
+	values := url.Values{
+		"part":       {"snippet,contentDetails"},
+		"channelId":  {id},
+		"maxResults": {strconv.Itoa(youtubeLimit(params.Limit, youtubePageSize))},
+	}
+	if params.PageToken != "" {
+		values.Set("pageToken", params.PageToken)
+	}
+	var wire youtubePlaylistListWire
+	if err := s.youtubeGet(token, s.youtubeURL("/playlists", values), "плейлисты канала YouTube", &wire); err != nil {
+		return youtubePlaylistPage{}, err
+	}
+	page := youtubePlaylistPage{NextPageToken: wire.NextPageToken, Playlists: []youtubePlaylist{}}
+	for _, item := range wire.Items {
+		playlist := mapYoutubePlaylist(item)
+		if playlist.ArtworkURL == "" && strings.TrimSpace(item.ID) != "" {
+			if cover := s.youtubePlaylistCover(token, item.ID); cover != "" {
+				playlist.ArtworkURL = cover
+			}
+		}
+		page.Playlists = append(page.Playlists, playlist)
+	}
+	return page, nil
+}
+
+// youtubeUploadsPlaylist reads the channel's uploads playlist id. One quota unit, and every
+// tracks-tab call needs it.
+func (s *service) youtubeUploadsPlaylist(token, channelID string) (string, error) {
+	values := url.Values{
+		"part": {"contentDetails"},
+		"id":   {channelID},
+	}
+	var wire youtubeChannelListWire
+	if err := s.youtubeGet(token, s.youtubeURL("/channels", values), "канал YouTube", &wire); err != nil {
+		return "", err
+	}
+	if len(wire.Items) == 0 {
+		return "", fmt.Errorf("канал YouTube %s не найден", channelID)
+	}
+	uploads := strings.TrimSpace(wire.Items[0].ContentDetails.RelatedPlaylists.Uploads)
+	if uploads == "" {
+		return "", fmt.Errorf("у канала YouTube %s нет плейлиста загрузок", channelID)
+	}
+	return uploads, nil
+}
+
+func mapYoutubeArtist(wire youtubeChannelWire) youtubeArtistProfile {
+	return youtubeArtistProfile{
+		ChannelID:         wire.ID,
+		Title:             wire.Snippet.Title,
+		Description:       wire.Snippet.Description,
+		AvatarURL:         bestYoutubeThumbnail(wire.Snippet.Thumbnails),
+		BannerURL:         strings.TrimSpace(wire.Branding.Image.BannerExternalURL),
+		SubscriberCount:   parseInt64(wire.Statistics.SubscriberCount),
+		VideoCount:        int(parseInt64(wire.Statistics.VideoCount)),
+		UploadsPlaylistID: strings.TrimSpace(wire.ContentDetails.RelatedPlaylists.Uploads),
+	}
+}
+
 // ---- helpers
 
 func (s *service) youtubeAccessToken() (string, error) {
@@ -436,12 +672,19 @@ func (s *service) youtubeGet(token, endpoint, what string, target any) error {
 	return nil
 }
 
-// youtubeDurations reads the lengths of several videos in one call.
+// youtubeVideoMeta holds what the search follow-up reads for several videos in one call.
+type youtubeVideoMeta struct {
+	DurationMs int64
+	LikeCount  int64
+}
+
+// youtubeVideoMeta reads lengths and like counts for several videos in one call.
 //
 // videos.list takes up to 50 comma-separated ids, and doing it per track would burn quota to build a
-// list that is mostly correct.
-func (s *service) youtubeDurations(token string, ids []string) (map[string]int64, error) {
-	durations := make(map[string]int64, len(ids))
+// list that is mostly correct. Statistics ride along in the same response, so likes cost nothing
+// extra here — unlike the channel subscriber count, which needs a separate channels.list.
+func (s *service) youtubeVideoMeta(token string, ids []string) (map[string]youtubeVideoMeta, error) {
+	metas := make(map[string]youtubeVideoMeta, len(ids))
 	for start := 0; start < len(ids); start += youtubePageSize {
 		end := start + youtubePageSize
 		if end > len(ids) {
@@ -449,20 +692,64 @@ func (s *service) youtubeDurations(token string, ids []string) (map[string]int64
 		}
 		batch := ids[start:end]
 		values := url.Values{
-			"part": {"contentDetails"},
+			"part": {"contentDetails,statistics"},
 			"id":   {strings.Join(batch, ",")},
 		}
 		var wire youtubeVideoListWire
 		if err := s.youtubeGet(token, s.youtubeURL("/videos", values), "длительности YouTube", &wire); err != nil {
-			return durations, err
+			return metas, err
 		}
 		for _, item := range wire.Items {
+			meta := metas[item.ID]
 			if ms, ok := parseISO8601Duration(item.ContentDetails.Duration); ok {
-				durations[item.ID] = ms
+				meta.DurationMs = ms
 			}
+			meta.LikeCount = parseInt64(item.Statistics.LikeCount)
+			metas[item.ID] = meta
 		}
 	}
-	return durations, nil
+	return metas, nil
+}
+
+// youtubeChannelSubscribers reads a channel's subscriber count. One quota unit, so only the
+// single-video call uses it — never a list.
+func (s *service) youtubeChannelSubscribers(token, channelID string) (int64, error) {
+	values := url.Values{
+		"part": {"statistics"},
+		"id":   {channelID},
+	}
+	var wire struct {
+		Items []struct {
+			Statistics struct {
+				SubscriberCount string `json:"subscriberCount"`
+			} `json:"statistics"`
+		} `json:"items"`
+	}
+	if err := s.youtubeGet(token, s.youtubeURL("/channels", values), "канал YouTube", &wire); err != nil {
+		return 0, err
+	}
+	if len(wire.Items) == 0 {
+		return 0, errors.New("канал YouTube не найден")
+	}
+	return parseInt64(wire.Items[0].Statistics.SubscriberCount), nil
+}
+
+// youtubePlaylistCover falls back to the first video's thumbnail when the playlist itself has none.
+// playlists.list does not guarantee thumbnails, and an artwork-less row looks broken.
+func (s *service) youtubePlaylistCover(token, playlistID string) string {
+	values := url.Values{
+		"part":       {"snippet"},
+		"playlistId": {playlistID},
+		"maxResults": {"1"},
+	}
+	var wire youtubePlaylistItemListWire
+	if err := s.youtubeGet(token, s.youtubeURL("/playlistItems", values), "обложка плейлиста YouTube", &wire); err != nil {
+		return ""
+	}
+	if len(wire.Items) == 0 {
+		return ""
+	}
+	return bestYoutubeThumbnail(wire.Items[0].Snippet.Thumbnails)
 }
 
 func (s *service) youtubeURL(path string, values url.Values) string {
@@ -489,9 +776,11 @@ func mapYoutubeTrack(wire youtubeVideoWire) youtubeTrack {
 		ArtworkURL: bestYoutubeThumbnail(wire.Snippet.Thumbnails),
 		DurationMs: 0,
 		CategoryID: wire.Snippet.CategoryID,
+		ChannelID:  wire.Snippet.ChannelID,
 		Artist:     wire.Snippet.ChannelTitle,
 		Published:  wire.Snippet.PublishedAt,
 		ViewCount:  parseInt64(wire.Statistics.ViewCount),
+		LikeCount:  parseInt64(wire.Statistics.LikeCount),
 	}
 	if ms, ok := parseISO8601Duration(wire.ContentDetails.Duration); ok {
 		track.DurationMs = ms

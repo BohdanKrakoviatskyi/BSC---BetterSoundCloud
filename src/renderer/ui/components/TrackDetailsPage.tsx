@@ -220,7 +220,7 @@ function TrackCoverflow({ contextTracks, activeTrackId, playingTrackId, isPlayin
             const isNowPlaying = playingTrackId === track.id;
             return (
               <button
-                key={track.id}
+                key={`${track.id}:${offset}`}
                 type="button"
                 className={`coverflow-card${isCenter ? ' is-center' : ''}${offset < 0 ? ' is-past' : offset > 0 ? ' is-future' : ''}`}
                 style={style}

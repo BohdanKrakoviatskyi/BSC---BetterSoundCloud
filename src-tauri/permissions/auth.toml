@@ -75,3 +75,13 @@ commands.allow = ["start_youtube_auth"]
 identifier = "allow-poll-youtube-auth"
 description = "Allows the main window to poll for the authorization code the Google webview intercepted."
 commands.allow = ["poll_youtube_auth"]
+
+[[permission]]
+identifier = "allow-youtube-bundled-credentials"
+description = "Allows the main window to read the build-time bundled YouTube OAuth credentials for one-click sign-in."
+commands.allow = ["youtube_bundled_credentials"]
+
+[[permission]]
+identifier = "allow-youtube-audio-url"
+description = "Allows the main window to resolve a direct YouTube audio URL through the bundled yt-dlp sidecar."
+commands.allow = ["youtube_audio_url"]

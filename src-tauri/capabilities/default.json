@@ -45,6 +45,8 @@
     {"identifier":"allow-start-spotify-auth"},
     {"identifier":"allow-poll-spotify-auth"},
     {"identifier":"allow-start-youtube-auth"},
-    {"identifier":"allow-poll-youtube-auth"}
+    {"identifier":"allow-poll-youtube-auth"},
+    {"identifier":"allow-youtube-bundled-credentials"},
+    {"identifier":"allow-youtube-audio-url"}
   ]
 }

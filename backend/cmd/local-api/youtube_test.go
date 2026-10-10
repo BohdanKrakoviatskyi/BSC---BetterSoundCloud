@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -164,10 +165,10 @@ func TestYoutubeAuthExchangeSendsCredentialsInTheBody(t *testing.T) {
 		t.Errorf("unexpected form: %v", tokenForm)
 	}
 
-	// redirect_uri is accepted on the signature and must not be forwarded. A Desktop app client has no
-	// registered redirect URIs, and sending one is what produces redirect_uri_mismatch.
-	if tokenForm.Has("redirect_uri") {
-		t.Errorf("redirect_uri was forwarded as %q; a desktop client must not send it", tokenForm.Get("redirect_uri"))
+	// redirect_uri must match the authorize URL value. Google refuses the exchange with
+	// invalid_request: Missing parameter: redirect_uri when it is omitted.
+	if tokenForm.Get("redirect_uri") != "http://localhost:8889/callback" {
+		t.Errorf("redirect_uri = %q, want the loopback callback from the authorize URL", tokenForm.Get("redirect_uri"))
 	}
 
 	if svc.youtubeAuth.RefreshToken != "rt-1" {
@@ -181,15 +182,15 @@ func TestYoutubeAuthExchangeSendsCredentialsInTheBody(t *testing.T) {
 		t.Errorf("token file missing the refresh token: %s", data)
 	}
 }
-func TestYoutubeAuthRefreshNeedsNoCredentials(t *testing.T) {
-	// Unlike Spotify, Google's refresh grant is authorized by the refresh token alone. That is the
-	// difference that makes a remembered session recoverable without the user, so it is asserted: a
-	// signature demanding client credentials here would make restarts fail where they need not.
+func TestYoutubeAuthRefreshSendsCredentials(t *testing.T) {
+	// Google's refresh grant needs the client credentials, like the exchange. A grant authorized by
+	// the refresh token alone is refused with invalid_client, which is exactly what an hourly expiry
+	// looked like before this was asserted.
 	svc := signedInYoutubeService(t)
 	recorder := &youtubeRecorder{}
 	routeYoutube(t, svc, map[string]string{"/token": `{"access_token":"at-new","expires_in":3600}`}, recorder)
 
-	status, err := svc.RPCYoutubeAuthRefresh(emptyParams{})
+	status, err := svc.RPCYoutubeAuthRefresh(youtubeRefreshParams{ClientID: "cid", ClientSecret: "secret"})
 	if err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
@@ -203,6 +204,21 @@ func TestYoutubeAuthRefreshNeedsNoCredentials(t *testing.T) {
 	}
 	if recorder.form.Get("grant_type") != "refresh_token" || recorder.form.Get("refresh_token") != "rt-live" {
 		t.Errorf("unexpected form: %v", recorder.form)
+	}
+	if recorder.form.Get("client_id") != "cid" || recorder.form.Get("client_secret") != "secret" {
+		t.Errorf("credentials not in the form: %v", recorder.form)
+	}
+}
+
+func TestYoutubeAuthRefreshRejectsMissingCredentials(t *testing.T) {
+	svc := signedInYoutubeService(t)
+	svc.httpClient = &http.Client{Transport: testRoundTripper(func(request *http.Request) (*http.Response, error) {
+		t.Errorf("no request should be made: %s", request.URL)
+		return youtubeResponse(request, http.StatusBadRequest, `{}`), nil
+	})}
+
+	if _, err := svc.RPCYoutubeAuthRefresh(youtubeRefreshParams{ClientSecret: "s"}); err == nil {
+		t.Error("expected an error when the client id is missing")
 	}
 }
 
@@ -219,7 +235,7 @@ func TestYoutubeAuthExchangeRejectsIncompleteInput(t *testing.T) {
 	if _, err := svc.RPCYoutubeAuthExchange(youtubeExchangeParams{Code: "c", ClientSecret: "s"}); err == nil {
 		t.Error("expected an error when the client id is missing")
 	}
-	if _, err := svc.RPCYoutubeAuthRefresh(emptyParams{}); err == nil {
+	if _, err := svc.RPCYoutubeAuthRefresh(youtubeRefreshParams{ClientID: "c", ClientSecret: "s"}); err == nil {
 		t.Error("expected an error when nothing is stored")
 	}
 }
@@ -268,13 +284,14 @@ func TestYoutubeAuthStatusAndLogout(t *testing.T) {
 	if status, err := svc.RPCYoutubeAuthStatus(emptyParams{}); err != nil || status.Authorized {
 		t.Fatalf("expected signed out: %#v %v", status, err)
 	}
-	svc.youtubeAuth = youtubeAuthState{AccessToken: "at", RefreshToken: "rt", ID: "u", ExpiresAt: 42}
+	expiresAt := time.Now().Add(time.Hour).UnixMilli()
+	svc.youtubeAuth = youtubeAuthState{AccessToken: "at", RefreshToken: "rt", ID: "u", ExpiresAt: expiresAt}
 	if err := svc.saveYoutubeAuth(svc.youtubeAuth); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 
 	status, err := svc.RPCYoutubeAuthStatus(emptyParams{})
-	if err != nil || !status.Authorized || status.Profile == nil || status.Profile.ID != "u" || status.ExpiresAt != 42 {
+	if err != nil || !status.Authorized || status.Profile == nil || status.Profile.ID != "u" || status.ExpiresAt != expiresAt {
 		t.Fatalf("unexpected status: %#v %v", status, err)
 	}
 
@@ -290,6 +307,21 @@ func TestYoutubeAuthStatusAndLogout(t *testing.T) {
 	// Twice is fine; the settings panel can be reopened.
 	if _, err := svc.RPCYoutubeAuthLogout(emptyParams{}); err != nil {
 		t.Errorf("second logout failed: %v", err)
+	}
+}
+
+func TestYoutubeAuthStatusReportsExpiredAsSignedOut(t *testing.T) {
+	// The status check is local and never touches the network, so an expired access token must read
+	// as signed out here: that is what makes switchService run the refresh instead of firing reads
+	// that are guaranteed to fail with "нужен refresh".
+	svc := signedInYoutubeService(t)
+	svc.youtubeAuth.ExpiresAt = time.Now().Add(-time.Minute).UnixMilli()
+	status, err := svc.RPCYoutubeAuthStatus(emptyParams{})
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if status.Authorized {
+		t.Errorf("expired token reads as authorized: %#v", status)
 	}
 }
 
@@ -316,8 +348,8 @@ func TestYoutubeAuthSurvivesUnreadableProfile(t *testing.T) {
 
 const twoLikedWire = `{
 	"items": [
-		{"id":"vid1","snippet":{"title":"Song One","channelTitle":"Artist One","categoryId":"10","publishedAt":"2024-01-02T03:04:05Z","thumbnails":{"high":{"url":"https://i.ytimg.com/hi","width":480,"height":360},"maxres":{"url":"https://i.ytimg.com/max","width":1280,"height":720},"default":{"url":"https://i.ytimg.com/lo","width":120,"height":90}}},
-		 "contentDetails":{"duration":"PT4M13S"},"statistics":{"viewCount":"1234567"}},
+		{"id":"vid1","snippet":{"title":"Song One","channelTitle":"Artist One","channelId":"UC-x","categoryId":"10","publishedAt":"2024-01-02T03:04:05Z","thumbnails":{"high":{"url":"https://i.ytimg.com/hi","width":480,"height":360},"maxres":{"url":"https://i.ytimg.com/max","width":1280,"height":720},"default":{"url":"https://i.ytimg.com/lo","width":120,"height":90}}},
+		 "contentDetails":{"duration":"PT4M13S"},"statistics":{"viewCount":"1234567","likeCount":"321"}},
 		{"id":"vid2","snippet":{"title":"A Lecture","channelTitle":"Some University","categoryId":"27","publishedAt":"2023-05-06T07:08:09Z","thumbnails":{"default":{"url":"https://i.ytimg.com/lo2","width":120,"height":90}}},
 		 "contentDetails":{"duration":"PT1H2M3S"}}
 	],
@@ -350,6 +382,12 @@ func TestYoutubeTracksMineReadsLikes(t *testing.T) {
 	}
 	if first.ViewCount != 1_234_567 {
 		t.Errorf("viewCount = %d", first.ViewCount)
+	}
+	if first.LikeCount != 321 {
+		t.Errorf("likeCount = %d, want 321", first.LikeCount)
+	}
+	if first.ChannelID != "UC-x" {
+		t.Errorf("channelId = %q, want UC-x", first.ChannelID)
 	}
 	// maxres is not always present, so the largest available image is chosen rather than a fixed key.
 	if first.ArtworkURL != "https://i.ytimg.com/max" {
@@ -633,6 +671,155 @@ func TestYoutubePlaylistsMine(t *testing.T) {
 		t.Errorf("mine = %q", requested.Query().Get("mine"))
 	}
 }
+func TestYoutubeTrackDetailsReportsLikesAndSubscribers(t *testing.T) {
+	// Likes ride along in the videos.list response; subscribers cost one channels.list call that
+	// only the single-video lookup makes, never a list.
+	svc := signedInYoutubeService(t)
+	routeYoutube(t, svc, map[string]string{
+		"/v3/videos":   `{"items":[{"id":"vid9","snippet":{"title":"Song","channelTitle":"Artist","channelId":"UC-9","categoryId":"10"},"contentDetails":{"duration":"PT3M"},"statistics":{"viewCount":"1000","likeCount":"42"}}]}`,
+		"/v3/channels": `{"items":[{"id":"UC-9","statistics":{"subscriberCount":"9876"}}]}`,
+	}, nil)
+
+	track, err := svc.RPCYoutubeTrackDetails(youtubeIdParams{ID: "vid9"})
+	if err != nil {
+		t.Fatalf("track.details: %v", err)
+	}
+	if track.LikeCount != 42 {
+		t.Errorf("likeCount = %d, want 42", track.LikeCount)
+	}
+	if track.SubscriberCount != 9876 {
+		t.Errorf("subscriberCount = %d, want 9876", track.SubscriberCount)
+	}
+}
+
+func TestYoutubeTrackDetailsSurvivesChannelFailure(t *testing.T) {
+	// The track is usable without the channel count: a channels.list failure must not fail details.
+	svc := signedInYoutubeService(t)
+	svc.httpClient = &http.Client{Transport: testRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Path == "/v3/videos" {
+			return youtubeResponse(request, http.StatusOK, `{"items":[{"id":"vid9","snippet":{"title":"Song","channelTitle":"Artist","channelId":"UC-9"},"contentDetails":{"duration":"PT3M"}}]}`), nil
+		}
+		return youtubeResponse(request, http.StatusForbidden, `{"error":{"code":403}}`), nil
+	})}
+
+	track, err := svc.RPCYoutubeTrackDetails(youtubeIdParams{ID: "vid9"})
+	if err != nil {
+		t.Fatalf("track.details failed because the channel lookup failed: %v", err)
+	}
+	if track.Title != "Song" {
+		t.Errorf("unexpected track: %#v", track)
+	}
+}
+
+func TestYoutubePlaylistsMineFallsBackToFirstVideoCover(t *testing.T) {
+	// playlists.list does not guarantee thumbnails. An artwork-less playlist borrows its first
+	// video's cover rather than rendering a broken row.
+	svc := signedInYoutubeService(t)
+	routeYoutube(t, svc, map[string]string{
+		"/v3/playlists":     `{"items":[{"id":"PL9","snippet":{"title":"Mix","description":"","channelTitle":"Me","thumbnails":{}},"contentDetails":{"itemCount":3}}]}`,
+		"/v3/playlistItems": `{"items":[{"snippet":{"title":"One","resourceId":{"videoId":"v1"},"thumbnails":{"high":{"url":"https://i.ytimg.com/first","width":480,"height":360}}}}]}`,
+	}, nil)
+
+	page, err := svc.RPCYoutubePlaylistsMine(youtubePageParams{})
+	if err != nil {
+		t.Fatalf("playlists.mine: %v", err)
+	}
+	if len(page.Playlists) != 1 {
+		t.Fatalf("got %d playlists", len(page.Playlists))
+	}
+	if page.Playlists[0].ArtworkURL != "https://i.ytimg.com/first" {
+		t.Errorf("artwork = %q, want the first video's cover", page.Playlists[0].ArtworkURL)
+	}
+}
+
+const channelWire = `{"id":"UC-9","snippet":{"title":"Artist Nine","description":"About nine","thumbnails":{"high":{"url":"https://i.ytimg.com/av","width":480,"height":360}}},"statistics":{"subscriberCount":"14609","videoCount":"80"},"brandingSettings":{"image":{"bannerExternalUrl":"https://i.ytimg.com/banner"}},"contentDetails":{"relatedPlaylists":{"uploads":"UU-9"}}}`
+
+func TestYoutubeArtistProfileMapsChannel(t *testing.T) {
+	svc := signedInYoutubeService(t)
+	routeYoutube(t, svc, map[string]string{"/v3/channels": `{"items":[` + channelWire + `]}`}, nil)
+
+	profile, err := svc.RPCYoutubeArtistProfile(youtubeIdParams{ID: "UC-9"})
+	if err != nil {
+		t.Fatalf("artist.profile: %v", err)
+	}
+	if profile.Title != "Artist Nine" || profile.ChannelID != "UC-9" {
+		t.Errorf("unexpected profile: %#v", profile)
+	}
+	if profile.AvatarURL != "https://i.ytimg.com/av" || profile.BannerURL != "https://i.ytimg.com/banner" {
+		t.Errorf("images = %#v", profile)
+	}
+	if profile.SubscriberCount != 14609 || profile.VideoCount != 80 {
+		t.Errorf("stats = %#v", profile)
+	}
+	if profile.UploadsPlaylistID != "UU-9" {
+		t.Errorf("uploads = %q", profile.UploadsPlaylistID)
+	}
+	if profile.Description != "About nine" {
+		t.Errorf("description = %q", profile.Description)
+	}
+}
+
+func TestYoutubeArtistProfileRejectsEmptyID(t *testing.T) {
+	svc := signedInYoutubeService(t)
+	if _, err := svc.RPCYoutubeArtistProfile(youtubeIdParams{ID: "  "}); err == nil {
+		t.Fatal("expected an error for an empty channel id")
+	}
+}
+
+func TestYoutubeArtistTracksReadsUploads(t *testing.T) {
+	svc := signedInYoutubeService(t)
+	routeYoutube(t, svc, map[string]string{
+		"/v3/channels":      `{"items":[` + channelWire + `]}`,
+		"/v3/playlistItems": `{"items":[{"snippet":{"title":"One","resourceId":{"videoId":"v1"}}},{"snippet":{"title":"Two","resourceId":{"videoId":"v2"}}}],"nextPageToken":"tok"}`,
+		"/v3/videos":        `{"items":[{"id":"v1","snippet":{"title":"One","channelTitle":"A","categoryId":"10"},"contentDetails":{"duration":"PT3M"},"statistics":{"viewCount":"10","likeCount":"2"}},{"id":"v2","snippet":{"title":"Two","channelTitle":"A","categoryId":"10"},"contentDetails":{"duration":"PT1M"},"statistics":{}}]}`,
+	}, nil)
+
+	page, err := svc.RPCYoutubeArtistTracks(youtubeArtistPageParams{ID: "UC-9"})
+	if err != nil {
+		t.Fatalf("artist.tracks: %v", err)
+	}
+	// Newest-first playlist order survives the details lookup, which answers in its own order.
+	if len(page.Tracks) != 2 || page.Tracks[0].NativeID != "v1" || page.Tracks[1].NativeID != "v2" {
+		t.Fatalf("unexpected order: %#v", page.Tracks)
+	}
+	if page.Tracks[0].DurationMs != 180_000 || page.Tracks[0].LikeCount != 2 || page.Tracks[0].ViewCount != 10 {
+		t.Errorf("stats = %#v", page.Tracks[0])
+	}
+	if page.NextPageToken != "tok" {
+		t.Errorf("nextPageToken = %q", page.NextPageToken)
+	}
+}
+
+func TestYoutubeArtistTracksRejectsEmptyID(t *testing.T) {
+	svc := signedInYoutubeService(t)
+	if _, err := svc.RPCYoutubeArtistTracks(youtubeArtistPageParams{}); err == nil {
+		t.Fatal("expected an error for an empty channel id")
+	}
+}
+
+func TestYoutubeArtistPlaylistsReadsChannel(t *testing.T) {
+	svc := signedInYoutubeService(t)
+	routeYoutube(t, svc, map[string]string{
+		"/v3/playlists":     `{"items":[{"id":"PL9","snippet":{"title":"Mix","thumbnails":{}},"contentDetails":{"itemCount":7}}]}`,
+		"/v3/playlistItems": `{"items":[{"snippet":{"title":"One","resourceId":{"videoId":"v1"},"thumbnails":{"high":{"url":"https://i.ytimg.com/cov","width":480,"height":360}}}}]}`,
+	}, nil)
+
+	page, err := svc.RPCYoutubeArtistPlaylists(youtubeArtistPageParams{ID: "UC-9"})
+	if err != nil {
+		t.Fatalf("artist.playlists: %v", err)
+	}
+	if len(page.Playlists) != 1 {
+		t.Fatalf("got %d playlists", len(page.Playlists))
+	}
+	got := page.Playlists[0]
+	if got.Title != "Mix" || got.TrackCount != 7 {
+		t.Errorf("unexpected playlist: %#v", got)
+	}
+	if got.ArtworkURL != "https://i.ytimg.com/cov" {
+		t.Errorf("artwork = %q, want the first video fallback", got.ArtworkURL)
+	}
+}
+
 func TestYoutubeTrackDetailsNotFound(t *testing.T) {
 	svc := signedInYoutubeService(t)
 	routeYoutube(t, svc, map[string]string{"/v3/videos": `{"items":[]}`}, nil)
@@ -715,12 +902,15 @@ func TestYoutubeDurationsBatchesIds(t *testing.T) {
 	for i := range ids {
 		ids[i] = "v" + strconv.Itoa(i)
 	}
-	durations, err := svc.youtubeDurations("token", ids)
+	metas, err := svc.youtubeVideoMeta("token", ids)
 	if err != nil {
-		t.Fatalf("durations: %v", err)
+		t.Fatalf("meta: %v", err)
 	}
-	if len(durations) != 120 {
-		t.Errorf("got %d durations, want 120", len(durations))
+	if len(metas) != 120 {
+		t.Errorf("got %d metas, want 120", len(metas))
+	}
+	if metas["v7"].DurationMs != 60_000 {
+		t.Errorf("v7 duration = %d, want 60000", metas["v7"].DurationMs)
 	}
 	if requests != 3 {
 		t.Errorf("made %d requests for 120 ids, want 3 batches of at most 50", requests)
@@ -728,6 +918,31 @@ func TestYoutubeDurationsBatchesIds(t *testing.T) {
 }
 
 // ---- the wire contract
+
+// The frontend reads camelCase keys. The backend once sent snake_case here, which left every
+// YouTube track without artwork, duration, views or likes while the mapping code looked correct.
+// This pins the wire shape so a renamed tag fails here instead of as blank covers in the UI.
+func TestYoutubeTrackJSONUsesCamelCase(t *testing.T) {
+	raw, err := json.Marshal(youtubeTrack{
+		NativeID: "v1", Source: "youtube-music", URN: "youtube:video:v1", Title: "T",
+		ArtworkURL: "https://img", DurationMs: 1000, ViewCount: 5, LikeCount: 2,
+		CategoryID: "10", ChannelID: "UC-1", SubscriberCount: 9, Artist: "A", Published: "2024-01-01",
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	body := string(raw)
+	for _, key := range []string{`"artworkUrl"`, `"durationMs"`, `"viewCount"`, `"likeCount"`, `"categoryId"`, `"channelId"`, `"subscriberCount"`, `"publishedAt"`} {
+		if !strings.Contains(body, key+":") {
+			t.Errorf("track JSON missing %s: %s", key, body)
+		}
+	}
+	for _, key := range []string{`"artwork_url"`, `"duration_ms"`, `"view_count"`, `"like_count"`, `"category_id"`, `"channel_id"`, `"subscriber_count"`, `"published_at"`} {
+		if strings.Contains(body, key) {
+			t.Errorf("track JSON uses snake_case %s: %s", key, body)
+		}
+	}
+}
 
 func TestYoutubeRPCMethodNamesAreTheContract(t *testing.T) {
 	methods := rpcMethods()
@@ -740,6 +955,9 @@ func TestYoutubeRPCMethodNamesAreTheContract(t *testing.T) {
 		"youtube.playlists.mine",
 		"youtube.playlist.tracks",
 		"youtube.track.details",
+		"youtube.artist.profile",
+		"youtube.artist.tracks",
+		"youtube.artist.playlists",
 		"youtube.search.tracks",
 		"youtube.user.profile",
 	} {

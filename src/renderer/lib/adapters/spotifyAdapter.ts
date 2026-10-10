@@ -12,7 +12,7 @@ import type { AdapterTrackStream, AuthResult, LikeResult, ServiceAdapter } from 
 import { loadCredentials, saveCredentials } from '../credentialStore';
 import { identityFor } from '../serviceIdentity';
 
-const SPOTIFY_REDIRECT_URI = 'http://localhost:8888/callback';
+const SPOTIFY_REDIRECT_URI = 'http://127.0.0.1:8888/callback';
 /** How often to ask the Rust side what the authorization window has produced. */
 const SPOTIFY_POLL_INTERVAL_MS = 700;
 

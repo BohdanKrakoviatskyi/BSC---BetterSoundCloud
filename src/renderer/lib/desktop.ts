@@ -132,6 +132,7 @@ export type SpotifyRecommendRequest = { seedTrackIds?: string[]; seedArtists?: s
 
 export type YouTubeAuthProfile = { id: string; email?: string; name?: string; picture?: string };
 export type YouTubeAuthStatus = { authorized: boolean; profile?: YouTubeAuthProfile; expiresAt?: number };
+export type YouTubeBundledCredentials = { clientId: string; clientSecret: string; configured: boolean };
 export type YouTubeTrack = {
   nativeId: string;
   source: string;
@@ -141,7 +142,10 @@ export type YouTubeTrack = {
   artworkUrl?: string;
   durationMs: number;
   viewCount?: number;
+  likeCount?: number;
   categoryId?: string;
+  channelId?: string;
+  subscriberCount?: number;
   artist: string;
   publishedAt?: string;
 };
@@ -163,6 +167,17 @@ export type YouTubePlaylist = {
   artist: string;
 };
 export type YouTubePlaylistPage = { playlists: YouTubePlaylist[]; nextPageToken?: string };
+export type YouTubeArtistProfile = {
+  channelId: string;
+  title: string;
+  description?: string;
+  avatarUrl?: string;
+  bannerUrl?: string;
+  subscriberCount?: number;
+  videoCount?: number;
+  uploadsPlaylistId?: string;
+};
+export type YouTubeArtistPageRequest = { id: string; pageToken?: string; limit?: number };
 export type YouTubeSearchRequest = { query: string; pageToken?: string; limit?: number };
 export type YouTubePageRequest = { pageToken?: string; limit?: number; musicOnly?: boolean };
 type BackendResponse<T> = { id: number; result?: T; error?: string };
@@ -434,12 +449,18 @@ class LocalBackend {
   }
 
   // Google needs no credentials here: its refresh grant is authorized by the refresh token alone.
-  async youtubeAuthRefresh(): Promise<YouTubeAuthStatus> {
-    return this.request<YouTubeAuthStatus>('youtube.auth.refresh', {}, 30_000);
+  async youtubeAuthRefresh(clientId: string, clientSecret: string): Promise<YouTubeAuthStatus> {
+    return this.request<YouTubeAuthStatus>('youtube.auth.refresh', { clientId, clientSecret }, 30_000);
   }
 
   async youtubeAuthLogout(): Promise<YouTubeAuthStatus> {
     return this.request<YouTubeAuthStatus>('youtube.auth.logout', {}, 10_000);
+  }
+
+  // Build-time bundled OAuth credentials for one-click sign-in (empty when the app was built
+  // without them). Read once per session by the adapter; never written to any store.
+  async youtubeBundledCredentials(): Promise<YouTubeBundledCredentials> {
+    return invoke<YouTubeBundledCredentials>('youtube_bundled_credentials');
   }
 
   async youtubeMyTracks(pageToken?: string, limit?: number, musicOnly?: boolean): Promise<YouTubeTrackPage> {
@@ -464,6 +485,25 @@ class LocalBackend {
 
   async youtubeUserProfile(): Promise<YouTubeAuthProfile> {
     return this.request<YouTubeAuthProfile>('youtube.user.profile', {}, 20_000);
+  }
+
+  async youtubeArtistProfile(id: string): Promise<YouTubeArtistProfile> {
+    return this.request<YouTubeArtistProfile>('youtube.artist.profile', { id }, 20_000);
+  }
+
+  async youtubeArtistTracks(id: string, pageToken?: string, limit?: number): Promise<YouTubeTrackPage> {
+    return this.request<YouTubeTrackPage>('youtube.artist.tracks', { id, pageToken, limit }, 30_000);
+  }
+
+  async youtubeArtistPlaylists(id: string, pageToken?: string, limit?: number): Promise<YouTubePlaylistPage> {
+    return this.request<YouTubePlaylistPage>('youtube.artist.playlists', { id, pageToken, limit }, 30_000);
+  }
+
+  // Direct audio URL for a YouTube video, resolved by the Rust side through the bundled yt-dlp
+  // sidecar. Asked at play time: the URLs expire after a few hours, so caching one past the
+  // current track would serve a dead link.
+  async youtubeAudioUrl(videoId: string): Promise<string> {
+    return invoke<string>('youtube_audio_url', { videoId });
   }
 
   async spotifyAuthStatus(): Promise<SpotifyAuthStatus> {
