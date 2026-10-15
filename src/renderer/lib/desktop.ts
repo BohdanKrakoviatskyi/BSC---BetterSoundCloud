@@ -161,6 +161,18 @@ export type YouTubeTrackCollection = {
   madeForYou?: boolean;
 };
 
+/**
+ * What videos.rate left behind.
+ *
+ * `id` comes back because the heart button applies the result to a row, and a user who changes
+ * their mind about two tracks quickly has two calls in flight. `liked` is what was asked for
+ * rather than what the server echoed, because a 204 No Content gives nothing back to echo.
+ */
+export type YouTubeRatingResult = {
+  id: string;
+  liked: boolean;
+};
+
 export type YouTubeTrackPage = {
   tracks: YouTubeTrack[];
   nextPageToken?: string;
@@ -493,6 +505,18 @@ class LocalBackend {
 
   async youtubeDiscover(): Promise<YouTubeTrackCollection[]> {
     return this.request<YouTubeTrackCollection[]>('youtube.discover', {}, 30_000);
+  }
+
+  /**
+   * Like or unlike a track through videos.rate.
+   *
+   * This is the only write the sidecar makes to YouTube and it is expensive — 50 units against a
+   * shared 10,000 a day — so the timeout is generous and there is no client-side retry anywhere in
+   * this path. A retry after a response that was lost in transit would rate the video twice, which
+   * is free, at the cost of a second 50 units, which is not.
+   */
+  async youtubeRateTrack(videoId: string, rating: 'like' | 'none'): Promise<YouTubeRatingResult> {
+    return this.request<YouTubeRatingResult>('youtube.rate.track', { id: videoId, rating }, 30_000);
   }
 
   async youtubeSearchTracks(query: string, pageToken?: string, limit?: number): Promise<YouTubeTrackPage> {

@@ -4,7 +4,7 @@ import type { ServiceCredentials } from '../../domain/models';
 import { desktop } from '../desktop';
 import type { YouTubeArtistProfile, YouTubeAuthProfile, YouTubePlaylist, YouTubeTrack, YouTubeTrackPage } from '../desktop';
 import { loadCredentials, saveCredentials } from '../credentialStore';
-import type { AdapterTrackStream, AuthResult, ServiceAdapter } from '../serviceAdapter';
+import type { AdapterTrackStream, AuthResult, LikeResult, ServiceAdapter } from '../serviceAdapter';
 import { identityFor } from '../serviceIdentity';
 
 /**
@@ -431,9 +431,23 @@ export const youtubeMusicAdapter: ServiceAdapter = {
     }));
   },
 
-  // No likeTrack. Writing a rating needs the force-ssl scope, and the app asks only for readonly —
-  // requesting write access to a user's YouTube account for a feature that cannot play the audio
-  // anyway would be a poor trade.
+  async likeTrack(track: Track): Promise<LikeResult> {
+    // videos.rate, and it is worth being precise about what that does: it records the user's own
+    // rating of a video. It does not move the video's public like counter, which is aggregated across
+    // every viewer and cannot be set by a client. What it does is add the video to the positively
+    // rated playlist, which is the same list myTracks() reads — so on YouTube a heart is a save.
+    //
+    // 50 units per call against 10,000 a day, which is why nothing retries here beyond the
+    // expired-token case: that one only fires after a 401, where nothing was recorded, so a second
+    // attempt cannot double-charge.
+    const result = await withRefreshRetry(() => desktop.youtubeRateTrack(track.nativeId ?? '', 'like'));
+    return { liked: result.liked };
+  },
+
+  async unlikeTrack(track: Track): Promise<LikeResult> {
+    const result = await withRefreshRetry(() => desktop.youtubeRateTrack(track.nativeId ?? '', 'none'));
+    return { liked: result.liked };
+  },
 
   // No artist, follower or history methods, for the same reasons as the Spotify adapter: the artist
   // endpoints are a later phase, and history in the sidecar is keyed by SoundCloud ids.

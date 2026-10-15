@@ -99,8 +99,8 @@ const YOUTUBE_REDIRECT_PATH: &str = "/callback";
 /// the established pattern rather than a leak. The values are never logged and never persisted —
 /// only held in memory for the exchange/refresh calls that need them.
 ///
-/// force-ssl is deliberately absent. It is what a rating write would need, and playback needs no
-/// scope at all: audio URLs are resolved locally through the bundled yt-dlp sidecar.
+/// Playback needs no YouTube scope at all: audio URLs are resolved locally through the bundled
+/// yt-dlp sidecar. See YOUTUBE_SCOPES for what is asked for and why.
 const YOUTUBE_BUNDLED_CLIENT_ID: Option<&str> = option_env!("BSC_YOUTUBE_CLIENT_ID");
 const YOUTUBE_BUNDLED_CLIENT_SECRET: Option<&str> = option_env!("BSC_YOUTUBE_CLIENT_SECRET");
 
@@ -122,7 +122,18 @@ fn youtube_bundled_credentials() -> YoutubeBundledCredentials {
     YoutubeBundledCredentials { client_id, client_secret, configured }
 }
 
-const YOUTUBE_SCOPES: &str = "https://www.googleapis.com/auth/youtube.readonly openid email profile";
+/// Read plus rate.
+///
+/// force-ssl is here for one reason: videos.rate, the only write the app makes, needs it. It is a
+/// narrower ask than youtube — no upload, no deletion — and it buys the heart button, which adds a
+/// track to the liked playlist that the library is read from. Reading alone would leave the app able
+/// to show a track and unable to keep it.
+///
+/// Adding a scope invalidates existing sessions: a user signed in before this will have to grant
+/// it again, and the sidecar says so rather than returning an opaque 403 from the first like.
+const YOUTUBE_SCOPES: &str =
+    "https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube.force-ssl \
+openid email profile";
 
 /// Credentials captured from the SoundCloud web session.
 ///
