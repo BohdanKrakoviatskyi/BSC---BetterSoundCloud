@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { ArtistProfile, Playlist, SocialUser, Track, TrackDetails, TrackCollection, TrackLyrics } from '../domain/models';
 import { appGateway } from '../lib/appGateway';
@@ -119,6 +119,20 @@ export function App() {
   useEffect(() => setPlaybackPositionMs(0), [currentTrack?.id]);
   const historyWriteRef = useRef<Promise<void>>(Promise.resolve());
   const historyMutationRef = useRef(0);
+  // The home page's "Недавние" row, narrowed to the tracks that are in the library.
+  //
+  // Everything that has been played used to land there, including tracks the user never liked and
+  // ones they have since removed, which made the row a log rather than a shortcut. Matching against
+  // `tracks` is the library as the active service reports it — the same list the heart button and
+  // "Мои треки" are built from — so the two can never disagree about what is saved.
+  //
+  // Matching on `id`, not `nativeId`: history is written by the sidecar keyed by its own ids, and
+  // both sides of the comparison are already in the same identity space.
+  const libraryTrackIds = useMemo(() => new Set(tracks.map((track) => track.id)), [tracks]);
+  const libraryHistory = useMemo(
+    () => history.filter((track) => libraryTrackIds.has(track.id)),
+    [history, libraryTrackIds],
+  );
   const [detailsTrack, setDetailsTrack] = useState<TrackDetails | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsError, setDetailsError] = useState('');
