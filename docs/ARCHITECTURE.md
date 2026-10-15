@@ -1,4 +1,4 @@
-# Архитектура BetterSoundCloud
+# Архитектура Resonance
 
 ## Текущая реализация
 

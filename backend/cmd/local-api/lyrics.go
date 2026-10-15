@@ -60,7 +60,7 @@ type lyricsQuery struct {
 	Duration      int64
 }
 
-const lyricsUserAgent = "BetterSoundCloud/0.1.0 (lyrics sidebar)"
+const lyricsUserAgent = "Resonance/0.1.0 (lyrics sidebar)"
 
 var (
 	lyricsNoisePatterns = []*regexp.Regexp{

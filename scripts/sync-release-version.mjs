@@ -36,7 +36,10 @@ const cargoLock = fs.readFileSync('src-tauri/Cargo.lock', 'utf8');
 fs.writeFileSync(
   'src-tauri/Cargo.lock',
   cargoLock.replace(
-    /(name = "better-soundcloud"\nversion = )"[^"]+"/,
+    // \r? because Cargo.lock is CRLF on a Windows checkout (core.autocrlf, no .gitattributes)
+    // and LF everywhere else. A bare \n never matched on Windows, so the version was silently
+    // never written — the script reported success either way.
+    /(name = "resonance"\r?\nversion = )"[^"]+"/,
     `$1"${version}"`,
   ),
 );

@@ -1502,7 +1502,7 @@ export function App() {
               selections={selections}
               loading={selectionsLoading}
               error={selectionsError}
-              history={history}
+              history={libraryHistory}
               historyLoading={historyLoading}
               historyError={historyError}
               artistFallback={profile?.username}
@@ -1709,7 +1709,7 @@ export function App() {
       {logoutDialogOpen && <ConfirmDialog
         eyebrow="АККАУНТ SOUNDCLOUD"
         title="Выйти из аккаунта?"
-        description="Аккаунт будет отключён только в BetterSoundCloud. Доступ к нему в браузере и других приложениях не изменится."
+        description="Аккаунт будет отключён только в Resonance. Доступ к нему в браузере и других приложениях не изменится."
         confirmLabel="Выйти"
         busyLabel="Выходим…"
         busy={logoutBusy}

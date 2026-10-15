@@ -26,7 +26,7 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 
 const LRCLIB = 'https://lrclib.net/api';
-const USER_AGENT = 'BetterSoundCloud-coverage-bench/0.1 (local dev script)';
+const USER_AGENT = 'Resonance-coverage-bench/0.1 (local dev script)';
 
 const args = process.argv.slice(2);
 const flag = (name, fallback) => {

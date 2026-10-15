@@ -24,7 +24,7 @@ Success means a user opens the app, connects their SoundCloud account, and their
 
 ## Positioning
 
-The user's own SoundCloud account, on their own machine, in one persistent window that behaves like software rather than a website. Tokens are stored locally with `0600` permissions and never leave the Go sidecar, never reach `localStorage`, and the app needs no account of its own — there is no BetterSoundCloud user, only the user's SoundCloud identity.
+The user's own SoundCloud account, on their own machine, in one persistent window that behaves like software rather than a website. Tokens are stored locally with `0600` permissions and never leave the Go sidecar, never reach `localStorage`, and the app needs no account of its own — there is no Resonance user, only the user's SoundCloud identity.
 
 The differentiator against the official SoundCloud desktop app is the *use*: lyrics, a local library view, and personalisation (accent color, compact mode, background image) that persists offline.
 
@@ -51,7 +51,7 @@ The differentiator against the official SoundCloud desktop app is the *use*: lyr
 
 ## Brand Commitments
 
-- **Name:** BetterSoundCloud.
+- **Name:** Resonance.
 - **Language: Russian only, confirmed as a standing commitment.** All user-facing copy, including accessible names and error messages, is written in Russian. Future work preserves this; do not introduce an i18n framework or English strings.
 - **Voice:** the existing UI uses plain, direct, non-marketing Russian — "Выйти", "Повторить", "Ничего не найдено", "Показать больше". No exclamation marks, no persuasion, no product claims. Preserve the register; `clarify` work should tighten it, never brighten it.
 - **Identity is user-owned, not imposed.** Accent color, background image, compact mode and volume are all user-set, and the interface recedes behind them. New design work must not hardcode a look that fights a user-chosen accent or background.

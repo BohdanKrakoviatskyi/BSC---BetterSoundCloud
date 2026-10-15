@@ -172,7 +172,7 @@ jobs:
         with:
           tauriScript: npx tauri
           tagName: ${{ inputs.tag || github.ref_name }}
-          releaseName: BetterSoundCloud ${{ inputs.tag || github.ref_name }}
+          releaseName: Resonance ${{ inputs.tag || github.ref_name }}
           releaseBody: See the release assets to download and install this version.
           releaseDraft: false
           prerelease: false
@@ -194,7 +194,7 @@ jobs:
         with:
           tauriScript: npx tauri
           tagName: ${{ inputs.tag || github.ref_name }}
-          releaseName: BetterSoundCloud ${{ inputs.tag || github.ref_name }}
+          releaseName: Resonance ${{ inputs.tag || github.ref_name }}
           releaseBody: See the release assets to download and install this version.
           releaseDraft: false
           prerelease: false

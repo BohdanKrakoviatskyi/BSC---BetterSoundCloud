@@ -1,8 +1,8 @@
 [package]
-name = "better-soundcloud"
+name = "resonance"
 version = "0.2.0"
-description = "BetterSoundCloud desktop application"
-authors = ["BetterSoundCloud"]
+description = "Resonance desktop application"
+authors = ["Resonance"]
 edition = "2021"
 
 [build-dependencies]

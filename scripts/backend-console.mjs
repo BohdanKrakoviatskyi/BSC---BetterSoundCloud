@@ -166,7 +166,7 @@ if (cliArgs.length > 0) {
   if (message) print(message);
   shutdown(message?.error ? 1 : 0);
 } else {
-  console.log('BetterSoundCloud local-api — тестовая консоль backend');
+  console.log('Resonance local-api — тестовая консоль backend');
   printHelp();
   const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: 'bsc> ' });
   rl.prompt();

@@ -1418,7 +1418,7 @@ fn main() {
             youtube_bundled_credentials,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running BetterSoundCloud");
+        .expect("error while running Resonance");
 }
 
 #[cfg(test)]

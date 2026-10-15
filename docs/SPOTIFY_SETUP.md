@@ -14,7 +14,7 @@ localhost и перехват кода выполняет само прилож�
 2. Нажми **Create app**.
 3. Заполни:
    - **App name** — например `BSC`
-   - **App description** — `BetterSoundCloud на десктопе`
+   - **App description** — `Resonance на десктопе`
    - **Redirect URI** — см. следующий раздел, значение must be exact
 4. Нажми **Save**.
 

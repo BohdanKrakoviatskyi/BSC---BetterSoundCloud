@@ -61,7 +61,7 @@ export function AuthScreen({ error, busy, clientId, onLogin, onSilentLogin }: Pr
     }
     theme.setAttribute('content', '#000000');
     // This screen is the first thing a user sees; the app shell owns the title once it takes over.
-    return () => { document.title = 'BetterSoundCloud'; };
+    return () => { document.title = 'Resonance'; };
   }, []);
 
   useEffect(() => {
