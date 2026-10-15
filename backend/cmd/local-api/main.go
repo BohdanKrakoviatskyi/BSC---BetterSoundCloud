@@ -22,9 +22,13 @@ import (
 )
 
 const (
-	appName    = "BetterSoundCloud"
+	appName    = "Resonance"
 	appVersion = "0.1.0"
-	maxLine    = 1 << 20
+	// legacyAppName is where this sidecar kept its files before the rename to Resonance. Only
+	// migrateLegacyDataDir reads it, and only to move those files once; it is not a second
+	// supported location, and nothing writes to it again.
+	legacyAppName = "BetterSoundCloud"
+	maxLine       = 1 << 20
 	// maxRequestBytes is the true ceiling on a single request line.
 	//
 	// maxLine is kept only for reference: it is far too small for anything carrying a
@@ -2289,7 +2293,74 @@ func appDataDir() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(userConfig, "BetterSoundCloud"), nil
+	return migrateLegacyDataDir(filepath.Join(userConfig, appName), filepath.Join(userConfig, legacyAppName)), nil
+}
+
+// migrateLegacyDataDir carries the files from the previous app name across to the current one.
+//
+// It is written to be safe to run more than once rather than guarded by a marker file. Each file is
+// copied only when the new location does not already have it, so a run interrupted halfway resumes
+// where it stopped instead of leaving half a profile behind, and a user who has already been
+// migrated pays nothing for the check.
+//
+// The old directory is left in place. Deleting it is the one irreversible step here and it is not
+// worth taking to save a few hundred kilobytes: if the copy turns out to have missed something, the
+// original is still there to fall back to.
+//
+// Failures are logged and swallowed. A migration problem must not stop the app from starting — the
+// user would see a signed-out app with no way to tell it apart from a real session problem.
+func migrateLegacyDataDir(dir, legacy string) string {
+	entries, err := os.ReadDir(legacy)
+	if err != nil {
+		// No previous install, which is the ordinary case for a fresh machine.
+		return dir
+	}
+
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		log.Printf("data_dir stage=migrate_mkdir_failed dir=%q error=%q", dir, err.Error())
+		return dir
+	}
+
+	moved := 0
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		target := filepath.Join(dir, entry.Name())
+		if _, err := os.Stat(target); err == nil {
+			continue
+		}
+		if err := copyDataFile(filepath.Join(legacy, entry.Name()), target); err != nil {
+			log.Printf("data_dir stage=migrate_copy_failed file=%q error=%q", entry.Name(), err.Error())
+			continue
+		}
+		moved++
+	}
+
+	if moved > 0 {
+		log.Printf("data_dir stage=migrated from=%q to=%q files=%d", legacy, dir, moved)
+	}
+	return dir
+}
+
+// copyDataFile copies one file, keeping the source file's permissions.
+//
+// The token files are written 0600 on Unix and that is enforced there. It is worth being honest that
+// the same call does nothing on Windows: Go's os package ignores every bit of the mode argument
+// there except the write bit and reports 0666 for any writable file, so a file created 0600 on
+// Windows already reports 0666. What still holds on both is that the copy is no more permissive than
+// its source — a widening here would be a real bug even where the numbers never differ. On Windows
+// the protection is the profile ACL that %APPDATA% sits behind, not the mode.
+func copyDataFile(from, to string) error {
+	data, err := os.ReadFile(from)
+	if err != nil {
+		return err
+	}
+	mode := os.FileMode(0o600)
+	if info, err := os.Stat(from); err == nil {
+		mode = info.Mode().Perm()
+	}
+	return os.WriteFile(to, data, mode)
 }
 
 func apiBase() string {
