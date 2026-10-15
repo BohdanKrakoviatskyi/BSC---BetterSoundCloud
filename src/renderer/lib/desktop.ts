@@ -149,6 +149,18 @@ export type YouTubeTrack = {
   artist: string;
   publishedAt?: string;
 };
+/**
+ * One home page row. Mirrors the frontend TrackCollection so the same section renders for every
+ * service; madeForYou stays false because nothing YouTube returns is personal.
+ */
+export type YouTubeTrackCollection = {
+  id: string;
+  title: string;
+  description?: string;
+  tracks: YouTubeTrack[];
+  madeForYou?: boolean;
+};
+
 export type YouTubeTrackPage = {
   tracks: YouTubeTrack[];
   nextPageToken?: string;
@@ -477,6 +489,10 @@ class LocalBackend {
 
   async youtubeTrackDetails(id: string): Promise<YouTubeTrack> {
     return this.request<YouTubeTrack>('youtube.track.details', { id }, 30_000);
+  }
+
+  async youtubeDiscover(): Promise<YouTubeTrackCollection[]> {
+    return this.request<YouTubeTrackCollection[]>('youtube.discover', {}, 30_000);
   }
 
   async youtubeSearchTracks(query: string, pageToken?: string, limit?: number): Promise<YouTubeTrackPage> {

@@ -414,9 +414,21 @@ export const youtubeMusicAdapter: ServiceAdapter = {
   },
 
   async mixedSelections(): Promise<TrackCollection[]> {
-    // No equivalent on YouTube. An empty list leaves the section empty rather than showing a broken
-    // one.
-    return [];
+    // YouTube has no personalised equivalent of SoundCloud's mixed selections — the Data API
+    // recommends nothing to anybody. What it has is the regional music chart and themed searches, so
+    // the rows are named for what they are instead of claiming to know the listener.
+    //
+    // Quota is why this is one call rather than one per row: the sidecar caches the whole set and
+    // refetches only once the stored copy is stale, so a launch does not spend YouTube's daily search
+    // budget. A failure here leaves the section empty, as it was before.
+    const rows = await withRefreshRetry(() => desktop.youtubeDiscover());
+    return rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      description: row.description,
+      tracks: row.tracks.map(toTrack),
+      madeForYou: row.madeForYou ?? false,
+    }));
   },
 
   // No likeTrack. Writing a rating needs the force-ssl scope, and the app asks only for readonly —

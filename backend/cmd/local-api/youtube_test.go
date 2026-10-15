@@ -955,6 +955,7 @@ func TestYoutubeRPCMethodNamesAreTheContract(t *testing.T) {
 		"youtube.playlists.mine",
 		"youtube.playlist.tracks",
 		"youtube.track.details",
+		"youtube.discover",
 		"youtube.artist.profile",
 		"youtube.artist.tracks",
 		"youtube.artist.playlists",

@@ -201,6 +201,9 @@ func (s *service) RPCYoutubeAuthLogout(_ emptyParams) (youtubeAuthStatus, error)
 	if err := removeFileIfExists(s.youtubePath); err != nil {
 		return youtubeAuthStatus{}, err
 	}
+	// The cached home page rows were fetched under the session that just ended, and they are not
+	// personal either way, so they are dropped rather than kept for whoever signs in next.
+	s.youtubeDiscoverClearCache()
 	return youtubeAuthStatus{Authorized: false}, nil
 }
 

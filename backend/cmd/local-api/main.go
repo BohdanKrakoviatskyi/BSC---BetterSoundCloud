@@ -386,6 +386,10 @@ type service struct {
 	// out of one must never touch another, and a Google token means nothing to a Spotify session.
 	youtubePath string
 	youtubeAuth youtubeAuthState
+	// Where the home page rows are cached. Search results go stale, and YouTube gives search.list a
+	// separate budget of 100 calls a day, so a set refetched on every launch would spend that in
+	// twenty-five launches. Refetched only once the stored set is older than the TTL.
+	youtubeDiscoverPath string
 	// Fields so tests can point at a stub.
 	youtubeAPIBase string
 	youtubeAuthURL string
@@ -424,12 +428,15 @@ func run(input io.Reader, output io.Writer) error {
 		spotifyAPIBase: spotifyDefaultAPIBase,
 		spotifyAuthURL: spotifyDefaultAuthURL,
 		youtubePath:    filepath.Join(dataDir, "youtube.json"),
-		youtubeAPIBase: youtubeDefaultAPIBase,
-		youtubeAuthURL: youtubeDefaultAuthURL,
-		historyPath:    filepath.Join(dataDir, "history.json"),
-		apiBase:        apiBase(),
-		httpClient:     &http.Client{Timeout: 15 * time.Second},
-		lyricsCache:    make(map[int64]cachedLyrics),
+		// 0600 like auth.json rather than the 0644 a plain cache would get: the rows name tracks and
+		// channels the user looked at, and this file sits beside the token files.
+		youtubeDiscoverPath: filepath.Join(dataDir, "youtube-discover.json"),
+		youtubeAPIBase:      youtubeDefaultAPIBase,
+		youtubeAuthURL:      youtubeDefaultAuthURL,
+		historyPath:         filepath.Join(dataDir, "history.json"),
+		apiBase:             apiBase(),
+		httpClient:          &http.Client{Timeout: 15 * time.Second},
+		lyricsCache:         make(map[int64]cachedLyrics),
 	}
 	if err := svc.loadSettings(); err != nil {
 		return err
@@ -2384,4 +2391,3 @@ func writeResponse(writer *bufio.Writer, value response) error {
 	}
 	return writer.Flush()
 }
-

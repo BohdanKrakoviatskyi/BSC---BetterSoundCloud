@@ -1,3 +1,4 @@
+import type { YouTubeTrackCollection } from '../renderer/lib/desktop';
 import type { AuthStatus, SoundCloudMixedSelection, SoundCloudPlaylist, SoundCloudSearchTrack, SoundCloudSocialPage, SoundCloudTrack, SoundCloudTrackDetails, SoundCloudTrackPage, SoundCloudUserProfile, SpotifyAuthProfile, SpotifyAuthStatus, SpotifyPlaylistPage, SpotifyRecommendRequest, SpotifySaveResult, SpotifyTrack, SpotifyTrackPage, TrackLikeResult, YouTubeAuthProfile, YouTubeAuthStatus, YouTubeBundledCredentials, YouTubePlaylistPage, YouTubeTrack, YouTubeTrackPage, TrackLyricsDTO, TrackStream } from '../renderer/lib/desktop';
 
 import type { Settings } from '../renderer/domain/models';
@@ -65,6 +66,7 @@ declare global {
       youtubeMyPlaylists(pageToken?: string, limit?: number): Promise<YouTubePlaylistPage>;
       youtubePlaylistTracks(id: string, pageToken?: string, limit?: number): Promise<YouTubeTrackPage>;
       youtubeTrackDetails(id: string): Promise<YouTubeTrack>;
+      youtubeDiscover(): Promise<YouTubeTrackCollection[]>;
       youtubeSearchTracks(query: string, pageToken?: string, limit?: number): Promise<YouTubeTrackPage>;
       youtubeUserProfile(): Promise<YouTubeAuthProfile>;
     };
