@@ -4,7 +4,7 @@
   "private": true,
   "description": "Локальный десктопный клиент для SoundCloud, Spotify и YouTube Music",
   "scripts": {
-    "dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
+    "dev": "node scripts/run-tauri-dev.mjs",
     "backend": "node scripts/backend-console.mjs",
     "test": "node --test scripts/*.test.mjs",
     "test:go": "cd backend && go test ./...",

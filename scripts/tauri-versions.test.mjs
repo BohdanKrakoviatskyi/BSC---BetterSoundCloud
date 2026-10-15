@@ -27,7 +27,8 @@ test('tauri npm/cargo minors match', () => {
   const lock = readFileSync(resolve(root, 'src-tauri/Cargo.lock'), 'utf8');
   for (const [npmName, crateName] of PAIRS) {
     const npmVersion = require(`./node_modules/${npmName}/package.json`).version;
-    const block = new RegExp(`name = "${crateName}"\nversion = "([^"]+)"`).exec(lock);
+    // \r? because Cargo.lock is CRLF on a Windows checkout and LF everywhere else.
+    const block = new RegExp(`name = "${crateName}"\\r?\\nversion = "([^"]+)"`).exec(lock);
     assert.ok(block, `crate ${crateName} missing from Cargo.lock`);
     assert.equal(
       minor(npmVersion),
