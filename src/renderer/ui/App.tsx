@@ -1155,23 +1155,34 @@ export function App() {
         // SoundCloud's own status above is the app's existing bootstrap and is left in charge when it is
         // the remembered service, or when it is signed in. The multi-service path only takes over when
         // the user last worked in something else and that service still has a session.
+        // Restoring the remembered service and loading the active service's data are two separate
+        // jobs. They used to be chained: the data load sat below the restore, so every early return
+        // in between skipped it — and the first of those returns fires whenever the user last worked
+        // in SoundCloud, which is the common case. Nothing loaded until the user switched services
+        // and back, because switchService loads without asking.
+        let restoredRemembered = false;
         const remembered = getLastActiveService();
-        if (remembered === 'soundcloud') return;
-        const stored = loadCredentials(remembered);
-        if (!stored) return;
-        const adapter = serviceManager.getAdapter(remembered);
-        if (!adapter) return;
-        try {
-          const restored = await adapter.authStatus();
-          if (!active || !restored.authorized) return;
-          console.info('[ui.startup] restoring remembered service', { service: remembered });
-          await switchService(remembered);
-        } catch (reason) {
-          // Falling through to the guest screen is the right outcome: a service that cannot be reached is
-          // a service that cannot be used, and the switcher still shows it as disconnected.
-          console.warn('[ui.startup] restore failed', { service: remembered, error: describeError(reason, 'unknown') });
+        if (remembered !== 'soundcloud') {
+          const stored = loadCredentials(remembered);
+          const adapter = stored ? serviceManager.getAdapter(remembered) : null;
+          if (adapter) {
+            try {
+              const restored = await adapter.authStatus();
+              if (active && restored.authorized) {
+                console.info('[ui.startup] restoring remembered service', { service: remembered });
+                await switchService(remembered);
+                restoredRemembered = true;
+              }
+            } catch (reason) {
+              // Falling through to the guest screen is the right outcome: a service that cannot be reached is
+              // a service that cannot be used, and the switcher still shows it as disconnected.
+              console.warn('[ui.startup] restore failed', { service: remembered, error: describeError(reason, 'unknown') });
+            }
+          }
         }
-        if (status.authorized) {
+
+        // Only when nothing took over: switchService has already loaded for the service it switched to.
+        if (!restoredRemembered && status.authorized) {
           void loadTracks();
           void loadPlaylists();
           void loadMixedSelections();
@@ -1186,8 +1197,7 @@ export function App() {
               }
             })
             .catch((reason: unknown) => console.error('[ui.auth.refresh] failed', { error: describeError(reason, 'unknown error') }));
-        }
-      })
+        }      })
       .catch((reason: unknown) => {
         if (!active) return;
         const message = describeError(reason, 'Локальный backend недоступен');
