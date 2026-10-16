@@ -38,7 +38,16 @@
     "macOS": {
       "signingIdentity": "-"
     },
-    "externalBin": ["binaries/local-api", "binaries/yt-dlp"]
+    "externalBin": [
+      "binaries/local-api",
+      "binaries/yt-dlp"
+    ],
+    "windows": {
+      "nsis": {
+        "installerHooks": "./windows/hooks.nsh",
+        "startMenuFolder": "Resonance"
+      }
+    }
   },
   "plugins": {
     "updater": {
