@@ -30,7 +30,8 @@ jobs:
       fail-fast: false
       max-parallel: 1
       matrix:
-        platform: ${{ inputs.platform != '' && inputs.platform != 'all' && fromJSON(format('["{0}"]', inputs.platform)) || fromJSON('["macos-latest"]') }}
+        platform:
+          - macos-latest
     steps:
       - name: Check out Swiftify repository
         uses: actions/checkout@v4
@@ -55,7 +56,7 @@ jobs:
         working-directory: swiftify
         shell: bash
         env:
-          RELEASE_VERSION: ${{ inputs.tag || github.ref_name }}
+          RELEASE_VERSION: ${{ github.event.inputs.tag || github.ref_name }}
         run: node scripts/sync-release-version.mjs
 
       - name: Set up Go
@@ -131,7 +132,7 @@ jobs:
         working-directory: swiftify
         shell: bash
         env:
-          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
           SIGNING_IDENTITY: ${{ steps.apple.outputs.identity }}
         run: |
           export PATH="$(brew --prefix qt@6)/bin:$PATH"
@@ -146,7 +147,7 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
         shell: bash
         run: |
           VERSION="${RELEASE_TAG#v}"
@@ -161,8 +162,8 @@ jobs:
       - name: Publish release to GitHub
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.tag || github.ref_name }}
-          name: Resonance ${{ inputs.tag || github.ref_name }}
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: Resonance ${{ github.event.inputs.tag || github.ref_name }}
           body: "See the release assets below to download and install this version."
           draft: false
           prerelease: false
