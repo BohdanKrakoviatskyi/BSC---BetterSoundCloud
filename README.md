@@ -1,178 +1,155 @@
-# Swiftify
+# Resonance
 
-a spotify player for desktop, built with Qt Quick on top of a Rust core that
-wraps [librespot](https://github.com/librespot-org/librespot). it follows
-Material 3 Expressive (heavy inspo from end4) and has an immersive player,
-synced lyrics, visualizers, an equalizer, and local files with local playlists
-where u can edit the tracks metadata.
-![Alt text](/assets/home.png)
-this apps purpose is to replace spotifys heavy webview client, but its also mostly eyecandy lol
-it runs significantly lighter than the spotify client.
+A high-performance, native desktop music player built with Qt 6 (QML / C++) and Rust, featuring seamless SoundCloud and Spotify integration, local music management, synchronized karaoke-style lyrics, dynamic spectrum visualizers, custom background wallpapers (images, GIFs, videos), and automated updates.
 
-**EVEN WITH THE EYECANDY TURNED ON....** it is lighter than spotify + spotifys renderers both on cpu AND ram!!!!!
+---
 
-id recommend turning the visualizers and background off if the app runs in the background tho lol
+## Features
 
-***anyways runs on linux (made for wayland and hyprland) macos, and windows.***
+- **SoundCloud & Spotify Integration**:
+  - Full SoundCloud streaming and browsing: user likes, playlists, artist tracks, and global search via native Go sidecar architecture.
+  - Spotify Premium playback powered by an ultra-fast Rust audio core (`librespot`), with full library, playlist, and search sync.
+- **Local Music Library**:
+  - Play and organize local audio files (MP3, FLAC, OGG, WAV, M4A/AAC, ALAC).
+  - Built-in metadata editor and album cover art extraction.
+- **Immersive Full-Screen Player**:
+  - Adaptive synced lyrics with ambient glow, explicit indicators, and a left-to-right karaoke color wipe effect.
+  - Live multi-band audio spectrum visualizer and responsive liquid backdrop.
+  - Multi-format background wallpapers: static images, animated GIFs, and looping video backgrounds.
+- **Material 3 Expressive Interface**:
+  - Dynamic palette generation adapting to the colors of the current track's album art.
+  - Smooth spring physics and fluid motion designed for low CPU/GPU overhead.
+- **Built-in Auto-Updates**:
+  - In-app update checking against GitHub Releases with real-time download progress and one-click installation.
+- **Lightweight & Efficient**:
+  - Native architecture running significantly lighter on CPU and memory than Electron- or WebView-based streaming apps.
 
-## previews
-first image shows equalizer, tempo and pitch settings. second picture shows how the immersive player and the visualizer/lyrics look
-<table border="0">
-  <tr>
-    <td><img src="/assets/eq.png" alt="equalizer and tempo" width="400"/></td>
-    <td><img src="/assets/immersive.png" alt="immersive player with visualizers" width="400"/></td>
-  </tr>
-</table>
+---
 
-> ### Note
-> i will probably not be maintaining it, if you are interested in taking over this project you can send me an email
+## System Requirements
 
-- [Before you start](#before-you-start)
-- [Building from source](#building-from-source)
-  - [Build requirements](#build-requirements)
-  - [macOS](#macos)
-  - [Linux](#linux)
-  - [Windows](#windows)
-- [Command line](#command-line)
+- **macOS**: 13.0 (Ventura) or newer (Apple Silicon & Intel)
+- **Linux**: Any modern distribution with Wayland or X11, PipeWire or PulseAudio
+- **Windows**: Windows 10 / 11 64-bit
 
-## Before you start
+---
 
-- **spotify premium.** playback goes through librespot, and that only works with premium.
-- **a spotify client id.** your library, playlists and search come from the spotify
-  web api through your own developer app. the first launch walks u through it:
-  make an app in the [spotify developer dashboard](https://developer.spotify.com/dashboard),
-  add `http://127.0.0.1:8898/login` as a redirect uri, and paste the apps client id
-  into swiftify. you dont need the client secret.
+## Building from Source
 
-## Building from source
+### Prerequisites
 
-### Build requirements
+- **Qt 6.9+**: Core, Gui, Network, Concurrent, Qml, Quick, QuickControls2, ShaderTools, Multimedia
+- **QCoro6** (0.10+) and **Qt6Keychain**
+- **CMake** (3.24+) and **Ninja**
+- **Rust Toolchain** (stable, via [rustup](https://rustup.rs))
+- **Go** (1.22+ for the SoundCloud backend sidecar)
+- **C++20** compatible compiler (Clang / GCC / MSVC)
 
-- Qt 6.9 or newer: Qt Base, Qt Declarative and Qt Shader Tools
-- QtKeychain and QCoro 0.10 or newer, both built for Qt 6
-- CMake 3.24 or newer, Ninja, and a C++20 compiler
-- Rust (stable, from [rustup](https://rustup.rs))
-
-the first cmake run needs internet: it pulls [Corrosion](https://github.com/corrosion-rs/corrosion)
-(which builds the rust core as part of the cmake build) and two fonts, Material Symbols
-Rounded and Google Sans Flex, each checked against a pinned hash.
-
-the builds below skip the tests with `-DBUILD_TESTING=OFF`. for a manual CMake
-build, drop that and run `ctest --test-dir build` if u want them.
+---
 
 ### macOS
 
-u need [homebrew](https://brew.sh) and apple's command line tools (`xcode-select --install`, or full xcode). then:
+Install build tools and libraries via [Homebrew](https://brew.sh):
 
-```sh
-brew install qtbase qtdeclarative qtshadertools qtkeychain qcoro6 cmake ninja
+```bash
+brew install cmake ninja qt@6 qcoro6 qtkeychain
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
-
-git clone https://github.com/shredos67/swiftify.git
-cd swiftify
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
-cmake --build build
-ditto build/swiftify.app /Applications/Swiftify.app
 ```
 
-it's signed ad hoc, so no developer account needed.
-with full xcode installed the icon gets compiled with `actool` and picks up macos 26's glass,
-dark and tinted looks; with just the command line tools it's built from the PNGs.
+Configure and build:
+
+```bash
+git clone https://github.com/BohdanKrakoviatskyi/BSC---BetterSoundCloud.git
+cd BSC---BetterSoundCloud
+
+# Configure CMake
+QT_PREFIX="$(brew --prefix qt@6)"
+QCORO_PREFIX="$(brew --prefix qcoro6)"
+KEYCHAIN_PREFIX="$(brew --prefix qtkeychain)"
+
+cmake -B build -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_PREFIX_PATH="$QT_PREFIX;$QCORO_PREFIX;$KEYCHAIN_PREFIX" \
+  -DBUILD_TESTING=OFF
+
+# Build
+cmake --build build --target swiftify
+```
+
+To create a standalone, fully bundled macOS `.dmg` and `.zip`:
+
+```bash
+./packaging/macos/package-dmg.sh build/swiftify.app release-artifacts 0.3.3 -
+```
+
+---
 
 ### Linux
 
-on arch either build a proper package, which installs to `/usr`:
+Install dependencies (example for Arch Linux):
 
-```sh
-git clone https://github.com/shredos67/swiftify.git
-cd swiftify/packaging/arch
-makepkg -si
+```bash
+sudo pacman -S --needed git qt6-base qt6-declarative qt6-shadertools qt6-multimedia \
+  qt6-wayland qtkeychain-qt6 qcoro libpulse alsa-lib openssl cmake ninja rust go pkgconf
 ```
-or use cmake:
 
-```sh
-# replace with your package manager if not on arch
-sudo pacman -S --needed git qt6-base qt6-declarative qt6-shadertools qt6-wayland qtkeychain-qt6 qcoro libpulse alsa-lib openssl cmake ninja rust pkgconf
+Build and install:
 
-git clone https://github.com/shredos67/swiftify.git
-cd swiftify
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX="$HOME/.local"
+```bash
+cmake -B build -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX="$HOME/.local" \
+  -DBUILD_TESTING=OFF
+
 cmake --build build
 cmake --install build
 ```
 
-anywhere else, install the same reqs (Qt 6.9+ with D-Bus, OpenGL and Wayland, QtKeychain
-and QCoro for Qt 6, libpulse, plus the ALSA, OpenSSL and pkg-config dev packages), then
-run the last five lines above.
+The app integrates with system MPRIS (media keys, `playerctl`, lock screen widgets) and system tray.
 
-`cmake --install` drops `swiftify` in `~/.local/bin` (make sure that's on your `PATH`)
-and the desktop entry, icons and fonts in `~/.local/share`. 
-
-your login gets saved in the secret service through QtKeychain, so u need something
-providing one: gnome-keyring, kwallet or keepassxc.
-
-on linux it also hooks into MPRIS (media keys, `playerctl`, shell media widgets),
-logind (pauses before the machine sleeps), pipewire/pulseaudio device changes, and
-the tray. `-DSWIFTIFY_DESKTOP_INTEGRATION=OFF` turns those off.
+---
 
 ### Windows
 
-**because most Windows users cant even use their own OS, i made a script that handles building so it's as simple as possible :)**
-
-first install Qt 6.9+ with *Qt Shader Tools*, CMake and Ninja from the Qt online installer,
-Rust from [rustup](https://rustup.rs), and Git. choose either Qt for *MSVC 2022 64-bit*
-with Visual Studio 2022 17.1+ (or Build Tools) and its *Desktop development with C++*
-workload, or Qt for *MinGW 64-bit* with its matching MinGW toolchain.
-
-then run this in Windows PowerShell:
+Install Qt 6.9+, CMake, Ninja, Rust, and Visual Studio 2022 C++ Build Tools or MinGW 64-bit:
 
 ```powershell
-git clone https://github.com/shredos67/swiftify.git
-Set-Location swiftify
-.\tools\build-windows.ps1
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+cmake --build build
 ```
 
-for a different Qt kit, toolchain location or install directory, pass overrides:
+---
 
-```powershell
-.\tools\build-windows.ps1 -QtPath 'C:\Qt\6.11.2\msvc2022_64'
-.\tools\build-windows.ps1 -QtPath 'C:\Qt\6.9.3\mingw_64' -MingwPath 'C:\Qt\Tools\mingw1310_64\bin' -InstallPrefix "$env:LOCALAPPDATA\Programs\Swiftify"
-```
+## Command Line Controls
 
-adjust the example paths to your installed versions, MinGW must match your Qt
-kit, not just the example folder name. 
+Resonance supports single-instance IPC. Launching a command while the player is running forwards the action immediately:
 
-quit a running installed copy through its tray menu before updating it.
-
-if PowerShell blocks the script, review it first, then run
-`powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build-windows.ps1`.
-this applies only to that process, not your machine's execution policy.
-
-start the installed app with:
-
-```powershell
-& "$env:LOCALAPPDATA\Programs\Swiftify\bin\swiftify.exe"
-```
-
-font downloads are hash-checked on every configure; on Windows, a failed CMake
-download is retried with `curl.exe` using the system certificate store.
-
-## Command line
-
-only one swiftify runs at a time. launching it again just passes the command to the one
-that's already running, so these work great as keybinds:
-
-| flag | |
+| Option | Action |
 |---|---|
-| `--immersive` | open the immersive player |
-| `--play-pause` | play or pause |
-| `--next` | next song |
-| `--previous` | previous song |
+| `--immersive` | Toggle full-screen immersive player |
+| `--close-immersive` | Exit immersive player |
+| `--play-pause` | Play or pause current playback |
+| `--next` | Skip to the next track |
+| `--previous` | Return to previous track |
+| `home` | Navigate to Home view |
+| `playlists` | Navigate to Playlists view |
+| `songs` | Navigate to Saved Songs view |
 
-on hyprland for example:
+Example keybinding configuration for Hyprland (`hyprland.conf`):
 
 ```ini
 bind = SUPER SHIFT, M, exec, swiftify --immersive
 bind = , XF86AudioPlay, exec, swiftify --play-pause
+bind = , XF86AudioNext, exec, swiftify --next
+bind = , XF86AudioPrev, exec, swiftify --previous
 ```
+
+---
+
+## Releases & Automated Builds
+
+Production builds are automated with GitHub Actions (`.github/workflows/release.yml`):
+- Pushing a version tag (e.g. `git tag v0.3.4 && git push origin v0.3.4`) triggers an automated build.
+- Generates notarized and codesigned standalone macOS `.dmg` and `.zip` distribution bundles.
+- Automatically publishes release assets to the repository release page.
