@@ -81,13 +81,20 @@ jobs:
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
         run: |
           if [ -n "$APPLE_CERTIFICATE" ]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
             echo "identity=$APPLE_SIGNING_IDENTITY" >> "$GITHUB_OUTPUT"
+            if [ -n "$APPLE_ID" ]; then
+              echo "notarize=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "notarize=false" >> "$GITHUB_OUTPUT"
+            fi
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
             echo "identity=-" >> "$GITHUB_OUTPUT"
+            echo "notarize=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Import Apple Developer certificate
@@ -141,7 +148,7 @@ jobs:
           ./packaging/macos/package-dmg.sh build/swiftify.app release-artifacts "$VERSION" "$SIGNING_IDENTITY"
 
       - name: Notarize DMG (Apple Developer)
-        if: runner.os == 'macOS' && steps.apple.outputs.enabled == 'true' && secrets.APPLE_ID != ''
+        if: runner.os == 'macOS' && steps.apple.outputs.notarize == 'true'
         working-directory: swiftify
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
