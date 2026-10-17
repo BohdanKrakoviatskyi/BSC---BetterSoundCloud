@@ -22,13 +22,27 @@ ListView {
     property string emptyDescription
     property bool allowsPlaylistRemoval: false
     property bool reorderable: false
+    property bool loadingMore: false
+
+    signal loadMoreRequested()
+
+    function checkLoadMore() {
+        if (contentHeight > height && (atYEnd || contentY + height >= contentHeight - 800)) {
+            loadMoreRequested()
+        }
+    }
+
+    onContentYChanged: checkLoadMore()
+    onAtYEndChanged: checkLoadMore()
+    onMovementEnded: checkLoadMore()
+    onFlickEnded: checkLoadMore()
 
     readonly property real margin: Appearance.sizes.pageMargin
 
     model: loading ? null : songs
     boundsBehavior: Flickable.StopAtBounds
     reuseItems: true
-    cacheBuffer: 600
+    cacheBuffer: 200
     bottomMargin: Appearance.sizes.playerBarClearance
     ScrollBar.vertical: StyledScrollBar { topPadding: 3 + Appearance.sizes.topBarHeight }
 
@@ -138,5 +152,15 @@ ListView {
         radius: 1
         visible: from >= 0
         color: Appearance.colors.primary
+    }
+
+    footer: Item {
+        width: root.width
+        height: root.loadingMore ? 60 : 0
+        visible: root.loadingMore
+
+        LoadingSpinner {
+            anchors.centerIn: parent
+        }
     }
 }

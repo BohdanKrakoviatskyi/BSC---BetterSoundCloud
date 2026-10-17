@@ -168,6 +168,18 @@ void SongListModel::append(const Song &song)
     emit countChanged();
 }
 
+void SongListModel::appendSongs(const QList<Song> &songs)
+{
+    if (songs.isEmpty()) {
+        return;
+    }
+    const int start = int(m_songs.size());
+    beginInsertRows({}, start, start + int(songs.size()) - 1);
+    m_songs.append(songs);
+    endInsertRows();
+    emit countChanged();
+}
+
 Song SongListModel::at(int row) const
 {
     return row >= 0 && row < m_songs.size() ? m_songs.at(row) : Song {};

@@ -22,3 +22,5 @@ target/
 *.swp
 *.swo
 *~
+third_party/local-api/
+release-artifacts/

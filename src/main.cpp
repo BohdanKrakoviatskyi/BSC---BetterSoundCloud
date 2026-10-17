@@ -3,12 +3,15 @@
 #include "app/Fonts.h"
 #include "app/Paths.h"
 #include "app/Settings.h"
+#include "app/UpdateManager.h"
 #include "artwork/ArtworkCache.h"
 #include "audio/AudioShaping.h"
 #include "core/RustCore.h"
 #include "library/LibraryStore.h"
 #include "library/LocalLibrary.h"
 #include "playback/PlaybackController.h"
+#include "provider/SidecarClient.h"
+#include "provider/SoundCloud.h"
 #include "render/SpectrumSource.h"
 #include "spotify/CredentialStore.h"
 #include "spotify/SpotifySession.h"
@@ -264,10 +267,17 @@ int main(int argc, char *argv[])
     AudioShaping sound(&core, &settings, &session);
     LocalLibrary localFiles(&settings);
     library.attachLocalFiles(&localFiles);
+    SidecarClient sidecar;
+    sidecar.start();
+    SoundCloud soundcloud(&sidecar, &settings, &network, &errors);
+    library.attachSoundCloud(&soundcloud);
+    player.attachSoundCloud(&soundcloud);
+    soundcloud.refreshStatus();
     // a song whose tags were edited shows as it is now wherever it is queued
     QObject::connect(&localFiles, &LocalLibrary::scanned, &player,
                      [&] { player.refreshSongDetails(localFiles.allSongs()); });
     AppController app(nullptr);
+    UpdateManager updater(nullptr);
     ArtworkCache artwork(&network);
     PlayerStyle playerStyle(&player, &theme, &artwork);
     SpectrumSource spectrum(&core, &player);

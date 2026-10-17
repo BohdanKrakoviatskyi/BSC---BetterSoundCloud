@@ -34,6 +34,7 @@ public:
     virtual QCoro::Task<> crossfadeTrack(QString spotifyUri, quint32 durationMs) = 0;
     /// a music file of the person's own, from anywhere on disk
     virtual QCoro::Task<> playFile(QString path) = 0;
+    virtual QCoro::Task<> crossfadeFile(QString path, quint32 durationMs) = 0;
     virtual QCoro::Task<> restartAudioOutput() = 0;
     virtual QCoro::Task<QString> lyricsJson(QString spotifyUri) = 0;
 

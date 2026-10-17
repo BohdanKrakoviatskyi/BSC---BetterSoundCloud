@@ -1,0 +1,184 @@
+name: Publish desktop release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Version tag to build and publish (for example, v0.3.4)'
+        required: true
+        type: string
+      platform:
+        description: 'Runner to build. "all" builds every platform.'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - macos-latest
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Publish (${{ matrix.platform }})
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        platform: ${{ inputs.platform != '' && inputs.platform != 'all' && fromJSON(format('["{0}"]', inputs.platform)) || fromJSON('["macos-latest"]') }}
+    steps:
+      - name: Check out Swiftify repository
+        uses: actions/checkout@v4
+        with:
+          path: swiftify
+
+      - name: Check out BSC backend sidecar source
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          repository: BohdanKrakoviatskyi/BSC---BetterSoundCloud
+          path: BSC---BetterSoundCloud
+          sparse-checkout: |
+            backend
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Sync release version
+        working-directory: swiftify
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ inputs.tag || github.ref_name }}
+        run: node scripts/sync-release-version.mjs
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install macOS build dependencies
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          brew update --quiet
+          brew install cmake ninja qt@6 qcoro6 qtkeychain
+
+      - name: Check for Apple signing secrets
+        id: apple
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          if [ -n "$APPLE_CERTIFICATE" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "identity=$APPLE_SIGNING_IDENTITY" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "identity=-" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Import Apple Developer certificate
+        if: runner.os == 'macOS' && steps.apple.outputs.enabled == 'true'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/build.keychain"
+          security create-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: \
+            -s -k "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychain -d user -s "$KEYCHAIN" login.keychain-db
+          rm -f "$RUNNER_TEMP/cert.p12"
+
+      - name: Build Swiftify
+        working-directory: swiftify
+        shell: bash
+        run: |
+          QT_PREFIX="$(brew --prefix qt@6)"
+          QCORO_PREFIX="$(brew --prefix qcoro6)"
+          KEYCHAIN_PREFIX="$(brew --prefix qtkeychain)"
+          export PATH="$QT_PREFIX/bin:$PATH"
+
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$QT_PREFIX;$QCORO_PREFIX;$KEYCHAIN_PREFIX" \
+            -DSWIFTIFY_CODESIGN_IDENTITY="${{ steps.apple.outputs.identity }}"
+
+          cmake --build build --target swiftify
+
+      - name: Package macOS release bundle & DMG
+        working-directory: swiftify
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          SIGNING_IDENTITY: ${{ steps.apple.outputs.identity }}
+        run: |
+          export PATH="$(brew --prefix qt@6)/bin:$PATH"
+          VERSION="${RELEASE_TAG#v}"
+          mkdir -p release-artifacts
+          ./packaging/macos/package-dmg.sh build/swiftify.app release-artifacts "$VERSION" "$SIGNING_IDENTITY"
+
+      - name: Notarize DMG (Apple Developer)
+        if: runner.os == 'macOS' && steps.apple.outputs.enabled == 'true' && secrets.APPLE_ID != ''
+        working-directory: swiftify
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        shell: bash
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          DMG_PATH="release-artifacts/Swiftify-${VERSION}-macOS.dmg"
+          xcrun notarytool submit "$DMG_PATH" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+          xcrun stapler staple "$DMG_PATH"
+
+      - name: Publish release to GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: Swiftify ${{ inputs.tag || github.ref_name }}
+          body: "See the release assets below to download and install this version."
+          draft: false
+          prerelease: false
+          files: |
+            swiftify/release-artifacts/*.dmg
+            swiftify/release-artifacts/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Report signing mode
+        shell: bash
+        run: |
+          if [ "$APPLE_SIGNED" = "true" ]; then
+            echo "macOS build: Apple Developer signed and notarised"
+          else
+            echo "::warning::macOS build is ad-hoc signed and NOT notarised; Gatekeeper blocks it on first launch until allowed via System Settings or xattr -cr Swiftify.app."
+          fi
+        env:
+          APPLE_SIGNED: ${{ steps.apple.outputs.enabled == 'true' }}

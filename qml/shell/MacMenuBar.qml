@@ -20,7 +20,7 @@ Platform.MenuBar {
         title: "File"
 
         Platform.MenuItem {
-            text: "About Swiftify"
+            text: "About Resonance"
             role: Platform.MenuItem.AboutRole
             onTriggered: UiState.settingsRequested()
         }
@@ -31,7 +31,7 @@ Platform.MenuBar {
             onTriggered: UiState.settingsRequested()
         }
         Platform.MenuItem {
-            text: "Quit Swiftify"
+            text: "Quit Resonance"
             role: Platform.MenuItem.QuitRole
             shortcut: StandardKey.Quit
             onTriggered: App.quit()
@@ -215,7 +215,7 @@ Platform.MenuBar {
         }
         Platform.MenuSeparator {}
         Platform.MenuItem {
-            text: "Swiftify"
+            text: "Resonance"
             onTriggered: root.showWindowRequested()
         }
     }

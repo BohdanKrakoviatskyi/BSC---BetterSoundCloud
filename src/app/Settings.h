@@ -53,6 +53,15 @@ class Settings : public QObject {
     Q_PROPERTY(bool showWindowControls READ showWindowControls WRITE setShowWindowControls NOTIFY showWindowControlsChanged FINAL)
     Q_PROPERTY(bool nativeTitleBar READ nativeTitleBar WRITE setNativeTitleBar NOTIFY nativeTitleBarChanged FINAL)
     Q_PROPERTY(bool trayIcon READ trayIcon WRITE setTrayIcon NOTIFY trayIconChanged FINAL)
+    /// the service the library pages are showing: "spotify" or "soundcloud".
+    /// kept so the app opens on the one that was last used
+    Q_PROPERTY(QString musicSource READ musicSource WRITE setMusicSource NOTIFY musicSourceChanged FINAL)
+    /// the app's own soundcloud client id, which the sidecar needs to sign a
+    /// stream url. the access token is not kept here: the sidecar holds it
+    Q_PROPERTY(QString soundcloudClientId READ soundcloudClientId WRITE setSoundcloudClientId NOTIFY soundcloudClientIdChanged FINAL)
+    Q_PROPERTY(QString customBackgroundPath READ customBackgroundPath WRITE setCustomBackgroundPath NOTIFY customBackgroundPathChanged FINAL)
+    Q_PROPERTY(QStringList customBackgrounds READ customBackgrounds WRITE setCustomBackgrounds NOTIFY customBackgroundsChanged FINAL)
+    Q_PROPERTY(double customBackgroundDim READ customBackgroundDim WRITE setCustomBackgroundDim NOTIFY customBackgroundDimChanged FINAL)
 
 public:
     /// the default file, ~/.config/Swiftify/Swiftify.conf. no default argument:
@@ -138,6 +147,23 @@ public:
     bool trayIcon() const { return m_trayIcon; }
     void setTrayIcon(bool value);
 
+    /// which service the library pages show. anything but "soundcloud" is
+    /// spotify, so a settings file with something odd in it still works
+    QString musicSource() const { return m_musicSource; }
+    void setMusicSource(const QString &value);
+    QString soundcloudClientId() const { return m_soundcloudClientId; }
+    void setSoundcloudClientId(const QString &value);
+    QString customBackgroundPath() const { return m_customBackgroundPath; }
+    void setCustomBackgroundPath(const QString &value);
+    QStringList customBackgrounds() const { return m_customBackgrounds; }
+    void setCustomBackgrounds(const QStringList &value);
+    double customBackgroundDim() const { return m_customBackgroundDim; }
+    void setCustomBackgroundDim(double value);
+
+    Q_INVOKABLE void addCustomBackground(const QString &path);
+    Q_INVOKABLE void removeCustomBackground(const QString &path);
+    Q_INVOKABLE void clearCustomBackground();
+
 signals:
     void visualizersEnabledChanged();
     void circularVisualizerChanged();
@@ -165,6 +191,11 @@ signals:
     void showWindowControlsChanged();
     void nativeTitleBarChanged();
     void trayIconChanged();
+    void musicSourceChanged();
+    void soundcloudClientIdChanged();
+    void customBackgroundPathChanged();
+    void customBackgroundsChanged();
+    void customBackgroundDimChanged();
 
 private:
     void load();
@@ -201,6 +232,11 @@ private:
     bool m_nativeTitleBar = true;
 #endif
     bool m_trayIcon = true;
+    QString m_musicSource = QStringLiteral("spotify");
+    QString m_soundcloudClientId;
+    QString m_customBackgroundPath;
+    QStringList m_customBackgrounds;
+    double m_customBackgroundDim = 0.35;
 };
 
 } // namespace swiftify

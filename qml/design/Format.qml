@@ -59,4 +59,22 @@ QtObject {
         }
         return (value >= 100 ? String(Math.round(value)) : value.toFixed(1)) + " " + units[unit]
     }
+
+    /// "1.2M", "540K", "120"
+    function compactCount(count: real): string {
+        if (!count || count <= 0) {
+            return "0"
+        }
+        if (count >= 1000000) {
+            const m = count / 1000000
+            const formatted = (m >= 100) ? Math.round(m).toString() : m.toFixed(1)
+            return (formatted.endsWith(".0") ? formatted.slice(0, -2) : formatted) + "M"
+        }
+        if (count >= 1000) {
+            const k = count / 1000
+            const formatted = (k >= 100) ? Math.round(k).toString() : k.toFixed(1)
+            return (formatted.endsWith(".0") ? formatted.slice(0, -2) : formatted) + "K"
+        }
+        return Math.round(count).toLocaleString()
+    }
 }

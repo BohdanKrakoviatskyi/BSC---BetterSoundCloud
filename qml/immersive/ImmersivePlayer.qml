@@ -37,10 +37,10 @@ FocusScope {
     readonly property real horizontalPadding: Math.max(28, Math.min(64, width * 0.05))
     readonly property real rowSpace: Math.min(1250, width - 2 * horizontalPadding)
     readonly property real gap: Math.max(32, Math.min(72, width * 0.055))
-    readonly property bool sideBySide: usesPanelLayout && rowSpace >= 900
+    readonly property bool sideBySide: usesPanelLayout && rowSpace >= 760
     readonly property bool panelOnly: usesPanelLayout && !sideBySide
-    readonly property real panelWidth: sideBySide ? Math.min(540, (rowSpace - gap) / 2) : rowSpace
-    readonly property real nowPlayingWidth: sideBySide ? Math.min(500, rowSpace - gap - panelWidth) : Math.min(620, rowSpace)
+    readonly property real panelWidth: sideBySide ? Math.min(560, (rowSpace - gap) * 0.52) : rowSpace
+    readonly property real nowPlayingWidth: sideBySide ? Math.min(480, rowSpace - gap - panelWidth) : Math.min(620, rowSpace)
     readonly property real rowWidth: sideBySide ? nowPlayingWidth + gap + panelWidth : nowPlayingWidth
     readonly property real panelHeight: Math.min(520, immersiveLayout.contentHeight)
     // where the panel stands when shown, worked out from the panel layout
@@ -165,6 +165,16 @@ FocusScope {
         }
     }
 
+    Connections {
+        target: Settings
+        function onImmersivePlayerPanelChanged() {
+            const next = root.resolvedPanel(Settings.immersivePlayerPanel)
+            if (next !== root.panel) {
+                root.swapPanel(next, false)
+            }
+        }
+    }
+
     Component.onCompleted: {
         panel = resolvedPanel(Settings.immersivePlayerPanel)
         shownPanel = panel
@@ -244,17 +254,64 @@ FocusScope {
             anchors.leftMargin: 24
             y: Math.max(18, root.titleBarInset + 6)
             scheme: root.scheme
-            symbol: "close"
-            size: 34
-            iconSize: 18
+            symbol: "keyboard_arrow_down"
+            size: 38
+            iconSize: 22
             iconColor: "white"
             colBackground: Qt.rgba(1, 1, 1, 0.12)
-            colBackgroundHover: Qt.rgba(1, 1, 1, 0.2)
-            colRipple: Qt.rgba(1, 1, 1, 0.24)
+            colBackgroundHover: Qt.rgba(1, 1, 1, 0.22)
+            colRipple: Qt.rgba(1, 1, 1, 0.28)
             backgroundItem.border.width: 1
             backgroundItem.border.color: Qt.rgba(1, 1, 1, 0.14)
-            tooltip: "Close Immersive Player"
+            tooltip: "Close Full Screen (Esc)"
             onClicked: root.closeRequested()
+        }
+
+        Item {
+            id: lyricsInfoPill
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.verticalCenter: immersiveClose.verticalCenter
+            visible: root.shownPanel === "lyrics" && Player.hasLyrics
+            height: 32
+            width: pillRow.implicitWidth + 24
+
+            Rectangle {
+                anchors.fill: parent
+                radius: 16
+                color: Qt.rgba(1, 1, 1, 0.1)
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, 0.14)
+            }
+
+            Row {
+                id: pillRow
+                anchors.centerIn: parent
+                spacing: 8
+
+                MaterialSymbol {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: Player.lyricsSynchronized ? "sync" : "lyrics"
+                    iconSize: 15
+                    color: Qt.rgba(1, 1, 1, 0.75)
+                }
+
+                StyledText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: Player.lyricsSynchronized ? "Synced Lyrics" : "Lyrics"
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
+                    color: "white"
+                }
+
+                StyledText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: Player.lyricsProvider.length > 0
+                    text: "•  " + Player.lyricsProvider
+                    font.pixelSize: 11
+                    font.weight: Font.Normal
+                    color: Qt.rgba(1, 1, 1, 0.6)
+                }
+            }
         }
 
         SegmentedControl {

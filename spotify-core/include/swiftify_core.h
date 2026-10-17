@@ -65,6 +65,8 @@ void swiftify_core_lyrics_json(const SwiftifyCore *core, uint64_t request_id,
 /* plays a music file of the person's own from anywhere on disk: mp3, flac,
  * ogg vorbis, wav, aiff, or aac or apple lossless in an m4a. */
 void swiftify_core_play_file(const SwiftifyCore *core, uint64_t request_id, const char *path);
+void swiftify_core_crossfade_file(const SwiftifyCore *core, uint64_t request_id, const char *path,
+                                  uint32_t duration_ms);
 
 /* what a music file's tags say, as json: title, artist, album, albumArtist,
  * trackNumber, discNumber, date, genre (each null when the file does not

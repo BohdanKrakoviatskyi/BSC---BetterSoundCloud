@@ -86,6 +86,11 @@ QJsonObject Song::toJson() const
     if (!albumId.isEmpty()) object.insert(QStringLiteral("albumID"), albumId);
     if (!albumUri.isEmpty()) object.insert(QStringLiteral("albumURI"), albumUri);
     if (!artistArray.isEmpty()) object.insert(QStringLiteral("artistItems"), artistArray);
+    if (!source.isEmpty() && source != QLatin1StringView("spotify")) {
+        object.insert(QStringLiteral("source"), source);
+    }
+    if (!nativeId.isEmpty()) object.insert(QStringLiteral("nativeId"), nativeId);
+    if (permalink.isValid()) object.insert(QStringLiteral("permalink"), permalink.toString());
     return object;
 }
 
@@ -101,6 +106,12 @@ Song Song::fromJson(const QJsonObject &object)
     song.isExplicit = object.value(QStringLiteral("isExplicit")).toBool();
     song.albumId = object.value(QStringLiteral("albumID")).toString();
     song.albumUri = object.value(QStringLiteral("albumURI")).toString();
+    const QString source = object.value(QStringLiteral("source")).toString();
+    if (!source.isEmpty()) {
+        song.source = source;
+    }
+    song.nativeId = object.value(QStringLiteral("nativeId")).toString();
+    song.permalink = QUrl(object.value(QStringLiteral("permalink")).toString());
     for (const QJsonValue &value : object.value(QStringLiteral("artistItems")).toArray()) {
         const Artist artist = Artist::fromJson(value.toObject());
         if (artist.isValid()) {

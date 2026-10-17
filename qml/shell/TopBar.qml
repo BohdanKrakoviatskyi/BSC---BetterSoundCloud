@@ -13,14 +13,14 @@ Item {
     required property Window window
     property Item backdropSource
     readonly property bool onPlaylist: Library.page === Library.Page.Playlist && Library.selectedPlaylist.valid
-    readonly property bool searching: Session.libraryConnected && Library.page === Library.Page.Search
+    readonly property bool searching: (Library.source === "soundcloud" ? SoundCloud.connected : Session.libraryConnected) && Library.page === Library.Page.Search
     readonly property bool compact: width < 600
     readonly property real buttonSize: width < 420 ? 26 : (compact ? 34 : 46)
     readonly property real searchLeftEdge: back.x + back.width + 8
     readonly property real searchRightEdge: rightControls.x - 8
     // Reserve the collapsed field's space even while its overlay is focused.
     readonly property real reservedSearchWidth: Math.max(40, Math.min(340, searchRightEdge - searchLeftEdge - (onPlaylist ? playlistActions.implicitWidth + 8 : 0)))
-    readonly property string playlistLink: "https://open.spotify.com/playlist/" + Library.selectedPlaylist.id
+    readonly property string playlistLink: Library.selectedPlaylist.isSoundCloud ? "https://soundcloud.com" : ("https://open.spotify.com/playlist/" + Library.selectedPlaylist.id)
 
     function focusSearch() {
         if (search.visible) {
@@ -288,7 +288,7 @@ Item {
             StyledMenuItem {
                 visible: !Library.selectedPlaylist.isLocal
                 height: visible ? implicitHeight : 0
-                text: "Open in Spotify"
+                text: Library.selectedPlaylist.isSoundCloud ? "Open in SoundCloud" : "Open in Spotify"
                 symbol: "open_in_new"
                 onTriggered: App.openUrl(root.playlistLink)
             }

@@ -118,4 +118,50 @@ Item {
 
         fragmentShader: "qrc:/shaders/backdrop_composite.frag.qsb"
     }
+
+    // ambient adaptive lighting layer driven by cover's primary & secondary palette
+    Item {
+        anchors.fill: parent
+
+        // left ambient bloom (behind artwork area)
+        SoftShadow {
+            x: -parent.width * 0.05
+            y: parent.height * 0.08
+            width: Math.max(380, parent.width * 0.55)
+            height: Math.max(380, parent.height * 0.84)
+            radius: Math.min(width, height) / 2
+            blur: Math.min(width, height) * 0.48
+            color: Qt.rgba(PlayerStyle.primary.r, PlayerStyle.primary.g, PlayerStyle.primary.b, 0.45)
+
+            Behavior on color {
+                ColorAnimation { duration: 600; easing.type: Easing.InOutQuad }
+            }
+        }
+
+        // right ambient bloom (behind lyrics area)
+        SoftShadow {
+            x: parent.width * 0.42
+            y: parent.height * 0.12
+            width: Math.max(380, parent.width * 0.60)
+            height: Math.max(380, parent.height * 0.80)
+            radius: Math.min(width, height) / 2
+            blur: Math.min(width, height) * 0.48
+            color: Qt.rgba(PlayerStyle.secondary.r, PlayerStyle.secondary.g, PlayerStyle.secondary.b, 0.32)
+
+            Behavior on color {
+                ColorAnimation { duration: 600; easing.type: Easing.InOutQuad }
+            }
+        }
+
+        // top/bottom subtle dark gradient vignette to keep text & controls crisp
+        Rectangle {
+            anchors.fill: parent
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: Qt.rgba(0.01, 0.01, 0.02, 0.55) }
+                GradientStop { position: 0.22; color: "transparent" }
+                GradientStop { position: 0.78; color: "transparent" }
+                GradientStop { position: 1.0; color: Qt.rgba(0.01, 0.01, 0.02, 0.7) }
+            }
+        }
+    }
 }

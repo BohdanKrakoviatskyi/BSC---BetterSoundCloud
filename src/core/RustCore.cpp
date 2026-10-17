@@ -204,6 +204,14 @@ QCoro::Task<> RustCore::playFile(QString path)
     co_await request([&](quint64 id) { swiftify_core_play_file(m_core, id, file.constData()); });
 }
 
+QCoro::Task<> RustCore::crossfadeFile(QString path, quint32 durationMs)
+{
+    const QByteArray file = path.toUtf8();
+    co_await request([&](quint64 id) {
+        swiftify_core_crossfade_file(m_core, id, file.constData(), uint32_t(durationMs));
+    });
+}
+
 QCoro::Task<> RustCore::restartAudioOutput()
 {
     co_await request([&](quint64 id) { swiftify_core_restart_audio_output(m_core, id); });

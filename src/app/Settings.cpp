@@ -1,6 +1,7 @@
 #include "app/Settings.h"
 
 #include <QQmlEngine>
+#include <QUrl>
 
 #include <algorithm>
 #include <initializer_list>
@@ -128,6 +129,11 @@ void Settings::load()
         m_backdropReactivity = std::clamp(raw, 0.0, 3.0);
     }
     m_debuggingEnabled = stored<bool>(m_store, "debuggingEnabled", m_debuggingEnabled);
+    {
+        const QString raw = stored<QString>(m_store, "musicSource", m_musicSource);
+        m_musicSource = raw == QLatin1StringView("soundcloud") ? QStringLiteral("soundcloud") : QStringLiteral("spotify");
+    }
+    m_soundcloudClientId = stored<QString>(m_store, "soundcloudClientId", m_soundcloudClientId);
     m_pinnedPlaylistsExpanded = stored<bool>(m_store, "pinnedPlaylistsExpanded", m_pinnedPlaylistsExpanded);
     m_allPlaylistsExpanded = stored<bool>(m_store, "allPlaylistsExpanded", m_allPlaylistsExpanded);
     {
@@ -159,6 +165,20 @@ void Settings::load()
     m_showWindowControls = stored<bool>(m_store, "showWindowControls", m_showWindowControls);
     m_nativeTitleBar = stored<bool>(m_store, "nativeTitleBar", m_nativeTitleBar);
     m_trayIcon = stored<bool>(m_store, "trayIcon", m_trayIcon);
+    m_customBackgroundPath = stored<QString>(m_store, "customBackgroundPath", m_customBackgroundPath);
+    {
+        const QVariant rawList = m_store.value(QStringLiteral("customBackgrounds"));
+        if (rawList.isValid() && rawList.canConvert<QStringList>()) {
+            m_customBackgrounds = rawList.toStringList();
+        }
+        if (!m_customBackgroundPath.isEmpty() && !m_customBackgrounds.contains(m_customBackgroundPath)) {
+            m_customBackgrounds.prepend(m_customBackgroundPath);
+        }
+    }
+    {
+        const double raw = stored<double>(m_store, "customBackgroundDim", m_customBackgroundDim);
+        m_customBackgroundDim = std::clamp(raw, 0.0, 0.95);
+    }
 }
 
 void Settings::setVisualizersEnabled(bool value)
@@ -200,6 +220,27 @@ void Settings::setVisualizerShape(const QString &raw)
     m_visualizerShape = value;
     m_store.setValue(QStringLiteral("circularVisualizerShape"), value);
     emit visualizerShapeChanged();
+}
+
+void Settings::setMusicSource(const QString &raw)
+{
+    const QString value = raw == QLatin1StringView("soundcloud") ? QStringLiteral("soundcloud") : QStringLiteral("spotify");
+    if (m_musicSource == value) {
+        return;
+    }
+    m_musicSource = value;
+    m_store.setValue(QStringLiteral("musicSource"), value);
+    emit musicSourceChanged();
+}
+
+void Settings::setSoundcloudClientId(const QString &value)
+{
+    if (m_soundcloudClientId == value) {
+        return;
+    }
+    m_soundcloudClientId = value;
+    m_store.setValue(QStringLiteral("soundcloudClientId"), value);
+    emit soundcloudClientIdChanged();
 }
 
 void Settings::setVisualizerSensitivity(double raw)
@@ -431,6 +472,83 @@ void Settings::setTrayIcon(bool value)
     m_trayIcon = value;
     m_store.setValue(QStringLiteral("trayIcon"), value);
     emit trayIconChanged();
+}
+
+void Settings::setCustomBackgroundPath(const QString &value)
+{
+    QString cleaned = value.trimmed();
+    if (cleaned.startsWith(QLatin1StringView("file://"))) {
+        cleaned = QUrl(cleaned).toLocalFile();
+    }
+    if (m_customBackgroundPath == cleaned) {
+        return;
+    }
+    m_customBackgroundPath = cleaned;
+    m_store.setValue(QStringLiteral("customBackgroundPath"), cleaned);
+    emit customBackgroundPathChanged();
+}
+
+void Settings::setCustomBackgrounds(const QStringList &value)
+{
+    if (m_customBackgrounds == value) {
+        return;
+    }
+    m_customBackgrounds = value;
+    m_store.setValue(QStringLiteral("customBackgrounds"), value);
+    emit customBackgroundsChanged();
+}
+
+void Settings::setCustomBackgroundDim(double raw)
+{
+    const double value = std::clamp(raw, 0.0, 0.95);
+    if (m_customBackgroundDim == value) {
+        return;
+    }
+    m_customBackgroundDim = value;
+    m_store.setValue(QStringLiteral("customBackgroundDim"), value);
+    emit customBackgroundDimChanged();
+}
+
+void Settings::addCustomBackground(const QString &path)
+{
+    QString cleaned = path.trimmed();
+    if (cleaned.startsWith(QLatin1StringView("file://"))) {
+        cleaned = QUrl(cleaned).toLocalFile();
+    }
+    if (cleaned.isEmpty()) {
+        return;
+    }
+    if (!m_customBackgrounds.contains(cleaned)) {
+        m_customBackgrounds.prepend(cleaned);
+        m_store.setValue(QStringLiteral("customBackgrounds"), m_customBackgrounds);
+        emit customBackgroundsChanged();
+    }
+    setCustomBackgroundPath(cleaned);
+}
+
+void Settings::removeCustomBackground(const QString &path)
+{
+    QString cleaned = path.trimmed();
+    if (cleaned.startsWith(QLatin1StringView("file://"))) {
+        cleaned = QUrl(cleaned).toLocalFile();
+    }
+    if (m_customBackgrounds.removeOne(cleaned)) {
+        m_store.setValue(QStringLiteral("customBackgrounds"), m_customBackgrounds);
+        emit customBackgroundsChanged();
+    }
+    if (m_customBackgroundPath == cleaned) {
+        clearCustomBackground();
+    }
+}
+
+void Settings::clearCustomBackground()
+{
+    if (m_customBackgroundPath.isEmpty()) {
+        return;
+    }
+    m_customBackgroundPath.clear();
+    m_store.setValue(QStringLiteral("customBackgroundPath"), QString());
+    emit customBackgroundPathChanged();
 }
 
 } // namespace swiftify

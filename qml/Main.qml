@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.Basic
+import QtMultimedia
 import Qt.labs.platform as Platform
 import Swiftify
 
@@ -8,6 +9,18 @@ import Swiftify
 // inspector beside it, and the player floating over the bottom.
 ApplicationWindow {
     id: window
+
+    readonly property string bgPathLower: Settings.customBackgroundPath.toLowerCase()
+    readonly property bool isCustomBgVideo: bgPathLower.endsWith(".mp4") || bgPathLower.endsWith(".mov")
+                                         || bgPathLower.endsWith(".webm") || bgPathLower.endsWith(".mkv")
+                                         || bgPathLower.endsWith(".avi") || bgPathLower.endsWith(".m4v")
+    readonly property bool isCustomBgGif: bgPathLower.endsWith(".gif")
+    readonly property bool isCustomBgStatic: Settings.customBackgroundPath.length > 0 && !isCustomBgVideo && !isCustomBgGif
+    readonly property url customBgUrl: {
+        const p = Settings.customBackgroundPath
+        if (p.length === 0) return ""
+        return (p.startsWith("file://") || p.startsWith("qrc:/")) ? p : ("file://" + p)
+    }
 
     property real sidebarWidth: 232
     readonly property real effectiveSidebarWidth: Math.max(132, Math.min(sidebarWidth, width * 0.28))
@@ -173,6 +186,83 @@ ApplicationWindow {
     }
 
     Item {
+        id: customBgLayer
+        anchors.fill: parent
+        visible: Settings.customBackgroundPath.length > 0 && window.onScreen
+
+        // Static Image
+        Image {
+            id: customBgImage
+            anchors.fill: parent
+            visible: window.isCustomBgStatic
+            source: window.isCustomBgStatic ? window.customBgUrl : ""
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            smooth: true
+            cache: true
+        }
+
+        // Animated GIF
+        AnimatedImage {
+            id: customBgGif
+            anchors.fill: parent
+            visible: window.isCustomBgGif
+            source: window.isCustomBgGif ? window.customBgUrl : ""
+            fillMode: Image.PreserveAspectCrop
+            playing: visible && window.onScreen && window.visibility !== Window.Hidden
+            asynchronous: true
+            cache: true
+        }
+
+        // Video (MP4, MOV, WEBM, MKV, etc.)
+        Loader {
+            id: customBgVideoLoader
+            anchors.fill: parent
+            active: window.isCustomBgVideo && window.onScreen
+            visible: active
+            sourceComponent: Item {
+                anchors.fill: parent
+
+                MediaPlayer {
+                    id: bgVideoPlayer
+                    source: window.customBgUrl
+                    loops: MediaPlayer.Infinite
+                    videoOutput: bgVideoOutput
+                    audioOutput: AudioOutput {
+                        muted: true
+                        volume: 0
+                    }
+                    Component.onCompleted: play()
+                }
+
+                VideoOutput {
+                    id: bgVideoOutput
+                    anchors.fill: parent
+                    fillMode: VideoOutput.PreserveAspectCrop
+                }
+
+                Connections {
+                    target: window
+                    function onVisibilityChanged() {
+                        if (window.visibility === Window.Hidden || !window.onScreen) {
+                            bgVideoPlayer.pause()
+                        } else {
+                            bgVideoPlayer.play()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        id: customBgDim
+        anchors.fill: parent
+        visible: customBgLayer.visible
+        color: Qt.rgba(0, 0, 0, Settings.customBackgroundDim)
+    }
+
+    Item {
         id: shell
         anchors.fill: parent
         // nothing under the opaque immersive player is drawn, or animates
@@ -235,7 +325,9 @@ ApplicationWindow {
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 8
             radius: Appearance.rounding.large
-            color: Appearance.colors.layer1
+            color: Settings.customBackgroundPath.length > 0
+                   ? Qt.rgba(Appearance.colors.layer1.r, Appearance.colors.layer1.g, Appearance.colors.layer1.b, 0.82)
+                   : Appearance.colors.layer1
 
             // the pages fill the sheet: they scroll up under the top bar,
             // which has no background, only its buttons on their shapes
@@ -262,6 +354,7 @@ ApplicationWindow {
                 anchors.fill: parent
                 radius: sheet.radius
                 color: window.color
+                visible: Settings.customBackgroundPath.length === 0
             }
 
             TopBar {
@@ -322,7 +415,9 @@ ApplicationWindow {
                 width: Appearance.sizes.sideSheetWidth
                 height: parent.height
                 radius: Appearance.rounding.large
-                color: Appearance.colors.layer1
+                color: Settings.customBackgroundPath.length > 0
+                       ? Qt.rgba(Appearance.colors.layer1.r, Appearance.colors.layer1.g, Appearance.colors.layer1.b, 0.82)
+                       : Appearance.colors.layer1
 
                 LyricsPanel {
                     objectName: "mainLyricsPanel"
@@ -715,7 +810,7 @@ ApplicationWindow {
             objectName: "swiftifyTrayIcon"
             visible: true
             icon.source: "qrc:/qt/qml/Swiftify/resources/swiftify-icon.png"
-            tooltip: Player.hasSong ? Player.currentSong.name + " — " + Player.currentSong.artists : "Swiftify"
+            tooltip: Player.hasSong ? Player.currentSong.name + " — " + Player.currentSong.artists : "Resonance"
             onActivated: (reason) => {
                 if (reason === Platform.SystemTrayIcon.Trigger || reason === Platform.SystemTrayIcon.DoubleClick) {
                     window.reveal()
@@ -724,7 +819,7 @@ ApplicationWindow {
 
             menu: Platform.Menu {
                 Platform.MenuItem {
-                    text: "Show Swiftify"
+                    text: "Show Resonance"
                     onTriggered: window.reveal()
                 }
                 Platform.MenuItem {
@@ -734,7 +829,7 @@ ApplicationWindow {
                 }
                 Platform.MenuSeparator {}
                 Platform.MenuItem {
-                    text: "Quit Swiftify"
+                    text: "Quit Resonance"
                     onTriggered: App.quit()
                 }
             }

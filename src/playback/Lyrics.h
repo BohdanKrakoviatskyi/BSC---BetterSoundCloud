@@ -22,6 +22,8 @@ struct Lyrics {
     QList<LyricLine> lines;
 
     static std::optional<Lyrics> fromJson(const QByteArray &json);
+    /// lyrics from the BSC sidecar (track.lyrics: Deezer + LRCLIB)
+    static std::optional<Lyrics> fromSidecarJson(const QJsonObject &object);
     /// an .lrc file's lines: "[01:02.50]words", timed when they carry times
     static std::optional<Lyrics> fromLrc(const QString &text);
     /// the .lrc kept beside a music file, with the same name

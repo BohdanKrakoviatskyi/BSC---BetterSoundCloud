@@ -17,14 +17,18 @@ struct Artist {
     Q_PROPERTY(QUrl artworkUrl MEMBER artworkUrl FINAL)
     Q_PROPERTY(QString uri MEMBER uri FINAL)
     Q_PROPERTY(bool valid READ isValid FINAL)
+    Q_PROPERTY(QString source MEMBER source FINAL)
+    Q_PROPERTY(bool isSoundCloud READ isSoundCloud FINAL)
 
 public:
     QString id;
     QString name;
     QUrl artworkUrl;
     QString uri;
+    QString source = QStringLiteral("spotify");
 
     bool isValid() const { return !id.isEmpty(); }
+    bool isSoundCloud() const { return source == QLatin1StringView("soundcloud") || uri.startsWith(QLatin1StringView("soundcloud:")); }
     bool operator==(const Artist &) const = default;
 
     QJsonObject toJson() const;
@@ -75,6 +79,15 @@ struct Song {
     /// a music file of the person's own (LocalLibrary), not a spotify track:
     /// nothing spotify knows can be done with it
     Q_PROPERTY(bool isLocalFile READ isLocalFile FINAL)
+    Q_PROPERTY(bool isSoundCloud READ isSoundCloud FINAL)
+    /// which service it comes from: "spotify", "soundcloud", or "local". the
+    /// uri stays the single identity the whole app passes around, and this is
+    /// what says who can answer for it
+    Q_PROPERTY(QString source MEMBER source FINAL)
+    /// the service's own id: spotify's base62, soundcloud's numeric id
+    Q_PROPERTY(QString nativeId MEMBER nativeId FINAL)
+    /// where the service's own client opens it, for a link out of the app
+    Q_PROPERTY(QUrl permalink MEMBER permalink FINAL)
 
 public:
     Song();
@@ -91,11 +104,20 @@ public:
     QString albumId;
     QString albumUri;
     QList<Artist> artistItems;
+    QString source = QStringLiteral("spotify");
+    QString nativeId;
+    QUrl permalink;
 
     bool isValid() const { return !uri.isEmpty(); }
     /// its uri is the file's own url, file:///...
     bool isLocalFile() const { return uri.startsWith(QLatin1StringView("file:")); }
     QString localPath() const { return isLocalFile() ? QUrl(uri).toLocalFile() : QString(); }
+    /// a soundcloud track: its stream is fetched by id before it can play
+    bool isSoundCloud() const { return source == QLatin1StringView("soundcloud"); }
+    /// a spotify track, which librespot plays from its uri
+    bool isSpotify() const { return source == QLatin1StringView("spotify"); }
+    /// the service's id, whatever it is
+    QString serviceId() const { return nativeId.isEmpty() ? spotifyId() : nativeId; }
     /// the same occurrence, not merely the same track
     bool isSameInstance(const Song &other) const { return instanceId == other.instanceId; }
     bool operator==(const Song &other) const { return instanceId == other.instanceId; }
@@ -130,6 +152,9 @@ struct Playlist {
     /// made on this computer from files of the person's own (LocalLibrary),
     /// not a spotify playlist
     Q_PROPERTY(bool isLocal READ isLocal FINAL)
+    Q_PROPERTY(bool isSoundCloud READ isSoundCloud FINAL)
+    /// whose playlist it is: "spotify" or "soundcloud"
+    Q_PROPERTY(QString source MEMBER source FINAL)
 
 public:
     QString id;
@@ -142,11 +167,20 @@ public:
     bool isPublic = false;
     bool isCollaborative = false;
     QString uri;
+    QString source = QStringLiteral("spotify");
 
     bool isValid() const { return !id.isEmpty(); }
     bool isLocal() const { return id.startsWith(QLatin1StringView("local:")); }
+    /// one the soundcloud sidecar reads: only plain listing and playing
+    bool isSoundCloud() const { return source == QLatin1StringView("soundcloud"); }
     bool operator==(const Playlist &) const = default;
-    QString ownerDisplayName() const { return ownerName.isEmpty() ? QStringLiteral("Spotify") : ownerName; }
+    QString ownerDisplayName() const
+    {
+        if (!ownerName.isEmpty()) {
+            return ownerName;
+        }
+        return isSoundCloud() ? QStringLiteral("SoundCloud") : QStringLiteral("Spotify");
+    }
     bool canModify(const QString &currentUserId) const
     {
         return isCollaborative || (!currentUserId.isEmpty() && ownerId == currentUserId);

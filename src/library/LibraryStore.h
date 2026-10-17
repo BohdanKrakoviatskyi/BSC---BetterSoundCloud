@@ -21,6 +21,7 @@ class ErrorCenter;
 class LocalLibrary;
 class PlaybackController;
 class Settings;
+class SoundCloud;
 class SpotifySession;
 
 /// the last few things of a kind that were opened, keyed by id. bounded on
@@ -77,12 +78,17 @@ class LibraryStore : public QObject {
     Q_CLASSINFO("RegisterEnumClassesUnscoped", "false")
     QML_SINGLETON
 
+    /// which service the library pages browse: "spotify" or "soundcloud".
+    /// the pages themselves are the same either way
+    Q_PROPERTY(QString source READ source NOTIFY sourceChanged FINAL)
+
     Q_PROPERTY(Page page READ page NOTIFY destinationChanged FINAL)
     Q_PROPERTY(QString selectedPlaylistId READ selectedPlaylistId NOTIFY destinationChanged FINAL)
     Q_PROPERTY(swiftify::Playlist selectedPlaylist READ selectedPlaylist NOTIFY selectedPlaylistChanged FINAL)
     Q_PROPERTY(bool selectedPlaylistEditable READ isSelectedPlaylistEditable NOTIFY selectedPlaylistChanged FINAL)
     Q_PROPERTY(swiftify::Album currentAlbum READ currentAlbum NOTIFY destinationChanged FINAL)
     Q_PROPERTY(swiftify::Artist currentArtist READ currentArtist NOTIFY destinationChanged FINAL)
+    Q_PROPERTY(swiftify::Song currentTrack READ currentTrack NOTIFY destinationChanged FINAL)
     Q_PROPERTY(bool canGoBack READ canGoBack NOTIFY destinationChanged FINAL)
     /// how many destinations back goes through; the page host keeps one
     /// page for each, so going back shows the page as it was left
@@ -137,7 +143,7 @@ class LibraryStore : public QObject {
 public:
     /// LocalFiles is the grid of playlists made on this computer, opening on
     /// LocalTracks, every music file of the person's own as a list
-    enum class Page { Home, Search, Songs, Playlists, PinnedPlaylists, Playlist, Album, Artist, LocalFiles, LocalTracks };
+    enum class Page { Home, Search, Songs, Playlists, PinnedPlaylists, Playlist, Album, Artist, LocalFiles, LocalTracks, TrackDetails, ArtistLikes, ArtistTracks };
     Q_ENUM(Page)
     enum class SortOrder { Playlist, Title, Artist, Album, Duration };
     Q_ENUM(SortOrder)
@@ -153,6 +159,12 @@ public:
     /// playlists made on this computer open, and are edited, like the
     /// person's own spotify playlists
     void attachLocalFiles(LocalLibrary *localFiles);
+    /// soundcloud, browsed like spotify: the same pages, filled from the
+    /// sidecar instead. null when this build has no sidecar
+    void attachSoundCloud(SoundCloud *soundcloud);
+
+    QString source() const;
+    Q_INVOKABLE void setSource(const QString &source);
 
     Page page() const { return m_destination.page; }
     QString selectedPlaylistId() const { return m_destination.page == Page::Playlist ? m_destination.playlistId : QString(); }
@@ -160,12 +172,13 @@ public:
     bool isSelectedPlaylistEditable() const;
     Album currentAlbum() const { return m_destination.album; }
     Artist currentArtist() const { return m_destination.artist; }
+    Song currentTrack() const { return m_destination.song; }
     bool canGoBack() const { return !m_history.isEmpty(); }
     int historyDepth() const { return int(m_history.size()); }
 
-    QString profileId() const { return m_profile.id; }
-    QString profileName() const { return m_profile.displayName; }
-    QUrl profileArtworkUrl() const { return m_profile.artworkUrl; }
+    QString profileId() const;
+    QString profileName() const;
+    QUrl profileArtworkUrl() const;
 
     PlaylistListModel *playlists() const { return m_playlists; }
     PlaylistListModel *pinnedPlaylists() const { return m_pinnedPlaylists; }
@@ -226,6 +239,12 @@ public:
     Q_INVOKABLE void selectPlaylistById(const QString &id);
     Q_INVOKABLE void selectAlbum(const swiftify::Album &album);
     Q_INVOKABLE void selectArtist(const swiftify::Artist &artist);
+    Q_INVOKABLE void selectTrack(const swiftify::Song &song);
+    Q_INVOKABLE void goToTrack(const swiftify::Song &song);
+    Q_INVOKABLE void selectArtistLikes(const swiftify::Artist &artist);
+    Q_INVOKABLE void goToArtistLikes(const swiftify::Artist &artist);
+    Q_INVOKABLE void selectArtistTracks(const swiftify::Artist &artist);
+    Q_INVOKABLE void goToArtistTracks(const swiftify::Artist &artist);
     Q_INVOKABLE void goToAlbum(const swiftify::Song &song);
     Q_INVOKABLE void goToArtist(const swiftify::Song &song);
     Q_INVOKABLE void goBack();
@@ -235,6 +254,7 @@ public:
     Q_INVOKABLE bool isPinned(const QString &playlistId) const { return m_pinnedIds.contains(playlistId); }
     Q_INVOKABLE void togglePinned(const swiftify::Playlist &playlist);
     Q_INVOKABLE bool isSaved(const QString &uri) const { return m_savedUris.contains(uri); }
+    void recordSavedUri(const QString &uri) { m_savedUris.insert(uri); }
     Q_INVOKABLE void toggleSaved(const swiftify::Song &song);
     Q_INVOKABLE QVariantList editablePlaylists() const;
     Q_INVOKABLE void clearSearchHistory();
@@ -264,6 +284,7 @@ signals:
     void destinationChanged();
     void selectedPlaylistChanged();
     void profileChanged();
+    void sourceChanged();
     void pinsChanged();
     void playlistViewChanged();
     void searchChanged();
@@ -281,6 +302,7 @@ private:
         Artist artist;
         /// as opened, for a playlist from search that is not in the library
         Playlist playlist;
+        Song song;
 
         bool operator==(const Destination &other) const;
     };
@@ -336,6 +358,7 @@ private:
     Settings *m_settings;
     ErrorCenter *m_errors;
     LocalLibrary *m_localFiles = nullptr;
+    SoundCloud *m_soundcloud = nullptr;
 
     Destination m_destination;
     QList<Destination> m_history;

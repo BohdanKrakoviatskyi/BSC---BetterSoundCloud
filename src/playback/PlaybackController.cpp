@@ -3,11 +3,13 @@
 #include "app/ErrorCenter.h"
 #include "app/Settings.h"
 #include "core/PlaybackCore.h"
+#include "provider/SoundCloud.h"
 #include "spotify/SpotifySession.h"
 
 #include <QLoggingCategory>
 #include <QQmlEngine>
 #include <QRandomGenerator>
+#include <QCryptographicHash>
 
 #include <QCoroTimer>
 
@@ -107,6 +109,11 @@ void PlaybackController::reportError(const QString &context, const QString &mess
 void PlaybackController::setStatus(const QString &status)
 {
     m_session->setStatus(status);
+}
+
+void PlaybackController::attachSoundCloud(SoundCloud *soundcloud)
+{
+    m_soundcloud = soundcloud;
 }
 
 // --- state ---------------------------------------------------------------------------
@@ -339,17 +346,26 @@ void PlaybackController::queueDidChange()
 
 void PlaybackController::preloadNextTrack()
 {
-    if (!m_playing || !m_currentSong || m_currentSong->isLocalFile()) {
+    if (!m_playing || !m_currentSong) {
         return;
     }
     const std::optional<Song> next = m_repeatMode == RepeatMode::One ? m_currentSong : upcomingSong();
-    if (!next || next->isLocalFile()) {
+    if (!next) {
         return;
     }
-    try {
-        m_core->preloadTrack(next->uri, m_settings->crossfadeEnabled());
-    } catch (const SpotifyError &error) {
-        qCDebug(lcPlayer) << "Could not preload the next track:" << error.message();
+    if (!next->isLocalFile() && !next->isSoundCloud()) {
+        try {
+            m_core->preloadTrack(next->uri, m_settings->crossfadeEnabled());
+        } catch (const SpotifyError &error) {
+            qCDebug(lcPlayer) << "Could not preload the next track:" << error.message();
+        }
+    } else if (next->isSoundCloud() && m_soundcloud && m_settings->crossfadeEnabled()) {
+        detach([](SoundCloud *sc, Song s) -> QCoro::Task<> {
+            try {
+                co_await sc->streamPath(s);
+            } catch (...) {
+            }
+        }(m_soundcloud, *next));
     }
 }
 
@@ -492,16 +508,22 @@ void PlaybackController::startPlayback(const Song &song, bool recordHistory, boo
         m_history.append(*m_currentSong);
     }
 
+
+
     const CancelToken token = m_playbackRequest.renew();
     m_crossfadeStarted = crossfadeDurationMs > 0;
     const quint64 crossfadeSerial = ++m_crossfadeSerial;
     m_playbackNeedsLoad = true;
+    const bool wasCrossfading = crossfadeDurationMs > 0 && m_playing;
     setCurrentSong(song, crossfadeDurationMs);
-    setPlaying(false);
-    setLoading(true);
-    setLivePosition(0);
-    setDuration(0);
-    loadLyrics(song);
+    if (!wasCrossfading) {
+        // normal start: stop the old song's UI immediately
+        setPlaying(false);
+        setLoading(true);
+        setLivePosition(0);
+        setDuration(0);
+    }
+    clearLyrics();
     queueDidChange();
     syncMediaSession();
 
@@ -551,7 +573,11 @@ QCoro::Task<> PlaybackController::runStartPlayback(Song song, CancelToken token,
             // the one wanted, unless the request was withdrawn
             bool retry = false;
             try {
-                co_await m_core->playFile(song.localPath());
+                if (crossfadeDurationMs > 0) {
+                    co_await m_core->crossfadeFile(song.localPath(), crossfadeDurationMs);
+                } else {
+                    co_await m_core->playFile(song.localPath());
+                }
             } catch (const SpotifyError &error) {
                 if (error.kind() != SpotifyError::Kind::Superseded) {
                     throw;
@@ -561,6 +587,30 @@ QCoro::Task<> PlaybackController::runStartPlayback(Song song, CancelToken token,
             if (retry) {
                 throwIfCancelled(token);
                 co_await m_core->playFile(song.localPath());
+            }
+        } else if (song.isSoundCloud()) {
+            if (m_soundcloud == nullptr) {
+                throw SpotifyError(SpotifyError::Kind::Core,
+                                   QStringLiteral("SoundCloud is not available in this build."));
+            }
+            const QString path = co_await m_soundcloud->streamPath(song);
+            throwIfCancelled(token);
+            bool retry = false;
+            try {
+                if (crossfadeDurationMs > 0) {
+                    co_await m_core->crossfadeFile(path, crossfadeDurationMs);
+                } else {
+                    co_await m_core->playFile(path);
+                }
+            } catch (const SpotifyError &error) {
+                if (error.kind() != SpotifyError::Kind::Superseded) {
+                    throw;
+                }
+                retry = true;
+            }
+            if (retry) {
+                throwIfCancelled(token);
+                co_await m_core->playFile(path);
             }
         } else {
             co_await m_session->ensureFreshPlaybackConnection();
@@ -625,6 +675,8 @@ QCoro::Task<> PlaybackController::runStartPlayback(Song song, CancelToken token,
         setStatus(m_session->isConnected() ? QStringLiteral("Connected") : QStringLiteral("Disconnected"));
         setLoading(false);
         setPlaying(false);
+        setLivePosition(0);
+        setDuration(0);
         syncMediaSession();
         reportError(QStringLiteral("Playing %1").arg(song.uri), failure);
     } else {
@@ -636,6 +688,7 @@ QCoro::Task<> PlaybackController::runStartPlayback(Song song, CancelToken token,
             emit playedFromSearch(song);
         }
         syncMediaSession();
+        loadLyrics(song);
     }
     m_playbackRequest.finish(token);
 }
@@ -767,6 +820,14 @@ QCoro::Task<> PlaybackController::restartAudioOutput(CancelToken token)
 
         if (song.isLocalFile()) {
             co_await m_core->playFile(song.localPath());
+        } else if (song.isSoundCloud()) {
+            if (m_soundcloud == nullptr) {
+                throw SpotifyError(SpotifyError::Kind::Core,
+                                   QStringLiteral("SoundCloud is not available in this build."));
+            }
+            const QString path = co_await m_soundcloud->streamPath(song);
+            throwIfCancelled(token);
+            co_await m_core->playFile(path);
         } else {
             // reconnect now instead of waiting for a dead session to time out
             co_await m_session->ensureFreshPlaybackConnection(true);
@@ -996,7 +1057,7 @@ void PlaybackController::pollPlayback()
     }
     syncPositionAndDuration();
     if (m_playing && !m_crossfadeStarted && m_settings->crossfadeEnabled() && m_currentSong
-        && !m_currentSong->isLocalFile() && m_durationMs > 0) {
+        && m_durationMs > 0) {
         std::optional<Song> next;
         bool recordHistory = true;
         if (m_repeatMode == RepeatMode::One) {
@@ -1005,7 +1066,7 @@ void PlaybackController::pollPlayback()
         } else {
             next = upcomingSong();
         }
-        if (next && !next->isLocalFile()) {
+        if (next) {
             quint32 duration = quint32(m_settings->crossfadeDurationSeconds() * 1000);
             duration = std::min(duration, m_durationMs / 2);
             if (next->durationMs > 0) {
@@ -1115,12 +1176,28 @@ QCoro::Task<> PlaybackController::runLoadLyrics(Song song, CancelToken token)
         // spotify has nothing for a file of the person's own; a .lrc kept
         // beside it does
         lyrics = Lyrics::besideFile(song.localPath());
+    } else if (song.isSoundCloud()) {
+        if (m_soundcloud != nullptr) {
+            try {
+                lyrics = co_await m_soundcloud->lyrics(song);
+            } catch (const Cancelled &) {
+                co_return;
+            } catch (const SpotifyError &) {
+            }
+        }
     } else {
         try {
             lyrics = Lyrics::fromJson((co_await m_core->lyricsJson(song.uri)).toUtf8());
         } catch (const Cancelled &) {
             co_return;
         } catch (const SpotifyError &) {
+        }
+        // fallback: if spotify has no lyrics, try BSC lyrics matching via the sidecar
+        if (!lyrics && m_soundcloud != nullptr) {
+            try {
+                lyrics = co_await m_soundcloud->lyrics(song);
+            } catch (...) {
+            }
         }
     }
     if (isCancelled(token) || !isCurrent(song)) {

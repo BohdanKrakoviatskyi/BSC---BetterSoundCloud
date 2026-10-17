@@ -151,7 +151,7 @@ Flickable {
                 spacing: 12
                 LoadingSpinner { anchors.horizontalCenter: parent.horizontalCenter }
                 StyledText {
-                    text: "Searching Spotify…"
+                    text: Library.source === "soundcloud" ? "Searching SoundCloud…" : "Searching Spotify…"
                     color: Appearance.colors.onSurfaceVariant
                 }
             }

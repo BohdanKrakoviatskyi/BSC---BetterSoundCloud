@@ -4,6 +4,7 @@
 #include "app/Settings.h"
 #include "library/LocalLibrary.h"
 #include "playback/PlaybackController.h"
+#include "provider/SoundCloud.h"
 #include "spotify/SpotifySession.h"
 
 #include <QCollator>
@@ -72,6 +73,9 @@ bool LibraryStore::Destination::operator==(const Destination &other) const
     case Page::Playlist: return playlistId == other.playlistId;
     case Page::Album: return album.id == other.album.id;
     case Page::Artist: return artist.id == other.artist.id;
+    case Page::ArtistLikes: return artist.id == other.artist.id;
+    case Page::ArtistTracks: return artist.id == other.artist.id;
+    case Page::TrackDetails: return song.uri == other.song.uri;
     default: return true;
     }
 }
@@ -156,6 +160,99 @@ void LibraryStore::attachLocalFiles(LocalLibrary *localFiles)
     refreshPinnedPlaylists();
 }
 
+void LibraryStore::attachSoundCloud(SoundCloud *soundcloud)
+{
+    m_soundcloud = soundcloud;
+    if (m_soundcloud != nullptr) {
+        connect(m_soundcloud, &SoundCloud::accountChanged, this, [this] {
+            if (m_settings->musicSource() == QLatin1StringView("soundcloud")) {
+                emit profileChanged();
+                if (m_soundcloud->connected()) {
+                    m_hasLoadedHome = false;
+                    m_hasLoadedSavedSongs = false;
+                    detach(loadHome());
+                    detach(loadPlaylists());
+                } else {
+                    setPlaylistList({});
+                    m_savedSongs->clear();
+                    m_savedUris.clear();
+                    emit savedSongTotalChanged();
+                    emit savedChanged();
+                }
+            }
+        });
+    }
+}
+
+QString LibraryStore::source() const
+{
+    return m_settings->musicSource();
+}
+
+void LibraryStore::setSource(const QString &raw)
+{
+    // anything but "soundcloud" is spotify, the way settings reads it
+    const QString value = raw == QLatin1StringView("soundcloud") ? QStringLiteral("soundcloud") : QStringLiteral("spotify");
+    if (value == m_settings->musicSource()) {
+        return;
+    }
+    m_settings->setMusicSource(value);
+
+    // nothing in flight belongs to the service being left, and every list it
+    // filled is the other service's library
+    cancelDetailLoads();
+    m_search.cancel();
+    setLoading(m_searching, false);
+    m_hasLoadedHome = false;
+    m_hasLoadedSavedSongs = false;
+    m_savedSongTotal = -1;
+    ++m_savedRevision;
+    ++m_savedStatusRevision;
+    setPlaylistList({});
+    m_savedSongs->clear();
+    m_savedUris.clear();
+    m_openedPlaylists.clear();
+    m_openedAlbums.clear();
+    m_openedArtists.clear();
+    emit savedSongTotalChanged();
+    emit savedChanged();
+    emit profileChanged();
+    emit sourceChanged();
+
+    // the same pages, filled from the service just chosen: home first, then
+    // the playlists and liked songs behind it. soundcloud loads playlists and
+    // liked songs from loadHome, so the two reloads below are the spotify path
+    showHome();
+    detach(loadPlaylists());
+    detach(loadSavedSongs());
+}
+
+QString LibraryStore::profileId() const
+{
+    // the account row shows whoever the pages are drawn from. for soundcloud
+    // that is the sidecar's session, not a spotify profile
+    if (m_settings->musicSource() == QLatin1StringView("soundcloud") && m_soundcloud) {
+        return m_soundcloud->userId();
+    }
+    return m_profile.id;
+}
+
+QString LibraryStore::profileName() const
+{
+    if (m_settings->musicSource() == QLatin1StringView("soundcloud") && m_soundcloud) {
+        return m_soundcloud->userName();
+    }
+    return m_profile.displayName;
+}
+
+QUrl LibraryStore::profileArtworkUrl() const
+{
+    if (m_settings->musicSource() == QLatin1StringView("soundcloud") && m_soundcloud) {
+        return m_soundcloud->avatarUrl();
+    }
+    return m_profile.artworkUrl;
+}
+
 void LibraryStore::refreshLocalPlaylist()
 {
     const QString id = selectedPlaylistId();
@@ -207,6 +304,10 @@ Playlist LibraryStore::selectedPlaylist() const
 bool LibraryStore::isSelectedPlaylistEditable() const
 {
     const Playlist playlist = selectedPlaylist();
+    if (playlist.isSoundCloud()) {
+        // the sidecar only lists and plays: nothing here can be edited
+        return false;
+    }
     return playlist.isValid() && (playlist.isLocal() || playlist.canModify(m_profile.id));
 }
 
@@ -247,6 +348,12 @@ void LibraryStore::setPlaylistList(const QList<Playlist> &playlists)
 
 void LibraryStore::refreshPinnedPlaylists()
 {
+    // soundcloud has no pins: the pages that show them are spotify's, so the
+    // model stays empty there without forgetting what was pinned
+    if (m_settings->musicSource() == QLatin1StringView("soundcloud")) {
+        m_pinnedPlaylists->setItems({});
+        return;
+    }
     QList<Playlist> pinned;
     for (const Playlist &playlist : m_playlistList) {
         if (m_pinnedIds.contains(playlist.id)) {
@@ -357,6 +464,10 @@ bool LibraryStore::canReorderPlaylist() const
 
 void LibraryStore::refreshRecommendations()
 {
+    // soundcloud has no recently-played feed of its own to build shelves from
+    if (m_settings->musicSource() == QLatin1StringView("soundcloud")) {
+        return;
+    }
     QList<Artist> artists;
     QList<Album> albums;
     QSet<QString> seenArtists;
@@ -441,6 +552,9 @@ void LibraryStore::goBack()
     }
     case Page::Album: selectAlbum(destination.album); break;
     case Page::Artist: selectArtist(destination.artist); break;
+    case Page::ArtistLikes: selectArtistLikes(destination.artist); break;
+    case Page::ArtistTracks: selectArtistTracks(destination.artist); break;
+    case Page::TrackDetails: selectTrack(destination.song); break;
     }
 }
 
@@ -480,6 +594,9 @@ void LibraryStore::showPlaylists()
 {
     cancelDetailLoads();
     navigate({Page::Playlists});
+    if (m_settings->musicSource() == QLatin1StringView("soundcloud") && m_playlistList.isEmpty() && !m_loadingPlaylists) {
+        detach(loadPlaylists());
+    }
 }
 
 void LibraryStore::showPinnedPlaylists()
@@ -534,6 +651,15 @@ void LibraryStore::selectPlaylist(const Playlist &playlist)
         return;
     }
     setSongs(openedSongs);
+    if (playlist.isSoundCloud()) {
+        // the sidecar answers for these, without a spotify library token
+        if (!m_soundcloud || !m_soundcloud->connected()) {
+            return;
+        }
+        setLoading(m_loadingSongs, opened == nullptr);
+        detach(runPlaylistLoad(playlist, m_songLoad.renew()));
+        return;
+    }
     if (!m_session->hasLibraryToken()) {
         return;
     }
@@ -544,6 +670,29 @@ void LibraryStore::selectPlaylist(const Playlist &playlist)
 QCoro::Task<> LibraryStore::runPlaylistLoad(Playlist playlist, CancelToken token)
 {
     const Destination target {Page::Playlist, playlist.id};
+    if (playlist.isSoundCloud()) {
+        if (!m_soundcloud || !m_soundcloud->connected()) {
+            co_return;
+        }
+        try {
+            const QList<Song> loaded = co_await m_soundcloud->playlistSongs(playlist);
+            throwIfCancelled(token);
+            if (!(m_destination == target)) {
+                co_return;
+            }
+            setSongs(loaded);
+            setLoading(m_loadingSongs, false);
+            m_songLoad.finish(token);
+        } catch (const Cancelled &) {
+        } catch (const SpotifyError &error) {
+            if (m_destination == target && !isCancelled(token)) {
+                setLoading(m_loadingSongs, false);
+                reportError(QStringLiteral("Loading songs from \"%1\"").arg(playlist.name), error.message());
+            }
+        }
+        m_songLoad.finish(token);
+        co_return;
+    }
     try {
         const QList<Song> loaded = co_await m_session->withLibraryAccessToken<QList<Song>>(
             [this, id = playlist.id](QString accessToken) { return m_session->webApi().playlistSongs(id, accessToken); });
@@ -611,11 +760,62 @@ void LibraryStore::selectArtist(const Artist &artist)
     m_artistAlbums->setItems(opened ? opened->albums : QList<Album> {});
     m_artistTopSongs->setSongs(opened ? opened->topSongs : QList<Song> {});
     m_errors->clear();
+    if (m_settings->musicSource() == QLatin1StringView("soundcloud") || artist.isSoundCloud()) {
+        if (m_soundcloud && m_soundcloud->connected()) {
+            m_soundcloud->openArtist(artist.id);
+        }
+        return;
+    }
     if (!m_session->hasLibraryToken()) {
         return;
     }
     setLoading(m_loadingArtist, opened == nullptr);
     detach(runArtistLoad(artist, m_artistLoad.renew()));
+}
+
+void LibraryStore::selectTrack(const Song &song)
+{
+    cancelDetailLoads();
+    navigate({Page::TrackDetails, {}, {}, {}, {}, song});
+    m_errors->clear();
+    if (m_soundcloud && m_soundcloud->connected()) {
+        m_soundcloud->openTrackDetails(song);
+    }
+}
+
+void LibraryStore::goToTrack(const Song &song)
+{
+    selectTrack(song);
+}
+
+void LibraryStore::selectArtistLikes(const Artist &artist)
+{
+    cancelDetailLoads();
+    navigate({Page::ArtistLikes, {}, {}, artist});
+    m_errors->clear();
+    if (m_soundcloud && m_soundcloud->connected()) {
+        m_soundcloud->openArtist(artist.id);
+    }
+}
+
+void LibraryStore::goToArtistLikes(const Artist &artist)
+{
+    selectArtistLikes(artist);
+}
+
+void LibraryStore::selectArtistTracks(const Artist &artist)
+{
+    cancelDetailLoads();
+    navigate({Page::ArtistTracks, {}, {}, artist});
+    m_errors->clear();
+    if (m_soundcloud && m_soundcloud->connected()) {
+        m_soundcloud->openArtist(artist.id);
+    }
+}
+
+void LibraryStore::goToArtistTracks(const Artist &artist)
+{
+    selectArtistTracks(artist);
 }
 
 QCoro::Task<> LibraryStore::runArtistLoad(Artist artist, CancelToken token)
@@ -677,6 +877,9 @@ QCoro::Task<> LibraryStore::runSongNavigation(Song song, bool toAlbum)
 {
     try {
         if (toAlbum) {
+            if (m_settings->musicSource() == QLatin1StringView("soundcloud") || song.isSoundCloud()) {
+                co_return;
+            }
             Album album = song.albumDestination();
             if (!album.isValid()) {
                 const Song resolved = co_await m_session->withLibraryAccessToken<Song>(
@@ -688,6 +891,15 @@ QCoro::Task<> LibraryStore::runSongNavigation(Song song, bool toAlbum)
             }
             selectAlbum(album);
         } else {
+            if (m_settings->musicSource() == QLatin1StringView("soundcloud") || song.isSoundCloud()) {
+                if (m_soundcloud) {
+                    Artist artist = co_await m_soundcloud->artistFromSong(song);
+                    if (artist.isValid()) {
+                        selectArtist(artist);
+                    }
+                }
+                co_return;
+            }
             Artist artist = song.primaryArtist();
             if (!artist.isValid()) {
                 const Song resolved = co_await m_session->withLibraryAccessToken<Song>(
@@ -737,6 +949,13 @@ void LibraryStore::setSearchQuery(const QString &query)
     };
     if (trimmed.isEmpty() || searchIsCatchphrase()) {
         clearResults();
+    } else if (m_settings->musicSource() == QLatin1StringView("soundcloud")) {
+        if (m_soundcloud && m_soundcloud->connected()) {
+            setLoading(m_searching, true);
+            detach(runSearch(trimmed, m_search.renew()));
+        } else {
+            m_errors->show(QStringLiteral("Connect your SoundCloud account to search."));
+        }
     } else if (!m_session->hasLibraryToken()) {
         m_errors->show(QStringLiteral("Connect your Spotify library to search the catalog."));
     } else {
@@ -748,6 +967,37 @@ void LibraryStore::setSearchQuery(const QString &query)
 
 QCoro::Task<> LibraryStore::runSearch(QString query, CancelToken token)
 {
+    if (m_settings->musicSource() == QLatin1StringView("soundcloud")) {
+        // soundcloud search answers with tracks only: there are no album,
+        // artist or playlist results to fill
+        if (!m_soundcloud || !m_soundcloud->connected()) {
+            co_return;
+        }
+        try {
+            co_await QCoro::sleepFor(std::chrono::milliseconds(350));
+            throwIfCancelled(token);
+            const QList<Song> songs = co_await m_soundcloud->searchSongs(query);
+            throwIfCancelled(token);
+            if (m_searchQuery.trimmed() != query) {
+                co_return;
+            }
+            m_searchSongs->setSongs(songs);
+            m_searchAlbums->setItems({});
+            m_searchArtists->setItems({});
+            m_searchPlaylists->setItems({});
+            setLoading(m_searching, false);
+            emit searchChanged();
+            m_search.finish(token);
+        } catch (const Cancelled &) {
+        } catch (const SpotifyError &error) {
+            if (!isCancelled(token)) {
+                setLoading(m_searching, false);
+                reportError(QStringLiteral("Searching for \"%1\"").arg(query), error.message());
+            }
+        }
+        m_search.finish(token);
+        co_return;
+    }
     try {
         co_await QCoro::sleepFor(std::chrono::milliseconds(350));
         throwIfCancelled(token);
@@ -812,6 +1062,10 @@ void LibraryStore::persistSearchHistory()
 
 void LibraryStore::togglePinned(const Playlist &playlist)
 {
+    // pins are a spotify-library idea, and a soundcloud playlist is not one
+    if (playlist.isSoundCloud()) {
+        return;
+    }
     if (m_pinnedIds.contains(playlist.id)) {
         m_pinnedIds.remove(playlist.id);
     } else {
@@ -825,6 +1079,11 @@ void LibraryStore::togglePinned(const Playlist &playlist)
 
 void LibraryStore::toggleSaved(const Song &song)
 {
+    // soundcloud's liked list is the app's own; a music file of the person's
+    // own still toggles through this path, so leave those alone
+    if (m_settings->musicSource() == QLatin1StringView("soundcloud") && !song.isLocalFile()) {
+        return;
+    }
     if (!m_session->hasFullLibraryAccess()) {
         m_errors->show(QStringLiteral("Reconnect your library once to enable saved songs and playlist editing."));
         return;
@@ -861,6 +1120,11 @@ void LibraryStore::toggleSaved(const Song &song)
 
 QCoro::Task<> LibraryStore::runToggleSaved(Song song, bool shouldSave, quint64 generation)
 {
+    // the guard in toggleSaved keeps this out of soundcloud's way; this is
+    // belt and braces for a call that slipped past it
+    if (m_settings->musicSource() == QLatin1StringView("soundcloud") && !song.isLocalFile()) {
+        co_return;
+    }
     try {
         co_await m_session->withLibraryAccessToken<void>([this, shouldSave, uri = song.uri](QString accessToken) {
             return m_session->webApi().setSaved(shouldSave, uri, accessToken);
@@ -888,6 +1152,11 @@ QCoro::Task<> LibraryStore::runToggleSaved(Song song, bool shouldSave, quint64 g
 
 QCoro::Task<> LibraryStore::loadSavedStatuses(QList<Song> songs)
 {
+    // soundcloud's liked songs list is the whole truth: there is no per-track
+    // saved status to ask about
+    if (m_settings->musicSource() == QLatin1StringView("soundcloud")) {
+        co_return;
+    }
     if (m_session->libraryNeedsAuthorizationUpgrade() || !m_session->hasLibraryToken() || songs.isEmpty()) {
         co_return;
     }
@@ -929,6 +1198,16 @@ QCoro::Task<> LibraryStore::loadSavedStatuses(QList<Song> songs)
 
 QCoro::Task<> LibraryStore::loadInitialLibrary()
 {
+    if (m_settings->musicSource() == QLatin1StringView("soundcloud")) {
+        // no sidecar, or nobody signed in: resolve rather than leave the app
+        // waiting on a library that cannot answer. loadHome fills playlists
+        // and liked songs from the sidecar when there is one
+        if (!m_soundcloud || !m_soundcloud->connected()) {
+            co_return;
+        }
+        co_await loadHome();
+        co_return;
+    }
     if (!m_session->hasLibraryToken()) {
         co_return;
     }
@@ -951,6 +1230,20 @@ QCoro::Task<> LibraryStore::loadInitialLibrary()
 
 QCoro::Task<> LibraryStore::loadPlaylists()
 {
+    if (m_settings->musicSource() == QLatin1StringView("soundcloud")) {
+        if (!m_soundcloud || !m_soundcloud->connected() || m_loadingPlaylists) {
+            co_return;
+        }
+        setLoading(m_loadingPlaylists, true);
+        try {
+            setPlaylistList(co_await m_soundcloud->playlists());
+        } catch (const Cancelled &) {
+        } catch (const SpotifyError &error) {
+            reportError(QStringLiteral("Loading playlists"), error.message());
+        }
+        setLoading(m_loadingPlaylists, false);
+        co_return;
+    }
     if (!m_session->hasLibraryToken() || m_loadingPlaylists) {
         co_return;
     }
@@ -977,6 +1270,22 @@ void LibraryStore::retryLoadingPlaylists()
 
 QCoro::Task<> LibraryStore::loadHome()
 {
+    if (m_settings->musicSource() == QLatin1StringView("soundcloud")) {
+        if (!m_soundcloud || !m_soundcloud->connected() || m_loadingHome) {
+            co_return;
+        }
+        setLoading(m_loadingHome, true);
+        // soundcloud has no made-for-you shelves: the home page is the liked
+        // songs and the playlists, and both come from the sidecar
+        m_recentlyPlayed->setSongs({});
+        m_recommendedArtists->setItems({});
+        m_recommendedAlbums->setItems({});
+        co_await loadPlaylists();
+        co_await loadSavedSongs();
+        m_hasLoadedHome = true;
+        setLoading(m_loadingHome, false);
+        co_return;
+    }
     if (m_session->libraryNeedsAuthorizationUpgrade() || !m_session->hasLibraryToken() || m_loadingHome) {
         co_return;
     }
@@ -1002,6 +1311,28 @@ QCoro::Task<> LibraryStore::loadHome()
 
 QCoro::Task<> LibraryStore::loadSavedSongs()
 {
+    if (m_settings->musicSource() == QLatin1StringView("soundcloud")) {
+        if (!m_soundcloud || !m_soundcloud->connected() || m_loadingSavedSongs) {
+            co_return;
+        }
+        setLoading(m_loadingSavedSongs, true);
+        try {
+            const QList<Song> loaded = co_await m_soundcloud->likedSongs();
+            m_savedSongs->setSongs(loaded);
+            for (const Song &song : loaded) {
+                m_savedUris.insert(song.uri);
+            }
+            m_hasLoadedSavedSongs = true;
+            ++m_savedRevision;
+            emit savedChanged();
+            emit savedSongTotalChanged();
+        } catch (const Cancelled &) {
+        } catch (const SpotifyError &error) {
+            reportError(QStringLiteral("Loading saved songs"), error.message());
+        }
+        setLoading(m_loadingSavedSongs, false);
+        co_return;
+    }
     if (m_session->libraryNeedsAuthorizationUpgrade()) {
         m_errors->show(QStringLiteral("Reconnect your library once to enable saved songs and playlist editing."));
         co_return;
@@ -1047,6 +1378,11 @@ QCoro::Task<> LibraryStore::loadSavedSongs()
 
 QCoro::Task<> LibraryStore::loadSavedSongTotal()
 {
+    if (m_settings->musicSource() == QLatin1StringView("soundcloud")) {
+        // soundcloud has no cheap total, and loadSavedSongs fills the whole
+        // list anyway, so -1 ("unknown") is what the count waits on
+        co_return;
+    }
     if (m_hasLoadedSavedSongs) {
         co_return;
     }
@@ -1089,6 +1425,10 @@ void LibraryStore::adjustPlaylistSongCount(const QString &id, int delta)
 
 void LibraryStore::addToPlaylist(const Song &song, const Playlist &playlist)
 {
+    if (playlist.isSoundCloud()) {
+        // the sidecar lists and plays: adding to one is not something it does
+        return;
+    }
     if (playlist.isLocal()) {
         // what changes shows once the library says so (refreshLocalPlaylist)
         if (!song.isLocalFile()) {
@@ -1103,6 +1443,9 @@ void LibraryStore::addToPlaylist(const Song &song, const Playlist &playlist)
 
 QCoro::Task<> LibraryStore::runAdd(Song song, Playlist playlist)
 {
+    if (playlist.isSoundCloud()) {
+        co_return;
+    }
     if (!m_session->hasFullLibraryAccess()) {
         m_errors->show(kReconnectToEdit);
         co_return;
@@ -1132,6 +1475,9 @@ void LibraryStore::removeFromSelectedPlaylist(const Song &song)
     const Playlist playlist = selectedPlaylist();
     if (playlist.isLocal()) {
         removeFromLocalPlaylist(song, playlist);
+    } else if (playlist.isSoundCloud()) {
+        // nothing to remove from: the sidecar's playlists are read-only
+        return;
     } else if (playlist.isValid()) {
         detach(runRemove(song, playlist));
     }
@@ -1139,6 +1485,9 @@ void LibraryStore::removeFromSelectedPlaylist(const Song &song)
 
 void LibraryStore::removeFromPlaylist(const Song &song, const Playlist &playlist)
 {
+    if (playlist.isSoundCloud()) {
+        return;
+    }
     if (playlist.isLocal()) {
         removeFromLocalPlaylist(song, playlist);
         return;
@@ -1155,6 +1504,9 @@ void LibraryStore::removeFromLocalPlaylist(const Song &song, const Playlist &pla
 
 QCoro::Task<> LibraryStore::runRemove(Song song, Playlist playlist)
 {
+    if (playlist.isSoundCloud()) {
+        co_return;
+    }
     if (!m_session->hasFullLibraryAccess()) {
         m_errors->show(kReconnectToEdit);
         co_return;
@@ -1200,6 +1552,10 @@ void LibraryStore::moveSongs(int from, int count, int to)
 {
     // a playlist made here is the person's own, and spotify has no say in it
     const Playlist playlist = selectedPlaylist();
+    if (playlist.isSoundCloud()) {
+        // the sidecar also has no say in a soundcloud playlist's order
+        return;
+    }
     const bool local = playlist.isLocal();
     if (!local && !m_session->hasFullLibraryAccess()) {
         m_errors->show(kReconnectToEdit);
@@ -1258,6 +1614,9 @@ void LibraryStore::moveSongs(int from, int count, int to)
 
 QCoro::Task<> LibraryStore::runMove(Playlist playlist, int from, int count, int to, QList<Song> previous, QList<Song> reordered)
 {
+    if (playlist.isSoundCloud()) {
+        co_return;
+    }
     QString failure;
     bool forbidden = false;
     try {
@@ -1287,6 +1646,9 @@ QCoro::Task<> LibraryStore::runMove(Playlist playlist, int from, int count, int 
 
 void LibraryStore::deletePlaylist(const Playlist &playlist)
 {
+    if (playlist.isSoundCloud()) {
+        return;
+    }
     if (playlist.isLocal()) {
         deleteLocalPlaylist(playlist);
         return;
@@ -1316,6 +1678,9 @@ void LibraryStore::deleteLocalPlaylist(const Playlist &playlist)
 
 QCoro::Task<> LibraryStore::runDelete(Playlist playlist)
 {
+    if (playlist.isSoundCloud()) {
+        co_return;
+    }
     if (!m_session->hasFullLibraryAccess()) {
         m_errors->show(kReconnectToEdit);
         co_return;
@@ -1354,6 +1719,11 @@ QCoro::Task<> LibraryStore::runDelete(Playlist playlist)
 void LibraryStore::savePlaylist(bool isNew, const QString &name, const QString &description, bool isPublic,
                                 const QByteArray &coverJpeg)
 {
+    // creating and editing is a spotify-library thing, and a soundcloud
+    // playlist is read-only
+    if (m_settings->musicSource() == QLatin1StringView("soundcloud") || selectedPlaylist().isSoundCloud()) {
+        return;
+    }
     detach(runSave(isNew, name, description, isPublic, coverJpeg));
 }
 
@@ -1381,6 +1751,9 @@ void LibraryStore::saveLocalPlaylist(bool isNew, const QString &name, const QStr
 
 QCoro::Task<> LibraryStore::runSave(bool isNew, QString name, QString description, bool isPublic, QByteArray coverJpeg)
 {
+    if (m_settings->musicSource() == QLatin1StringView("soundcloud") || selectedPlaylist().isSoundCloud()) {
+        co_return;
+    }
     const auto finish = [this](bool ok) {
         setLoading(m_savingPlaylist, false);
         emit playlistSaveFinished(ok);
@@ -1455,6 +1828,9 @@ QCoro::Task<> LibraryStore::runSave(bool isNew, QString name, QString descriptio
 
 QCoro::Task<bool> LibraryStore::uploadCover(Playlist playlist, QByteArray jpeg)
 {
+    if (playlist.isSoundCloud()) {
+        co_return false;
+    }
     if (!playlist.canModify(m_profile.id) || !m_session->hasLibraryToken()) {
         co_return false;
     }
@@ -1474,6 +1850,9 @@ QCoro::Task<bool> LibraryStore::uploadCover(Playlist playlist, QByteArray jpeg)
 
 QCoro::Task<> LibraryStore::refreshCover(Playlist playlist)
 {
+    if (playlist.isSoundCloud()) {
+        co_return;
+    }
     // spotify mints a new image url for an uploaded cover once it has processed
     // it, and the old url keeps serving the old picture until then.
     const QUrl staleUrl = playlist.artworkUrl;

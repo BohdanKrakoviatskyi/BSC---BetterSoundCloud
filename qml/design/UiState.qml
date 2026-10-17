@@ -139,6 +139,12 @@ QtObject {
         }
     }
 
+    /// open the immersive player directly in fullscreen lyrics view
+    function openFullscreenLyrics() {
+        Settings.immersivePlayerPanel = "lyrics"
+        immersiveOpen = true
+    }
+
     /// leaving the immersive player first, as going to an album or artist does
     function goToAlbum(song: song) {
         immersiveOpen = false
@@ -150,6 +156,21 @@ QtObject {
         Library.goToArtist(song)
     }
 
+    function goToTrack(song: song) {
+        immersiveOpen = false
+        Library.goToTrack(song)
+    }
+
+    function goToArtistLikes(artist: artist) {
+        immersiveOpen = false
+        Library.goToArtistLikes(artist)
+    }
+
+    function goToArtistTracks(artist: artist) {
+        immersiveOpen = false
+        Library.goToArtistTracks(artist)
+    }
+
     /// connecting for the first time (SetupView) is under way: it shows
     /// until playback is connected as well as the library, not only the
     /// library. it begins only once the saved logins have been read, so a
@@ -157,9 +178,17 @@ QtObject {
     /// does playback dropping later on
     property bool setupUnderway: false
     /// the setup shows rather than the library
-    readonly property bool needsSetup: !Session.libraryConnected || (setupUnderway && !Session.connected)
+    readonly property bool needsSetup: (Library.source === "soundcloud")
+        ? !SoundCloud.connected
+        : (!Session.libraryConnected || (setupUnderway && !Session.connected))
 
     function followSetup() {
+        if (Library.source === "soundcloud") {
+            if (SoundCloud.connected) {
+                setupUnderway = false
+            }
+            return
+        }
         if (!Session.evaluatingStoredLogin && !Session.libraryConnected) {
             setupUnderway = true
         } else if (Session.libraryConnected && Session.connected) {
@@ -172,6 +201,14 @@ QtObject {
         function onLibraryConnectedChanged() { root.followSetup() }
         function onConnectedChanged() { root.followSetup() }
         function onEvaluatingStoredLoginChanged() { root.followSetup() }
+    }
+    readonly property Connections soundCloudFollower: Connections {
+        target: SoundCloud
+        function onAccountChanged() { root.followSetup() }
+    }
+    readonly property Connections librarySourceFollower: Connections {
+        target: Library
+        function onSourceChanged() { root.followSetup() }
     }
     Component.onCompleted: followSetup()
 }

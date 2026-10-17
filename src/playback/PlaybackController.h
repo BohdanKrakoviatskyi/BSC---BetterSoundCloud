@@ -24,6 +24,7 @@ class ErrorCenter;
 class PlaybackCore;
 class Settings;
 class SpotifySession;
+class SoundCloud;
 
 /// the player: queue, transport, volume, lyrics and the sleep timer. the
 /// transport half of PlayerModel.swift, with the same rule underneath it all:
@@ -188,6 +189,8 @@ public:
     /// the machine is about to suspend
     void prepareForSleep();
 
+    void attachSoundCloud(SoundCloud *soundcloud);
+
 signals:
     void currentSongChanged();
     void playingChanged();
@@ -294,9 +297,12 @@ private:
     SleepFade m_sleepFade = SleepFade::None;
 
     bool m_visualizersEnabled = true;
+    SoundCloud *m_soundcloud = nullptr;
     bool m_presentationActive = true;
     bool m_analysisActive = false;
     bool m_loadingPulseWasVisible = true;
+
+
 };
 
 } // namespace swiftify

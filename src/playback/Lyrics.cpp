@@ -7,6 +7,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
+#include <QUrl>
 
 #include <algorithm>
 
@@ -99,6 +100,38 @@ std::optional<Lyrics> Lyrics::fromJson(const QByteArray &json)
         if (line.endTimeMs <= line.startTimeMs) {
             line.endTimeMs = index + 1 < lyrics.lines.size() ? lyrics.lines.at(index + 1).startTimeMs
                                                              : line.startTimeMs + 5000;
+        }
+    }
+    return lyrics;
+}
+
+std::optional<Lyrics> Lyrics::fromSidecarJson(const QJsonObject &object)
+{
+    const QJsonArray linesArray = object.value(QStringLiteral("lines")).toArray();
+    if (linesArray.isEmpty()) {
+        return std::nullopt;
+    }
+    Lyrics lyrics;
+    const QString sourceUrl = object.value(QStringLiteral("sourceUrl")).toString();
+    lyrics.provider = sourceUrl.isEmpty() ? QStringLiteral("LRCLIB") : QUrl(sourceUrl).host();
+    lyrics.synchronized = object.value(QStringLiteral("isSynced")).toBool();
+
+    for (const QJsonValue &value : linesArray) {
+        const QJsonObject line = value.toObject();
+        const QString text = line.value(QStringLiteral("text")).toString();
+        const quint32 startMs = quint32(line.value(QStringLiteral("startMs")).toDouble());
+        lyrics.lines.append({
+            startMs,
+            0,
+            text,
+        });
+    }
+
+    if (lyrics.synchronized) {
+        for (qsizetype index = 0; index < lyrics.lines.size(); ++index) {
+            LyricLine &line = lyrics.lines[index];
+            line.endTimeMs = (index + 1 < lyrics.lines.size()) ? lyrics.lines.at(index + 1).startTimeMs
+                                                               : line.startTimeMs + 5000;
         }
     }
     return lyrics;

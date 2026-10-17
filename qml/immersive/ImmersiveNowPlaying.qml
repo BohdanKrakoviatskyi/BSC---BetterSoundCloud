@@ -132,8 +132,8 @@ Item {
                 anchors.centerIn: parent
                 width: root.innerSize
                 height: root.innerSize
-                intensity: 0.42
-                glowRadius: 44
+                intensity: 0.62
+                glowRadius: 72
                 cornerRadius: root.artworkRadius
                 circular: root.roundCover
                 primary: PlayerStyle.primary
@@ -169,6 +169,26 @@ Item {
                 source: Player.currentSong.artworkUrl
                 crossfade: true
                 revealDuration: Player.crossfadeMs
+            }
+
+            IconButton {
+                id: saveBadge
+                anchors.left: cover.left
+                anchors.bottom: cover.bottom
+                anchors.margins: 14
+                z: 10
+                scheme: root.scheme
+                size: 34
+                iconSize: 18
+                symbol: Library.isSaved(Player.currentSong.uri) ? "check" : "add"
+                iconColor: "white"
+                colBackground: Qt.rgba(0, 0, 0, 0.6)
+                colBackgroundHover: Qt.rgba(0, 0, 0, 0.8)
+                colRipple: Qt.rgba(1, 1, 1, 0.2)
+                backgroundItem.border.width: 1
+                backgroundItem.border.color: Qt.rgba(1, 1, 1, 0.24)
+                tooltip: Library.isSaved(Player.currentSong.uri) ? "Saved to Library" : "Save to Library"
+                onClicked: Library.toggleSaved(Player.currentSong)
             }
 
             Toast {
@@ -224,16 +244,35 @@ Item {
 
                 Row {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    spacing: 5
+                    spacing: 6
+
+                    Rectangle {
+                        visible: root.shownSong.isExplicit
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 16
+                        height: 16
+                        radius: 3
+                        color: Qt.rgba(1, 1, 1, 0.25)
+                        border.width: 1
+                        border.color: Qt.rgba(1, 1, 1, 0.3)
+
+                        StyledText {
+                            anchors.centerIn: parent
+                            text: "E"
+                            font.pixelSize: 10
+                            font.weight: Font.Bold
+                            color: "white"
+                        }
+                    }
 
                     StyledText {
                         anchors.verticalCenter: parent.verticalCenter
-                        width: Math.min(implicitWidth, metadata.width - more.width - 5)
+                        width: Math.min(implicitWidth, metadata.width - more.width - (root.shownSong.isExplicit ? 28 : 6))
                         text: root.shownSong.artists
                         elide: Text.ElideRight
                         font.pixelSize: Appearance.fontSize.larger
                         font.weight: Font.Medium
-                        color: Qt.rgba(1, 1, 1, 0.62)
+                        color: Qt.rgba(1, 1, 1, 0.72)
                     }
                     IconButton {
                         id: more
@@ -242,7 +281,7 @@ Item {
                         symbol: "more_horiz"
                         size: 28
                         iconSize: 20
-                        iconColor: Qt.rgba(1, 1, 1, 0.62)
+                        iconColor: Qt.rgba(1, 1, 1, 0.72)
                         colBackgroundHover: Qt.rgba(1, 1, 1, 0.1)
                         tooltip: "More"
                         onClicked: SongMenus.open(Player.currentSong, false)
@@ -266,6 +305,7 @@ Item {
                 width: Math.min(details.width, root.compactHorizontal ? details.width : Math.max(320, root.artworkSize + 80))
                 height: 18
 
+                property bool showRemaining: false
 
                 Time {
                     id: elapsed
@@ -294,7 +334,15 @@ Item {
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     width: 48
-                    text: "−" + Format.playbackTime(Math.max(seek.durationMs - seek.displayPositionMs, 0))
+                    text: progress.showRemaining
+                          ? ("−" + Format.playbackTime(Math.max(seek.durationMs - seek.displayPositionMs, 0)))
+                          : Format.playbackTime(seek.durationMs)
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: progress.showRemaining = !progress.showRemaining
+                    }
                 }
             }
 

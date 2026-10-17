@@ -159,11 +159,45 @@ Item {
                     Row {
                         id: content
                         anchors.centerIn: parent
-                        spacing: 6
+                        spacing: segment.modelData.text.length > 0 && segment.modelData.symbol.length > 0 ? 6 : 0
+
+                        Image {
+                            id: spotifyIcon
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: root.iconSize
+                            height: root.iconSize
+                            sourceSize.width: root.iconSize * 2
+                            sourceSize.height: root.iconSize * 2
+                            fillMode: Image.PreserveAspectFit
+                            visible: segment.modelData.symbol === "spotify"
+                            source: "qrc:/qt/qml/Swiftify/resources/spotify.svg"
+                            opacity: segment.selected ? 1.0 : 0.65
+
+                            Behavior on opacity {
+                                NumberAnimation { duration: Appearance.duration(150) }
+                            }
+                        }
+
+                        Image {
+                            id: soundcloudIcon
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: root.iconSize
+                            height: root.iconSize
+                            sourceSize.width: root.iconSize * 2
+                            sourceSize.height: root.iconSize * 2
+                            fillMode: Image.PreserveAspectFit
+                            visible: segment.modelData.symbol === "soundcloud" || segment.modelData.symbol === "cloud"
+                            source: "qrc:/qt/qml/Swiftify/resources/soundcloud.svg"
+                            opacity: segment.selected ? 1.0 : 0.65
+
+                            Behavior on opacity {
+                                NumberAnimation { duration: Appearance.duration(150) }
+                            }
+                        }
 
                         MaterialSymbol {
                             anchors.verticalCenter: parent.verticalCenter
-                            visible: segment.modelData.symbol.length > 0
+                            visible: segment.modelData.symbol.length > 0 && segment.modelData.symbol !== "spotify" && segment.modelData.symbol !== "soundcloud" && segment.modelData.symbol !== "cloud"
                             text: segment.modelData.symbol
                             iconSize: root.iconSize
                             fill: segment.selected ? 1 : 0

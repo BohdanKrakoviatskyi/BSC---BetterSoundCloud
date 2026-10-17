@@ -39,6 +39,12 @@ GridView {
     // the new-playlist tile comes first on the full grid
     model: source.count + leading
 
+    Component.onCompleted: {
+        if (Library.source === "soundcloud" && source.count === 0 && !Library.loadingPlaylists) {
+            Library.retryLoadingPlaylists()
+        }
+    }
+
     header: Item {
         width: root.available
         height: 64
@@ -165,6 +171,17 @@ GridView {
         symbol: "push_pin"
         title: "No Pinned Playlists"
         description: "Right-click a playlist to pin it here."
+    }
+
+    Item {
+        anchors.centerIn: parent
+        width: 100
+        height: 100
+        visible: Library.loadingPlaylists && root.source.count === 0
+
+        LoadingSpinner {
+            anchors.centerIn: parent
+        }
     }
 
     MenuLoader {

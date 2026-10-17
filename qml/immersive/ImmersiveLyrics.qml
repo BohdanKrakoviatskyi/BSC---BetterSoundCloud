@@ -46,9 +46,9 @@ Item {
         anchors.fill: parent
         Reveal.shown: !Player.loadingLyrics && Player.hasLyrics
         model: Player.lyrics
-        spacing: 26
-        topMargin: 30
-        bottomMargin: 30
+        spacing: 28
+        topMargin: 40
+        bottomMargin: 40
         leftMargin: 8
         rightMargin: 8
         // dragged past either end, it stretches and springs back
@@ -116,16 +116,75 @@ Item {
             required property int index
             required property string words
             required property int startTimeMs
+            required property int endTimeMs
             readonly property bool active: !Player.lyricsSynchronized || Player.activeLyricIndex === index
             property bool highlighted: false
             property real glowStrength: active ? 1 : 0
+            property real fillProgress: line.active ? 0.0 : (line.index < Player.activeLyricIndex ? 1.0 : 0.0)
 
             Behavior on glowStrength {
                 NumberAnimation { duration: Appearance.duration(320); easing.type: Easing.InOutQuad }
             }
 
+            NumberAnimation {
+                id: fillAnim
+                target: line
+                property: "fillProgress"
+                easing.type: Easing.Linear
+            }
+
+            function startFillAnimation() {
+                if (!Player.lyricsSynchronized) {
+                    fillAnim.stop()
+                    line.fillProgress = 1.0
+                    return
+                }
+
+                const now = Player.livePositionMs
+                const start = line.startTimeMs
+                const end = line.endTimeMs > line.startTimeMs ? line.endTimeMs : (start + Math.max(1200, line.words.length * 75))
+                const totalDuration = Math.max(400, end - start)
+                const elapsed = Math.max(0, now - start)
+
+                if (elapsed >= totalDuration) {
+                    fillAnim.stop()
+                    line.fillProgress = 1.0
+                    return
+                }
+
+                const startProgress = Math.min(0.95, elapsed / totalDuration)
+                const remainingDuration = Math.max(200, totalDuration - elapsed)
+
+                fillAnim.stop()
+                fillAnim.from = startProgress
+                fillAnim.to = 1.0
+                fillAnim.duration = remainingDuration
+                if (Player.playing) {
+                    fillAnim.start()
+                } else {
+                    line.fillProgress = startProgress
+                }
+            }
+
+            onActiveChanged: {
+                if (active) {
+                    startFillAnimation()
+                } else {
+                    fillAnim.stop()
+                    fillProgress = line.index < Player.activeLyricIndex ? 1.0 : 0.0
+                }
+            }
+
+            Component.onCompleted: {
+                if (line.active) {
+                    line.startFillAnimation()
+                } else {
+                    line.fillProgress = line.index < Player.activeLyricIndex ? 1.0 : 0.0
+                }
+            }
+
             width: list.width - list.leftMargin - list.rightMargin
-            height: label.implicitHeight + 16
+            height: baseLabel.implicitHeight + 16
 
             property real lag: 0
             transform: Translate { y: line.lag }
@@ -144,10 +203,41 @@ Item {
                 NumberAnimation { target: line; property: "lag"; to: 0; duration: 560; easing.type: Easing.OutBack; easing.overshoot: 0.6 }
             }
 
+            Connections {
+                target: Player
+                function onActiveLyricIndexChanged() {
+                    if (!line.active) {
+                        fillAnim.stop()
+                        line.fillProgress = line.index < Player.activeLyricIndex ? 1.0 : 0.0
+                    }
+                }
+                function onLivePositionChanged() {
+                    if (line.active && Player.lyricsSynchronized) {
+                        const start = line.startTimeMs
+                        const end = line.endTimeMs > start ? line.endTimeMs : (start + Math.max(1200, line.words.length * 75))
+                        const total = Math.max(400, end - start)
+                        const expectedProgress = Math.min(1.0, Math.max(0.0, (Player.livePositionMs - start) / total))
+                        if (Math.abs(line.fillProgress - expectedProgress) > 0.18) {
+                            line.startFillAnimation()
+                        }
+                    }
+                }
+                function onPlayingChanged() {
+                    if (line.active && Player.lyricsSynchronized) {
+                        if (Player.playing) {
+                            if (fillAnim.paused) fillAnim.resume()
+                            else if (!fillAnim.running && line.fillProgress < 1.0) line.startFillAnimation()
+                        } else {
+                            if (fillAnim.running) fillAnim.pause()
+                        }
+                    }
+                }
+            }
+
             // the sung line swells a touch, on a spring, or with reduced
             // motion on the plain ease out the column scrolls with
-            property real springing: active ? 1 : 0.96
-            property real eased: active ? 1 : 0.96
+            property real springing: active ? 1.0 : 0.94
+            property real eased: active ? 1.0 : 0.94
             scale: Appearance.reduceMotion ? eased : springing
             transformOrigin: Item.Left
 
@@ -160,58 +250,78 @@ Item {
                 NumberAnimation { duration: 420; easing.type: Easing.OutCubic }
             }
 
-
-            // the sung line sits on a scalloped pill
-            WavyPill {
-                objectName: "lyricHighlight"
-                anchors.fill: parent
-                cornerRadius: 32
-                color: Qt.rgba(1, 1, 1, line.active && Player.lyricsSynchronized ? 0.07 : 0)
-
-                Behavior on color {
-                    ColorAnimation { duration: Appearance.duration(320); easing.type: Easing.InOutQuad }
-                }
-            }
-
             Rectangle {
                 anchors.fill: parent
-                radius: 20
-                color: Qt.rgba(1, 1, 1, line.highlighted ? 0.13 : 0)
+                radius: 14
+                color: Qt.rgba(1, 1, 1, line.highlighted ? 0.08 : 0)
 
                 Behavior on color {
                     ColorAnimation { duration: Appearance.duration(180); easing.type: Easing.OutQuad }
                 }
             }
 
-            StyledText {
-                id: label
-                objectName: "lyricText"
-                width: parent.width
-                y: 8
-                leftPadding: 24
-                rightPadding: 24
-                topPadding: 14
-                bottomPadding: 14
-                text: line.words.length > 0 ? line.words : "♪"
-                wrapMode: Text.Wrap
-                font.pixelSize: 30
-                font.weight: Font.Bold
-                color: "white"
-                opacity: line.active ? 1 : 0.28
+            Item {
+                id: textContainer
+                anchors.fill: parent
 
-                Behavior on opacity {
-                    NumberAnimation { duration: Appearance.duration(320); easing.type: Easing.InOutQuad }
+                // Base text: letters are physically already rendered in soft muted tone
+                StyledText {
+                    id: baseLabel
+                    objectName: "lyricBaseText"
+                    anchors.fill: parent
+                    leftPadding: 16
+                    rightPadding: 16
+                    topPadding: 10
+                    bottomPadding: 10
+                    text: line.words.length > 0 ? line.words : "♪"
+                    wrapMode: Text.Wrap
+                    font.pixelSize: 34
+                    font.weight: line.active ? Font.Bold : Font.DemiBold
+                    color: "white"
+                    opacity: 0.36
                 }
 
-                layer.enabled: line.glowStrength > 0.01
-                layer.effect: MultiEffect {
-                    shadowEnabled: true
-                    shadowColor: root.glow
-                    shadowOpacity: line.glowStrength
-                    shadowBlur: 1
-                    blurMax: 24
-                    shadowHorizontalOffset: 0
-                    shadowVerticalOffset: 0
+                // Active text layer: sweeps across from left to right revealing glowing white
+                Item {
+                    id: activeClip
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    width: line.fillProgress >= 1.0
+                           ? parent.width
+                           : (line.fillProgress <= 0.001
+                              ? 0
+                              : Math.min(parent.width, Math.max(0, baseLabel.leftPadding + (baseLabel.contentWidth + 24) * line.fillProgress)))
+                    clip: true
+                    visible: width > 0
+
+                    StyledText {
+                        id: activeLabel
+                        objectName: "lyricActiveText"
+                        width: textContainer.width
+                        height: textContainer.height
+                        leftPadding: baseLabel.leftPadding
+                        rightPadding: baseLabel.rightPadding
+                        topPadding: baseLabel.topPadding
+                        bottomPadding: baseLabel.bottomPadding
+                        text: baseLabel.text
+                        wrapMode: baseLabel.wrapMode
+                        font.pixelSize: baseLabel.font.pixelSize
+                        font.weight: Font.Bold
+                        color: "white"
+                        opacity: line.active ? 1.0 : 0.36
+
+                        layer.enabled: line.active && line.glowStrength > 0.01
+                        layer.effect: MultiEffect {
+                            shadowEnabled: true
+                            shadowColor: Qt.rgba(1, 1, 1, 0.45)
+                            shadowOpacity: line.glowStrength * 0.7
+                            shadowBlur: 0.9
+                            blurMax: 20
+                            shadowHorizontalOffset: 0
+                            shadowVerticalOffset: 0
+                        }
+                    }
                 }
             }
 

@@ -319,13 +319,39 @@ Item {
                             loops: Animation.Infinite
                         }
                     }
+
+                    HoverHandler {
+                        id: pbTitleHover
+                        cursorShape: Library.source === "soundcloud" && Player.hasSong
+                                     ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    }
+                    TapHandler {
+                        enabled: Library.source === "soundcloud" && Player.hasSong
+                        onTapped: UiState.goToTrack(Player.currentSong)
+                    }
                 }
                 StyledText {
                     width: parent.width
                     text: Player.hasSong ? Player.currentSong.artists : "Choose something to play"
                     elide: Text.ElideRight
                     font.pixelSize: Appearance.fontSize.smaller
-                    color: root.scheme.onSurfaceVariant
+                    color: pbArtistHover.hovered && Library.source === "soundcloud" && Player.hasSong
+                           ? root.scheme.primary
+                           : root.scheme.onSurfaceVariant
+
+                    Behavior on color {
+                        ColorAnimation { duration: Appearance.duration(100) }
+                    }
+
+                    HoverHandler {
+                        id: pbArtistHover
+                        cursorShape: Library.source === "soundcloud" && Player.hasSong
+                                     ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    }
+                    TapHandler {
+                        enabled: Library.source === "soundcloud" && Player.hasSong
+                        onTapped: UiState.goToArtist(Player.currentSong)
+                    }
                 }
             }
 
@@ -378,6 +404,7 @@ Item {
             anchors.bottomMargin: 2
             height: 18
             scheme: root.scheme
+            followsCrossfade: true
         }
 
         // the times ride up with the seek line
@@ -432,8 +459,9 @@ Item {
             size: root.buttonSize
             iconSize: root.tiny ? 18 : 20
             toggled: Player.showingLyrics
-            tooltip: "Lyrics"
+            tooltip: "Lyrics (Right-click for full screen)"
             onClicked: Player.toggleLyricsPanel()
+            onSecondaryClicked: UiState.openFullscreenLyrics()
         }
         IconButton {
             anchors.verticalCenter: parent.verticalCenter
@@ -459,6 +487,12 @@ Item {
                 symbol: "open_in_full"
                 enabled: Player.hasSong
                 onTriggered: root.immersiveRequested()
+            }
+            StyledMenuItem {
+                text: "Open Fullscreen Lyrics"
+                symbol: "lyrics"
+                enabled: Player.hasSong
+                onTriggered: UiState.openFullscreenLyrics()
             }
         }
     }

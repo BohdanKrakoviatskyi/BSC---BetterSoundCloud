@@ -58,7 +58,7 @@ Flickable {
             spacing: 6
 
             TitleText {
-                text: "Swiftify"
+                text: "Resonance"
                 font.pixelSize: Appearance.fontSize.display
                 font.weight: Font.Bold
                 font.letterSpacing: -0.8

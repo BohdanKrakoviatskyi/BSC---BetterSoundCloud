@@ -148,9 +148,17 @@ pub(crate) struct LocalOutput {
     rate: u32,
 }
 
+struct OutgoingStream {
+    stream: LocalStream,
+    fade_frames: usize,
+    frames_played: usize,
+    scratch: Vec<f32>,
+}
+
 #[derive(Default)]
 struct LocalShared {
     playing: Mutex<Option<LocalStream>>,
+    outgoing: Mutex<Option<OutgoingStream>>,
     /// an f32's bits
     volume: AtomicU32,
     paused: AtomicBool,
@@ -163,11 +171,42 @@ impl LocalShared {
 
     fn fill(&self, out: &mut [f32]) {
         let volume = f32::from_bits(self.volume.load(Ordering::Relaxed));
-        let written = self
-            .playing()
-            .as_mut()
-            .map_or(0, |stream| stream.fill(out, volume));
-        out[written..].fill(0.0);
+        let mut outgoing = self.outgoing.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut playing = self.playing.lock().unwrap_or_else(PoisonError::into_inner);
+
+        if let Some(out_stream) = outgoing.as_mut() {
+            let total_frames = out_stream.fade_frames.max(1);
+            let frames_done = out_stream.frames_played;
+            let progress = (frames_done as f32 / total_frames as f32).clamp(0.0, 1.0);
+            let angle = progress * std::f32::consts::FRAC_PI_2;
+            let outgoing_gain = angle.cos() * volume;
+            let incoming_gain = angle.sin() * volume;
+
+            let written = playing
+                .as_mut()
+                .map_or(0, |stream| stream.fill(out, incoming_gain));
+            out[written..].fill(0.0);
+
+            if out_stream.scratch.len() < out.len() {
+                out_stream.scratch.resize(out.len(), 0.0);
+            }
+            let temp = &mut out_stream.scratch[..out.len()];
+            temp.fill(0.0);
+            let out_written = out_stream.stream.fill(temp, outgoing_gain);
+            for i in 0..out_written {
+                out[i] += temp[i];
+            }
+
+            out_stream.frames_played += out.len() / 2;
+            if out_stream.frames_played >= out_stream.fade_frames || out_stream.stream.ended() {
+                *outgoing = None;
+            }
+        } else {
+            let written = playing
+                .as_mut()
+                .map_or(0, |stream| stream.fill(out, volume));
+            out[written..].fill(0.0);
+        }
     }
 }
 
@@ -216,8 +255,7 @@ impl LocalOutput {
             .send(play);
     }
 
-    /// what plays next, in place of whatever played before
-    pub(crate) fn append<S>(&self, source: S)
+    pub(crate) fn append_with_crossfade<S>(&self, source: S, crossfade_ms: u32)
     where
         S: Source<Item = f32> + BlockSource + 'static,
     {
@@ -225,10 +263,34 @@ impl LocalOutput {
         let rate = source.sample_rate().max(1);
         let stream = LocalStream::new(Box::new(source), channels, rate, self.rate);
         let previous = self.shared.playing().replace(stream);
-        drop(previous);
+        let mut outgoing = self.shared.outgoing.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(prev) = previous {
+            if crossfade_ms > 0 && !prev.ended() {
+                let fade_frames = (crossfade_ms as usize * self.rate as usize) / 1000;
+                *outgoing = Some(OutgoingStream {
+                    stream: prev,
+                    fade_frames,
+                    frames_played: 0,
+                    scratch: Vec::with_capacity(4096),
+                });
+            } else {
+                *outgoing = None;
+            }
+        } else {
+            *outgoing = None;
+        }
+    }
+
+    /// what plays next, in place of whatever played before
+    pub(crate) fn append<S>(&self, source: S)
+    where
+        S: Source<Item = f32> + BlockSource + 'static,
+    {
+        self.append_with_crossfade(source, 0);
     }
 
     pub(crate) fn clear(&self) {
+        let _ = self.shared.outgoing.lock().unwrap_or_else(PoisonError::into_inner).take();
         let previous = self.shared.playing().take();
         drop(previous);
     }

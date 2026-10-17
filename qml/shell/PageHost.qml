@@ -29,9 +29,14 @@ Item {
         case Library.Page.Songs: return savedPage
         case Library.Page.Playlists: return playlistsPage
         case Library.Page.PinnedPlaylists: return pinnedPage
-        case Library.Page.Playlist: return playlistPage
+        case Library.Page.Playlist:
+            return (Library.source === "soundcloud" || Library.selectedPlaylist.isSoundCloud) ? soundcloudPlaylistPage : playlistPage
         case Library.Page.Album: return albumPage
-        case Library.Page.Artist: return artistPage
+        case Library.Page.Artist:
+            return Library.source === "soundcloud" ? soundcloudArtistPage : artistPage
+        case Library.Page.ArtistLikes: return soundcloudArtistLikesPage
+        case Library.Page.ArtistTracks: return soundcloudArtistTracksPage
+        case Library.Page.TrackDetails: return trackDetailsPage
         case Library.Page.LocalFiles: return localFilesPage
         case Library.Page.LocalTracks: return localTracksPage
         default: return homePage
@@ -202,8 +207,13 @@ Item {
     Component { id: playlistsPage; PlaylistsView {} }
     Component { id: pinnedPage; PlaylistsView { pinnedOnly: true } }
     Component { id: playlistPage; PlaylistView {} }
+    Component { id: soundcloudPlaylistPage; SoundCloudPlaylistView {} }
     Component { id: albumPage; AlbumView {} }
     Component { id: artistPage; ArtistView {} }
+    Component { id: soundcloudArtistPage; SoundCloudArtistView {} }
+    Component { id: soundcloudArtistLikesPage; SoundCloudArtistLikesView {} }
+    Component { id: soundcloudArtistTracksPage; SoundCloudArtistTracksView {} }
+    Component { id: trackDetailsPage; SoundCloudTrackView {} }
     Component { id: localFilesPage; LocalFilesView {} }
     Component { id: localTracksPage; LocalTracksView {} }
 }

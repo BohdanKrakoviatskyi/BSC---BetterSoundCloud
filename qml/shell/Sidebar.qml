@@ -32,6 +32,31 @@ Item {
             spacing: 2
             bottomPadding: 2
 
+            Item { width: 1; height: 10 }
+
+            Item {
+                width: parent.width
+                height: 38
+
+                SegmentedControl {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 14
+                    anchors.verticalCenter: parent.verticalCenter
+                    segmentHeight: 30
+                    horizontalPadding: 18
+                    iconSize: 18
+                    currentIndex: Library.source === "soundcloud" ? 1 : 0
+                    segments: [
+                        Segment { symbol: "spotify"; tooltip: "Spotify" },
+                        Segment { symbol: "soundcloud"; tooltip: "SoundCloud" }
+                    ]
+                    onActivated: (index) => {
+                        const target = index === 1 ? "soundcloud" : "spotify"
+                        Library.setSource(target)
+                    }
+                }
+            }
+
             Item { width: 1; height: 8 }
 
             NavigationItem {

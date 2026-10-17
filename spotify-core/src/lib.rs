@@ -860,10 +860,10 @@ impl SpotifyCore {
     /// plays a music file of the person's own, from anywhere on disk
     pub async fn play_file(&self, path: String) -> Result<(), String> {
         let ticket = self.begin_playback_request();
-        self.play_file_as(path, ticket).await
+        self.play_file_as(path, ticket, 0).await
     }
 
-    pub async fn play_file_as(&self, path: String, ticket: u64) -> Result<(), String> {
+    pub async fn play_file_as(&self, path: String, ticket: u64, crossfade_ms: u32) -> Result<(), String> {
         if !self.is_latest_request(ticket) {
             return Err(SUPERSEDED.to_owned());
         }
@@ -871,7 +871,7 @@ impl SpotifyCore {
         if !path.is_file() {
             return Err(format!("{} is no longer there", path.display()));
         }
-        self.play_path_as(path, ticket)
+        self.play_path_as(path, ticket, crossfade_ms)
     }
 
     fn open_decoder(
@@ -896,7 +896,7 @@ impl SpotifyCore {
             .map_err(|error| format!("failed to decode local track: {error}"))
     }
 
-    fn play_path_as(&self, path: PathBuf, ticket: u64) -> Result<(), String> {
+    fn play_path_as(&self, path: PathBuf, ticket: u64, crossfade_ms: u32) -> Result<(), String> {
         // opened before the outputs are touched, so a request replaced while
         // it reads the file leaves the newer one playing undisturbed
         let decoder = Self::open_decoder(&path)?;
@@ -905,7 +905,25 @@ impl SpotifyCore {
         if !self.is_latest_request(ticket) {
             return Err(SUPERSEDED.to_owned());
         }
-        self.clear_local_playback();
+
+        if crossfade_ms > 0 {
+            // Keep the previous track playing and fading out on the outgoing slot;
+            // cancel it only once the crossfade duration has elapsed
+            let old_playback = if let Ok(mut state) = self.lock_state() {
+                state.local_playback.take()
+            } else {
+                None
+            };
+            if let Some(old) = old_playback {
+                tokio::spawn(async move {
+                    tokio::time::sleep(Duration::from_millis(u64::from(crossfade_ms))).await;
+                    old.cancel.store(true, Ordering::Relaxed);
+                });
+            }
+        } else {
+            self.clear_local_playback();
+        }
+
         // stopped, not paused: a stream still loading would otherwise be
         // kept, and start when it arrives, over this track
         if let Ok((active, standby)) = self.player_slots() {
@@ -938,12 +956,13 @@ impl SpotifyCore {
         );
 
         let sink = self.resolve_live_sink()?;
-        sink.stop();
-        sink.clear();
-
-        // position is derived from the count of consumed samples. rodio consumes
-        // at real time while playing, so no explicit clock is required.
-        sink.append(source);
+        if crossfade_ms > 0 {
+            sink.append_with_crossfade(source, crossfade_ms);
+        } else {
+            sink.stop();
+            sink.clear();
+            sink.append(source);
+        }
         sink.play();
 
         {
@@ -1455,7 +1474,7 @@ mod tests {
             SUPERSEDED
         );
         assert_eq!(
-            core.play_file_as("/nowhere/song.flac".to_owned(), first)
+            core.play_file_as("/nowhere/song.flac".to_owned(), first, 0)
                 .await
                 .unwrap_err(),
             SUPERSEDED

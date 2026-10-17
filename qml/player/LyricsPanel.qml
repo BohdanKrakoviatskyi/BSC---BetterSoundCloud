@@ -13,6 +13,21 @@ Item {
     property bool suspended: false
     property MaterialScheme scheme: Appearance.colors
 
+    IconButton {
+        id: fullscreenBtn
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.margins: 10
+        z: 10
+        scheme: root.scheme
+        symbol: "open_in_full"
+        size: 32
+        iconSize: 18
+        tooltip: "Full Screen Lyrics"
+        visible: Player.hasLyrics && !Player.loadingLyrics
+        onClicked: UiState.openFullscreenLyrics()
+    }
+
     Column {
         anchors.centerIn: parent
         Reveal.shown: Player.loadingLyrics
@@ -106,10 +121,69 @@ Item {
             required property int index
             required property string words
             required property int startTimeMs
+            required property int endTimeMs
             readonly property bool active: !Player.lyricsSynchronized || Player.activeLyricIndex === index
+            property real fillProgress: line.active ? 0.0 : (line.index < Player.activeLyricIndex ? 1.0 : 0.0)
+
+            NumberAnimation {
+                id: fillAnim
+                target: line
+                property: "fillProgress"
+                easing.type: Easing.Linear
+            }
+
+            function startFillAnimation() {
+                if (!Player.lyricsSynchronized) {
+                    fillAnim.stop()
+                    line.fillProgress = 1.0
+                    return
+                }
+
+                const now = Player.livePositionMs
+                const start = line.startTimeMs
+                const end = line.endTimeMs > line.startTimeMs ? line.endTimeMs : (start + Math.max(1200, line.words.length * 75))
+                const totalDuration = Math.max(400, end - start)
+                const elapsed = Math.max(0, now - start)
+
+                if (elapsed >= totalDuration) {
+                    fillAnim.stop()
+                    line.fillProgress = 1.0
+                    return
+                }
+
+                const startProgress = Math.min(0.95, elapsed / totalDuration)
+                const remainingDuration = Math.max(200, totalDuration - elapsed)
+
+                fillAnim.stop()
+                fillAnim.from = startProgress
+                fillAnim.to = 1.0
+                fillAnim.duration = remainingDuration
+                if (Player.playing) {
+                    fillAnim.start()
+                } else {
+                    line.fillProgress = startProgress
+                }
+            }
+
+            onActiveChanged: {
+                if (active) {
+                    startFillAnimation()
+                } else {
+                    fillAnim.stop()
+                    fillProgress = line.index < Player.activeLyricIndex ? 1.0 : 0.0
+                }
+            }
+
+            Component.onCompleted: {
+                if (line.active) {
+                    line.startFillAnimation()
+                } else {
+                    line.fillProgress = line.index < Player.activeLyricIndex ? 1.0 : 0.0
+                }
+            }
 
             width: list.width - list.leftMargin - list.rightMargin
-            height: text.implicitHeight
+            height: baseText.implicitHeight
 
             property real lag: 0
             transform: Translate { y: line.lag }
@@ -128,34 +202,96 @@ Item {
                 NumberAnimation { target: line; property: "lag"; to: 0; duration: 560; easing.type: Easing.OutBack; easing.overshoot: 0.6 }
             }
 
-
-            StyledText {
-                id: text
-                width: parent.width
-                transformOrigin: Item.TopLeft
-                text: line.words.length > 0 ? line.words : "♪"
-                wrapMode: Text.Wrap
-                font.pixelSize: 22
-                font.weight: Font.Bold
-                color: root.scheme.onSurface
-                // the sung line grows on a spring, or with reduced motion on
-                // the plain ease out the column scrolls with
-                property real springing: line.active ? 1 : 19 / 22
-                property real eased: line.active ? 1 : 19 / 22
-                scale: Appearance.reduceMotion ? eased : springing
-                opacity: line.active ? 1 : 0.34
-
-                Behavior on springing {
-                    enabled: !root.suspended && !Appearance.reduceMotion
-                    Bounce {}
+            Connections {
+                target: Player
+                function onActiveLyricIndexChanged() {
+                    if (!line.active) {
+                        fillAnim.stop()
+                        line.fillProgress = line.index < Player.activeLyricIndex ? 1.0 : 0.0
+                    }
                 }
-                Behavior on eased {
-                    enabled: !root.suspended && Appearance.reduceMotion && !Appearance.performanceMode
-                    NumberAnimation { duration: 420; easing.type: Easing.OutCubic }
+                function onLivePositionChanged() {
+                    if (line.active && Player.lyricsSynchronized) {
+                        const start = line.startTimeMs
+                        const end = line.endTimeMs > start ? line.endTimeMs : (start + Math.max(1200, line.words.length * 75))
+                        const total = Math.max(400, end - start)
+                        const expectedProgress = Math.min(1.0, Math.max(0.0, (Player.livePositionMs - start) / total))
+                        if (Math.abs(line.fillProgress - expectedProgress) > 0.18) {
+                            line.startFillAnimation()
+                        }
+                    }
                 }
-                Behavior on opacity {
-                    enabled: !root.suspended
-                    NumberAnimation { duration: Appearance.duration(280); easing.type: Easing.InOutQuad }
+                function onPlayingChanged() {
+                    if (line.active && Player.lyricsSynchronized) {
+                        if (Player.playing) {
+                            if (fillAnim.paused) fillAnim.resume()
+                            else if (!fillAnim.running && line.fillProgress < 1.0) line.startFillAnimation()
+                        } else {
+                            if (fillAnim.running) fillAnim.pause()
+                        }
+                    }
+                }
+            }
+
+            Item {
+                id: textContainer
+                anchors.fill: parent
+
+                StyledText {
+                    id: baseText
+                    width: parent.width
+                    transformOrigin: Item.TopLeft
+                    text: line.words.length > 0 ? line.words : "♪"
+                    wrapMode: Text.Wrap
+                    font.pixelSize: 22
+                    font.weight: Font.Bold
+                    color: root.scheme.onSurface
+                    property real springing: line.active ? 1 : 19 / 22
+                    property real eased: line.active ? 1 : 19 / 22
+                    scale: Appearance.reduceMotion ? eased : springing
+                    opacity: 0.34
+
+                    Behavior on springing {
+                        enabled: !root.suspended && !Appearance.reduceMotion
+                        Bounce {}
+                    }
+                    Behavior on eased {
+                        enabled: !root.suspended && Appearance.reduceMotion && !Appearance.performanceMode
+                        NumberAnimation { duration: 420; easing.type: Easing.OutCubic }
+                    }
+                }
+
+                Item {
+                    id: activeClip
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    width: line.fillProgress >= 1.0
+                           ? parent.width
+                           : (line.fillProgress <= 0.001
+                              ? 0
+                              : Math.min(parent.width, Math.max(0, (baseText.contentWidth + 16) * line.fillProgress)))
+                    clip: true
+                    visible: width > 0
+
+                    StyledText {
+                        id: activeText
+                        width: textContainer.width
+                        height: textContainer.height
+                        transformOrigin: Item.TopLeft
+                        text: baseText.text
+                        wrapMode: baseText.wrapMode
+                        font.pixelSize: baseText.font.pixelSize
+                        font.weight: Font.Bold
+                        color: root.scheme.onSurface
+                        scale: baseText.scale
+                        opacity: line.active ? 1.0 : 0.34
+
+                        Behavior on opacity {
+                            enabled: !root.suspended
+                            NumberAnimation { duration: Appearance.duration(280); easing.type: Easing.InOutQuad }
+                        }
+                    }
                 }
             }
 

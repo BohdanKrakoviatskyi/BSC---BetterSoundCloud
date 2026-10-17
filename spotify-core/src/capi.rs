@@ -434,9 +434,38 @@ async_call!(
     swiftify_core_play_file(path) => |core| prepare {
         let ticket = core.begin_playback_request();
     } run {
-        core.play_file_as(path, ticket).await.map(|()| Unit)
+        core.play_file_as(path, ticket, 0).await.map(|()| Unit)
     }
 );
+
+/// starts a file with a crossfade from the currently playing audio
+///
+/// # Safety
+/// `core` is null or live; `path` is a nul-terminated string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn swiftify_core_crossfade_file(
+    core: *const SwiftifyCore,
+    request_id: u64,
+    path: *const c_char,
+    duration_ms: u32,
+) {
+    let Some(handle) = (unsafe { handle(core) }) else {
+        return;
+    };
+    let path = match unsafe { read_str(path) } {
+        Ok(v) => v,
+        Err(error) => {
+            handle.completions.push(request_id, Err(error));
+            return;
+        }
+    };
+    let ticket = handle.core.begin_playback_request();
+    handle.spawn(request_id, move |core| async move {
+        core.play_file_as(path, ticket, duration_ms)
+            .await
+            .map(|()| Unit)
+    });
+}
 async_call!(
     /// completes with the lyrics as json.
     swiftify_core_lyrics_json(spotify_uri) => |core| {

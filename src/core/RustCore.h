@@ -33,6 +33,7 @@ public:
     void preloadTrack(const QString &spotifyUri, bool preloadStandby) override;
     QCoro::Task<> crossfadeTrack(QString spotifyUri, quint32 durationMs) override;
     QCoro::Task<> playFile(QString path) override;
+    QCoro::Task<> crossfadeFile(QString path, quint32 durationMs) override;
     QCoro::Task<> restartAudioOutput() override;
     QCoro::Task<QString> lyricsJson(QString spotifyUri) override;
 

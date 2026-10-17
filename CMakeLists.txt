@@ -41,7 +41,7 @@ endif()
 option(SWIFTIFY_DESKTOP_INTEGRATION "Build the Linux desktop integration" ${SWIFTIFY_IS_LINUX})
 
 find_package(Qt6 6.9 REQUIRED COMPONENTS
-    Core Gui Network Concurrent Qml Quick QuickControls2 ShaderTools)
+    Core Gui Network Concurrent Qml Quick QuickControls2 ShaderTools Multimedia)
 if(BUILD_TESTING)
     find_package(Qt6 6.9 REQUIRED COMPONENTS Test QuickTest)
 endif()
@@ -201,7 +201,7 @@ qt_add_qml_module(swiftify_app
     VERSION 1.0
     SOURCES ${SWIFTIFY_SOURCES}
     QML_FILES ${SWIFTIFY_QML}
-    RESOURCES resources/swiftify-icon.png resources/cameo.png
+    RESOURCES resources/swiftify-icon.png resources/cameo.png resources/spotify.svg resources/soundcloud.svg
     DEPENDENCIES QtQuick)
 # BATCHABLE: the spectrum's material can be merged into the scene graph's
 # batches, which needs the extra vertex input qsb adds for it.
@@ -272,7 +272,7 @@ if(APPLE)
         PROPERTIES COMPILE_OPTIONS -fobjc-arc)
 endif()
 target_link_libraries(swiftify_app PUBLIC
-    Qt6::Core Qt6::Gui Qt6::Network Qt6::Concurrent Qt6::Qml Qt6::Quick Qt6::QuickControls2
+    Qt6::Core Qt6::Gui Qt6::Network Qt6::Concurrent Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Multimedia
     QCoro6::Core QCoro6::Network
     qt6keychain
     material_color_utilities
@@ -293,6 +293,59 @@ if(MINGW)
     # qt's WinMain shim reads msvcrt's __argc, which a mingw on ucrt (as
     # homebrew's is) lacks; mingw's own start-up calls main() just as well
     set_target_properties(swiftify PROPERTIES qt_no_entrypoint ON)
+endif()
+
+# --- the soundcloud sidecar (go) ---------------------------------------------
+
+# soundcloud, and later youtube, are read through the local-api the better
+# soundcloud app already runs: one copy of that code, in its own repository
+# beside this one, speaking json over stdin and stdout. built from there when
+# it is checked out, or a built one can be pointed at.
+# SWIFTIFY_SIDECAR_BUILD=OFF builds without it; the app then says the
+# soundcloud service is missing from this build and everything else works.
+set(SWIFTIFY_SIDECAR_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../BSC---BetterSoundCloud/backend
+    CACHE PATH "the go local-api of the better soundcloud app")
+set(SWIFTIFY_SIDECAR_BINARY "" CACHE FILEPATH "a built local-api, instead of building one")
+option(SWIFTIFY_SIDECAR_BUILD "Build the soundcloud sidecar from its go source" ON)
+set(SWIFTIFY_SIDECAR_FILE "")
+if(SWIFTIFY_SIDECAR_BINARY)
+    set(SWIFTIFY_SIDECAR_FILE ${SWIFTIFY_SIDECAR_BINARY})
+elseif(SWIFTIFY_SIDECAR_BUILD)
+    find_program(SWIFTIFY_GO_EXECUTABLE go)
+    if(SWIFTIFY_GO_EXECUTABLE AND EXISTS ${SWIFTIFY_SIDECAR_SOURCE_DIR}/go.mod)
+        file(GLOB_RECURSE SWIFTIFY_SIDECAR_SOURCES CONFIGURE_DEPENDS
+            ${SWIFTIFY_SIDECAR_SOURCE_DIR}/*.go)
+        set(SWIFTIFY_SIDECAR_FILE ${CMAKE_CURRENT_BINARY_DIR}/sidecar/local-api)
+        add_custom_command(OUTPUT ${SWIFTIFY_SIDECAR_FILE}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/sidecar
+            # CGO off: the result is one file with nothing to find at run time
+            COMMAND ${CMAKE_COMMAND} -E env CGO_ENABLED=0 ${SWIFTIFY_GO_EXECUTABLE}
+                build -trimpath "-ldflags=-s -w" -o ${SWIFTIFY_SIDECAR_FILE} ./cmd/local-api
+            DEPENDS ${SWIFTIFY_SIDECAR_SOURCES}
+            WORKING_DIRECTORY ${SWIFTIFY_SIDECAR_SOURCE_DIR}
+            COMMENT "Building the soundcloud sidecar")
+        add_custom_target(swiftify_sidecar DEPENDS ${SWIFTIFY_SIDECAR_FILE})
+        add_dependencies(swiftify swiftify_sidecar)
+    elseif(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/local-api/local-api)
+        set(SWIFTIFY_SIDECAR_FILE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/local-api/local-api)
+    else()
+        message(STATUS "not building the soundcloud sidecar: no go, or no source at ${SWIFTIFY_SIDECAR_SOURCE_DIR}")
+    endif()
+endif()
+if(SWIFTIFY_SIDECAR_FILE)
+    # the app looks beside itself first, and at the built one while developing
+    target_compile_definitions(swiftify_app PRIVATE
+        SWIFTIFY_SIDECAR_PATH="${SWIFTIFY_SIDECAR_FILE}")
+    if(APPLE)
+        # before the signing below, which seals whatever is already inside
+        add_custom_command(TARGET swiftify POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SWIFTIFY_SIDECAR_FILE}
+                $<TARGET_BUNDLE_DIR:swiftify>/Contents/MacOS/local-api
+            COMMAND chmod +x $<TARGET_BUNDLE_DIR:swiftify>/Contents/MacOS/local-api
+            COMMENT "Placing the soundcloud sidecar in the app")
+    else()
+        install(PROGRAMS ${SWIFTIFY_SIDECAR_FILE} DESTINATION ${CMAKE_INSTALL_BINDIR})
+    endif()
 endif()
 
 # on macos, an app bundle: its own name in the menu bar and the dock, its own

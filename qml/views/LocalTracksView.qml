@@ -14,7 +14,7 @@ SongListPage {
     showsEmpty: LocalFiles.songs.count === 0
     emptySymbol: "folder_open"
     emptyTitle: LocalFiles.sources.length === 0 ? "No Local Files Yet" : "No Music Found"
-    emptyDescription: LocalFiles.sources.length === 0 ? "Add a folder of music, or drop files onto the window." : "The folders you added hold no music Swiftify can play."
+    emptyDescription: LocalFiles.sources.length === 0 ? "Add a folder of music, or drop files onto the window." : "The folders you added hold no music Resonance can play."
 
     MusicPicker {
         id: picker

@@ -10,6 +10,7 @@ Item {
 
     property url artworkUrl
     property bool circular: false
+    property bool themeTinted: false
     property string kind
     property string title
     property string description
@@ -60,7 +61,7 @@ Item {
 
         ArtworkGlow {
             anchors.fill: parent
-            visible: artworkSlot.children.length === 0
+            visible: root.artworkUrl.toString().length > 0
             opacity: artworkBox.awaitingFlight ? 0 : 1
             source: root.artworkUrl
             circular: root.circular
@@ -75,15 +76,54 @@ Item {
         ArtworkImage {
             id: cover
             anchors.fill: parent
-            visible: artworkSlot.children.length === 0
+            visible: root.artworkUrl.toString().length > 0
             opacity: artworkBox.awaitingFlight ? 0 : 1
             source: root.artworkUrl
             circular: root.circular
         }
 
+        Rectangle {
+            id: themeTint
+            anchors.fill: parent
+            radius: root.circular ? width / 2 : Appearance.sizes.artworkRadius
+            visible: root.themeTinted && root.artworkUrl.toString().length > 0
+            opacity: artworkBox.awaitingFlight ? 0 : 1
+
+            gradient: Gradient {
+                GradientStop {
+                    position: 0.0
+                    color: Qt.alpha(Appearance.colors.primary, 0.42)
+                }
+                GradientStop {
+                    position: 1.0
+                    color: Qt.alpha(Appearance.colors.tertiary, 0.35)
+                }
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                radius: parent.radius
+                color: Qt.alpha(Appearance.colors.primaryContainer, 0.12)
+                border.width: 1
+                border.color: Qt.alpha(Appearance.colors.primary, 0.35)
+            }
+
+            MaterialSymbol {
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.margins: 12
+                text: "favorite"
+                iconSize: 26
+                fill: 1
+                color: Appearance.colors.onPrimary
+                opacity: 0.95
+            }
+        }
+
         Item {
             id: artworkSlot
             anchors.fill: parent
+            visible: root.artworkUrl.toString().length === 0
             opacity: artworkBox.awaitingFlight ? 0 : 1
         }
     }

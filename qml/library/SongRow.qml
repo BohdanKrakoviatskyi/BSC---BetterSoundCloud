@@ -212,7 +212,23 @@ T.AbstractButton {
                 text: Format.joined([root.song.artists, root.song.albumName], " — ")
                 elide: Text.ElideRight
                 font.pixelSize: Appearance.fontSize.smaller
-                color: Appearance.colors.onSurfaceVariant
+                color: artistRowHover.hovered && Library.source === "soundcloud"
+                       ? Appearance.colors.primary
+                       : Appearance.colors.onSurfaceVariant
+
+                Behavior on color {
+                    ColorAnimation { duration: Appearance.duration(100) }
+                }
+
+                HoverHandler {
+                    id: artistRowHover
+                    cursorShape: Library.source === "soundcloud" && root.song.artists.length > 0
+                                 ? Qt.PointingHandCursor : Qt.ArrowCursor
+                }
+                TapHandler {
+                    enabled: Library.source === "soundcloud" && root.song.artists.length > 0
+                    onTapped: UiState.goToArtist(root.song)
+                }
             }
         }
 
@@ -255,8 +271,8 @@ T.AbstractButton {
             IconButton {
                 id: star
                 anchors.verticalCenter: parent.verticalCenter
-                // a file of the person's own cannot be saved to spotify
-                visible: !root.song.isLocalFile
+                // a file of the person's own or soundcloud cannot be saved to spotify
+                visible: !root.song.isLocalFile && !root.song.isSoundCloud
                 symbol: "star"
                 toggled: root.saved
                 size: 28

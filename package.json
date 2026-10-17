@@ -1,0 +1,10 @@
+{
+  "name": "swiftify",
+  "version": "0.3.3",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "sync:version": "node scripts/sync-release-version.mjs",
+    "release": "node scripts/trigger-release.mjs"
+  }
+}

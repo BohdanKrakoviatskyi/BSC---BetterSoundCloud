@@ -52,6 +52,7 @@ public:
     void moveRows(int from, int count, int to);
     void removeAll(const std::function<bool(const Song &)> &predicate);
     void append(const Song &song);
+    void appendSongs(const QList<Song> &songs);
 
     Q_INVOKABLE swiftify::Song at(int row) const;
     Q_INVOKABLE int indexOfInstance(quint64 instanceId) const;

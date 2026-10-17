@@ -1,5 +1,8 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Dialogs
+import QtQuick.Effects
+import QtMultimedia
 import Swiftify
 
 // the settings themselves (SwiftifySettingsView), one page per rail
@@ -125,7 +128,240 @@ Item {
             visible: root.page === 1
 
             ContentSection {
-                title: "Background"
+                title: "App Wallpaper"
+                symbol: "image"
+
+                FileDialog {
+                    id: bgFileDialog
+                    title: "Select Background"
+                    fileMode: FileDialog.OpenFile
+                    nameFilters: ["All supported (*.png *.jpg *.jpeg *.webp *.bmp *.gif *.mp4 *.mov *.webm *.mkv)",
+                                  "Images (*.png *.jpg *.jpeg *.webp *.bmp *.gif)",
+                                  "Videos (*.mp4 *.mov *.webm *.mkv)"]
+                    onAccepted: {
+                        if (selectedFile) {
+                            Settings.addCustomBackground(selectedFile.toString())
+                        }
+                    }
+                }
+
+                Flow {
+                    x: 8
+                    width: parent.width - 16
+                    spacing: 8
+                    topPadding: 4
+                    bottomPadding: 6
+
+                    TextButton {
+                        variant: TextButton.Tonal
+                        symbol: "add_photo_alternate"
+                        text: "Upload Background"
+                        onClicked: bgFileDialog.open()
+                    }
+
+                    TextButton {
+                        visible: Settings.customBackgroundPath.length > 0
+                        variant: TextButton.Text
+                        symbol: "close"
+                        text: "Reset to Default"
+                        onClicked: Settings.clearCustomBackground()
+                    }
+                }
+
+                ConfigSlider {
+                    visible: Settings.customBackgroundPath.length > 0
+                    text: "Wallpaper dim"
+                    from: 0.0
+                    to: 0.85
+                    stepSize: 0.05
+                    value: Settings.customBackgroundDim
+                    valueText: Math.round(Settings.customBackgroundDim * 100) + "%"
+                    onMoved: (value) => Settings.customBackgroundDim = value
+                }
+
+                Flow {
+                    x: 8
+                    width: parent.width - 16
+                    spacing: 10
+                    topPadding: 4
+                    bottomPadding: 8
+                    visible: Settings.customBackgrounds.length > 0
+
+                    Repeater {
+                        model: Settings.customBackgrounds
+
+                        Item {
+                            id: bgCard
+                            required property string modelData
+                            width: 136
+                            height: 88
+
+                            readonly property bool isSelected: modelData === Settings.customBackgroundPath
+                            readonly property string cardPathLower: modelData.toLowerCase()
+                            readonly property bool isVideo: cardPathLower.endsWith(".mp4") || cardPathLower.endsWith(".mov")
+                                                         || cardPathLower.endsWith(".webm") || cardPathLower.endsWith(".mkv")
+                                                         || cardPathLower.endsWith(".avi") || cardPathLower.endsWith(".m4v")
+                            readonly property bool isGif: cardPathLower.endsWith(".gif")
+
+                            Rectangle {
+                                id: cardBorder
+                                anchors.fill: parent
+                                radius: Appearance.rounding.normal
+                                color: Appearance.colors.surfaceContainer
+                                border.width: bgCard.isSelected ? 2 : 1
+                                border.color: bgCard.isSelected ? Appearance.colors.primary : Appearance.colors.outlineVariant
+
+                                Item {
+                                    id: imgContainer
+                                    anchors.fill: parent
+                                    anchors.margins: bgCard.isSelected ? 3 : 2
+
+                                    Image {
+                                        id: previewImg
+                                        anchors.fill: parent
+                                        source: bgCard.modelData.startsWith("file://") ? bgCard.modelData : ("file://" + bgCard.modelData)
+                                        fillMode: Image.PreserveAspectCrop
+                                        asynchronous: true
+                                        visible: !bgCard.isVideo && !bgCard.isGif
+                                    }
+
+                                    AnimatedImage {
+                                        id: previewGif
+                                        anchors.fill: parent
+                                        source: bgCard.modelData.startsWith("file://") ? bgCard.modelData : ("file://" + bgCard.modelData)
+                                        fillMode: Image.PreserveAspectCrop
+                                        asynchronous: true
+                                        visible: bgCard.isGif
+                                        playing: true
+                                    }
+
+                                    Loader {
+                                        anchors.fill: parent
+                                        active: bgCard.isVideo
+                                        visible: active
+                                        sourceComponent: Item {
+                                            anchors.fill: parent
+
+                                            MediaPlayer {
+                                                id: cardVideoPlayer
+                                                source: bgCard.modelData.startsWith("file://") ? bgCard.modelData : ("file://" + bgCard.modelData)
+                                                loops: MediaPlayer.Infinite
+                                                videoOutput: cardVideoOutput
+                                                audioOutput: AudioOutput { muted: true; volume: 0 }
+                                                Component.onCompleted: play()
+                                            }
+
+                                            VideoOutput {
+                                                id: cardVideoOutput
+                                                anchors.fill: parent
+                                                fillMode: VideoOutput.PreserveAspectCrop
+                                            }
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        id: cardMask
+                                        anchors.fill: parent
+                                        radius: Appearance.rounding.normal - 2
+                                        visible: false
+                                        layer.enabled: true
+                                    }
+
+                                    MultiEffect {
+                                        anchors.fill: parent
+                                        source: bgCard.isGif ? previewGif : previewImg
+                                        visible: !bgCard.isVideo
+                                        maskEnabled: true
+                                        maskSource: cardMask
+                                    }
+                                }
+
+                                RippleButton {
+                                    anchors.fill: parent
+                                    colBackground: "transparent"
+                                    colBackgroundHover: "transparent"
+                                    buttonRadius: Appearance.rounding.normal
+                                    onClicked: {
+                                        if (bgCard.isSelected) {
+                                            Settings.clearCustomBackground()
+                                        } else {
+                                            Settings.customBackgroundPath = bgCard.modelData
+                                        }
+                                    }
+                                }
+
+                                IconButton {
+                                    anchors.top: parent.top
+                                    anchors.right: parent.right
+                                    anchors.margins: 4
+                                    symbol: "close"
+                                    size: 24
+                                    iconSize: 14
+                                    tooltip: bgCard.isVideo ? "Delete video" : (bgCard.isGif ? "Delete GIF" : "Delete photo")
+                                    colBackground: Qt.rgba(0, 0, 0, 0.65)
+                                    colBackgroundHover: Appearance.colors.error
+                                    iconColor: "white"
+                                    onClicked: Settings.removeCustomBackground(bgCard.modelData)
+                                }
+
+                                Rectangle {
+                                    anchors.bottom: parent.bottom
+                                    anchors.left: parent.left
+                                    anchors.margins: 6
+                                    width: 18
+                                    height: 18
+                                    radius: 9
+                                    color: Appearance.colors.primary
+                                    visible: bgCard.isSelected
+
+                                    MaterialSymbol {
+                                        anchors.centerIn: parent
+                                        text: "check"
+                                        iconSize: 12
+                                        color: Appearance.colors.onPrimary
+                                        fill: 1
+                                    }
+                                }
+
+                                Rectangle {
+                                    anchors.bottom: parent.bottom
+                                    anchors.right: parent.right
+                                    anchors.margins: 6
+                                    width: bgCard.isVideo ? 24 : 32
+                                    height: 18
+                                    radius: 4
+                                    color: Qt.rgba(0, 0, 0, 0.72)
+                                    visible: bgCard.isVideo || bgCard.isGif
+
+                                    MaterialSymbol {
+                                        visible: bgCard.isVideo
+                                        anchors.centerIn: parent
+                                        text: "videocam"
+                                        iconSize: 14
+                                        color: "white"
+                                    }
+
+                                    StyledText {
+                                        visible: bgCard.isGif
+                                        anchors.centerIn: parent
+                                        text: "GIF"
+                                        font.pixelSize: 9
+                                        font.weight: Font.Bold
+                                        color: "white"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                NoteText {
+                    text: "Click a saved image, GIF or video to apply it as the application background. Click the cross to remove or delete."
+                }
+            }
+
+            ContentSection {
+                title: "Live Background"
                 symbol: "wallpaper"
 
                 ConfigSwitch {
@@ -433,7 +669,7 @@ Item {
                 }
                 NoteText {
                     text: App.windows
-                        ? "closing the window keeps Swiftify running in the tray. choose Quit Swiftify from the tray menu to exit."
+                        ? "closing the window keeps Resonance running in the tray. choose Quit Resonance from the tray menu to exit."
                         : "window buttons are for desktops that draw none of their own, Hyprland closes and moves windows itself"
                 }
             }
@@ -484,6 +720,23 @@ Item {
             visible: root.page === 6
 
             ContentSection {
+                title: "Music Service"
+                symbol: "hub"
+
+                ConfigSelection {
+                    text: "Active Service"
+                    currentIndex: Library.source === "soundcloud" ? 1 : 0
+                    segments: [
+                        Segment { text: "Spotify" },
+                        Segment { text: "SoundCloud" }
+                    ]
+                    onActivated: (index) => {
+                        Library.setSource(index === 1 ? "soundcloud" : "spotify")
+                    }
+                }
+            }
+
+            ContentSection {
                 title: "Account"
                 symbol: "account_circle"
 
@@ -524,16 +777,18 @@ Item {
 
                         StyledText {
                             width: parent.width
-                            text: Library.profileName.length > 0 ? Library.profileName : "Spotify"
+                            text: Library.profileName.length > 0 ? Library.profileName : (Library.source === "soundcloud" ? "SoundCloud" : "Spotify")
                             elide: Text.ElideRight
                             font.pixelSize: Appearance.fontSize.larger
                             font.weight: Font.DemiBold
                         }
                         StyledText {
                             width: parent.width
-                            text: Session.libraryConnected && Session.connected ? "Library and playback connected"
-                                : Session.libraryConnected ? "Library connected"
-                                : Session.connected ? "Playback connected" : "Not signed in"
+                            text: Library.source === "soundcloud"
+                                ? (SoundCloud.connected ? "SoundCloud connected" : "SoundCloud not connected")
+                                : (Session.libraryConnected && Session.connected ? "Library and playback connected"
+                                    : Session.libraryConnected ? "Library connected"
+                                    : Session.connected ? "Playback connected" : "Not signed in")
                             elide: Text.ElideRight
                             color: Appearance.colors.onSurfaceVariant
                         }
@@ -551,20 +806,24 @@ Item {
                         colBackground: Appearance.colors.error
                         colBackgroundHover: Appearance.colors.errorHover
                         labelColor: Appearance.colors.onError
-                        enabled: Session.libraryConnected || Session.connected
+                        enabled: Library.source === "soundcloud" ? SoundCloud.connected : (Session.libraryConnected || Session.connected)
                         onClicked: logOutDialog.open()
                     }
                 }
                 NoteText {
-                    text: "forgets both logins on this computer, local files stay of course"
+                    text: Library.source === "soundcloud"
+                        ? "forgets the soundcloud login on this computer, local files stay of course"
+                        : "forgets both logins on this computer, local files stay of course"
                 }
 
                 StyledDialog {
                     id: logOutDialog
-                    headline: "Log Out of Spotify?"
+                    headline: Library.source === "soundcloud" ? "Log Out of SoundCloud?" : "Log Out of Spotify?"
                     symbol: "logout"
                     iconShape: "ghostish"
-                    body: "swiftify forgets your library and playback logins on this computer. you can connect again any time."
+                    body: Library.source === "soundcloud"
+                        ? "Resonance forgets your soundcloud login on this computer. you can connect again any time."
+                        : "Resonance forgets your library and playback logins on this computer. you can connect again any time."
 
                     buttons: [
                         TextButton {
@@ -573,7 +832,11 @@ Item {
                             colBackgroundHover: Appearance.colors.errorHover
                             labelColor: Appearance.colors.onError
                             onClicked: {
-                                Session.logOut()
+                                if (Library.source === "soundcloud") {
+                                    SoundCloud.logOut()
+                                } else {
+                                    Session.logOut()
+                                }
                                 logOutDialog.accept()
                             }
                         },
@@ -583,6 +846,81 @@ Item {
                             onClicked: logOutDialog.close()
                         }
                     ]
+                }
+            }
+
+            ContentSection {
+                title: "SoundCloud"
+                symbol: "cloud"
+
+                StatusRow {
+                    label: "Status"
+                    value: SoundCloud.connected ? ("Connected as " + (SoundCloud.userName.length > 0 ? SoundCloud.userName : "User"))
+                         : (SoundCloud.available ? "Not connected" : "Sidecar not available")
+                    good: SoundCloud.connected
+                }
+                OutlinedTextField {
+                    id: scSettingsClientIdField
+                    x: 8
+                    width: Math.min(460, parent.width - 16)
+                    placeholder: "SoundCloud Client ID"
+                    text: SoundCloud.clientId
+                    onTextEdited: SoundCloud.clientId = text
+                }
+                OutlinedTextField {
+                    id: scSettingsTokenField
+                    x: 8
+                    width: Math.min(460, parent.width - 16)
+                    placeholder: "SoundCloud OAuth Token"
+                }
+                Flow {
+                    x: 8
+                    width: parent.width - 16
+                    spacing: 8
+                    topPadding: 4
+
+                    TextButton {
+                        variant: TextButton.Tonal
+                        symbol: SoundCloud.connected ? "cloud_done" : "cloud_sync"
+                        text: SoundCloud.busy ? "Connecting…" : (SoundCloud.connected ? "Reconnect SoundCloud" : "Connect SoundCloud")
+                        enabled: !SoundCloud.busy && (scSettingsClientIdField.text.trim().length > 0 || SoundCloud.clientId.length > 0)
+                        onClicked: {
+                            SoundCloud.connectAccount(scSettingsClientIdField.text, scSettingsTokenField.text)
+                        }
+                    }
+
+                    TextButton {
+                        visible: SoundCloud.connected
+                        symbol: "logout"
+                        text: "Disconnect"
+                        colBackground: Appearance.colors.error
+                        colBackgroundHover: Appearance.colors.errorHover
+                        labelColor: Appearance.colors.onError
+                        enabled: !SoundCloud.busy
+                        onClicked: {
+                            SoundCloud.logOut()
+                            if (Library.source === "soundcloud") {
+                                Library.setSource("spotify")
+                            }
+                        }
+                    }
+
+                    TextButton {
+                        visible: SoundCloud.connected && Library.source !== "soundcloud"
+                        variant: TextButton.Filled
+                        symbol: "swap_horiz"
+                        text: "Switch to SoundCloud"
+                        onClicked: {
+                            Library.setSource("soundcloud")
+                        }
+                    }
+                }
+                NoteText {
+                    visible: SoundCloud.statusMessage.length > 0
+                    text: SoundCloud.statusMessage
+                }
+                NoteText {
+                    text: "Paste your SoundCloud Client ID and OAuth token from soundcloud.com. Streams are cached locally with full EQ and spectrum."
                 }
             }
 
@@ -618,7 +956,7 @@ Item {
                 }
                 NoteText {
                     text: Session.libraryNeedsAuthorizationUpgrade
-                          ? "reconnect once to let Swiftify edit playlists and save songs"
+                          ? "reconnect once to let Resonance edit playlists and save songs"
                           : "your playlists, saved songs and search come through the Spotify app whose Client ID is above."
                 }
             }
@@ -723,7 +1061,7 @@ Item {
                         spacing: 2
 
                         StyledText {
-                            text: "Swiftify " + App.version
+                            text: "Resonance " + App.version
                             font.weight: Font.Medium
 
                             TapHandler {
@@ -734,7 +1072,7 @@ Item {
                             }
                         }
                         StyledText {
-                            text: "developed by addenator, the best programmer on earth"
+                            text: "humans"
                             font.pixelSize: Appearance.fontSize.smaller
                             color: Appearance.colors.onSurfaceVariant
                         }
@@ -754,6 +1092,244 @@ Item {
                             Behavior on scale {
                                 ElementMoveSmall {}
                             }
+                        }
+                    }
+                }
+            }
+
+            ContentSection {
+                id: updatesSection
+                title: "Updates"
+                symbol: "update"
+
+                Component.onCompleted: {
+                    if (Updater.status === Updater.Idle) {
+                        Updater.checkForUpdates()
+                    }
+                }
+
+                Column {
+                    x: 12
+                    width: parent.width - 24
+                    spacing: 12
+                    topPadding: 4
+                    bottomPadding: 8
+
+                    Row {
+                        width: parent.width
+                        spacing: 16
+
+                        Item {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 44
+                            height: 44
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 22
+                                color: {
+                                    if (Updater.status === Updater.Checking || Updater.status === Updater.Downloading || Updater.status === Updater.Installing)
+                                        return Appearance.colors.secondaryContainer;
+                                    if (Updater.status === Updater.UpdateAvailable)
+                                        return Appearance.colors.primaryContainer;
+                                    if (Updater.status === Updater.Downloaded)
+                                        return Appearance.colors.primary;
+                                    if (Updater.status === Updater.Error)
+                                        return Appearance.colors.errorContainer;
+                                    return Appearance.colors.surfaceContainerHigh;
+                                }
+
+                                LoadingSpinner {
+                                    anchors.centerIn: parent
+                                    width: 24
+                                    height: 24
+                                    running: Updater.status === Updater.Checking || Updater.status === Updater.Downloading || Updater.status === Updater.Installing
+                                    visible: running
+                                    color: Appearance.colors.primary
+                                }
+
+                                MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    visible: Updater.status !== Updater.Checking && Updater.status !== Updater.Downloading && Updater.status !== Updater.Installing
+                                    text: {
+                                        if (Updater.status === Updater.UpdateAvailable) return "system_update";
+                                        if (Updater.status === Updater.Downloaded) return "check_circle";
+                                        if (Updater.status === Updater.UpToDate) return "check";
+                                        if (Updater.status === Updater.Error) return "error";
+                                        return "update";
+                                    }
+                                    color: {
+                                        if (Updater.status === Updater.Downloaded) return Appearance.colors.onPrimary;
+                                        if (Updater.status === Updater.Error) return Appearance.colors.error;
+                                        if (Updater.status === Updater.UpdateAvailable) return Appearance.colors.onPrimaryContainer;
+                                        return Appearance.colors.primary;
+                                    }
+                                    iconSize: 22
+                                    fill: 1
+                                }
+                            }
+                        }
+
+                        Column {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width - 60
+                            spacing: 4
+
+                            StyledText {
+                                text: {
+                                    switch (Updater.status) {
+                                    case Updater.Checking:
+                                        return "Проверка наличия обновлений…";
+                                    case Updater.UpdateAvailable:
+                                        return "Доступна новая версия: " + Updater.latestVersion;
+                                    case Updater.Downloading:
+                                        return "Загрузка обновления… " + Math.round(Updater.downloadProgress * 100) + "%";
+                                    case Updater.Downloaded:
+                                        return "Обновление " + Updater.latestVersion + " загружено";
+                                    case Updater.Installing:
+                                        return "Установка обновления…";
+                                    case Updater.UpToDate:
+                                        return "У вас установлена актуальная версия (" + Updater.currentVersion + ")";
+                                    case Updater.Error:
+                                        return "Ошибка проверки обновлений";
+                                    default:
+                                        return "Текущая версия: " + Updater.currentVersion;
+                                    }
+                                }
+                                font.weight: Font.Medium
+                                color: Updater.status === Updater.Error ? Appearance.colors.error : Appearance.colors.onSurface
+                            }
+
+                            StyledText {
+                                text: {
+                                    if (Updater.status === Updater.UpdateAvailable) {
+                                        let details = Updater.releaseTitle ? Updater.releaseTitle : "";
+                                        if (Updater.assetSize > 0) {
+                                            const mb = (Updater.assetSize / (1024 * 1024)).toFixed(1);
+                                            details += (details.length > 0 ? " • " : "") + mb + " MB";
+                                        }
+                                        return details;
+                                    }
+                                    if (Updater.status === Updater.Downloading) {
+                                        const receivedMb = (Updater.downloadedBytes / (1024 * 1024)).toFixed(1);
+                                        const totalMb = Updater.assetSize > 0 ? (Updater.assetSize / (1024 * 1024)).toFixed(1) : "?";
+                                        return receivedMb + " MB из " + totalMb + " MB";
+                                    }
+                                    if (Updater.status === Updater.Downloaded) {
+                                        return "Установщик готов к запуску в папке Загрузки";
+                                    }
+                                    if (Updater.status === Updater.Error) {
+                                        return Updater.errorMessage;
+                                    }
+                                    return "Релизы GitHub: BohdanKrakoviatskyi/BSC---BetterSoundCloud";
+                                }
+                                font.pixelSize: Appearance.fontSize.smaller
+                                color: Appearance.colors.onSurfaceVariant
+                                elide: Text.ElideRight
+                                width: parent.width
+                            }
+                        }
+                    }
+
+                    // Download progress bar
+                    Rectangle {
+                        width: parent.width
+                        height: 4
+                        radius: 2
+                        color: Appearance.colors.surfaceContainerHigh
+                        visible: Updater.status === Updater.Downloading
+                        clip: true
+
+                        Rectangle {
+                            height: parent.height
+                            width: parent.width * Math.max(0.02, Updater.downloadProgress)
+                            radius: 2
+                            color: Appearance.colors.primary
+
+                            Behavior on width {
+                                NumberAnimation { duration: 100 }
+                            }
+                        }
+                    }
+
+                    // Release notes preview (if update available)
+                    Rectangle {
+                        width: parent.width
+                        height: Math.min(120, releaseNotesText.implicitHeight + 16)
+                        radius: 12
+                        color: Appearance.colors.surfaceContainerLow
+                        visible: (Updater.status === Updater.UpdateAvailable || Updater.status === Updater.Downloaded) && Updater.releaseNotes.length > 0
+                        clip: true
+
+                        Flickable {
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            contentWidth: width
+                            contentHeight: releaseNotesText.implicitHeight
+                            boundsBehavior: Flickable.StopAtBounds
+
+                            StyledText {
+                                id: releaseNotesText
+                                width: parent.width
+                                text: Updater.releaseNotes
+                                font.pixelSize: Appearance.fontSize.smaller
+                                color: Appearance.colors.onSurfaceVariant
+                                wrapMode: Text.WordWrap
+                            }
+                        }
+                    }
+
+                    // Action buttons
+                    Row {
+                        spacing: 8
+                        topPadding: 4
+
+                        TextButton {
+                            variant: TextButton.Filled
+                            symbol: "sync"
+                            text: "Проверить обновления"
+                            visible: Updater.status === Updater.Idle || Updater.status === Updater.UpToDate || Updater.status === Updater.Error
+                            busy: Updater.status === Updater.Checking
+                            enabled: Updater.status !== Updater.Checking
+                            onClicked: Updater.checkForUpdates()
+                        }
+
+                        TextButton {
+                            variant: TextButton.Filled
+                            symbol: "download"
+                            text: "Загрузить обновление"
+                            visible: Updater.status === Updater.UpdateAvailable
+                            onClicked: Updater.startDownload()
+                        }
+
+                        TextButton {
+                            variant: TextButton.Filled
+                            symbol: "open_in_new"
+                            text: App.macOS ? "Установить и перезапустить" : "Открыть установщик"
+                            visible: Updater.status === Updater.Downloaded
+                            onClicked: {
+                                if (App.macOS) {
+                                    Updater.installAndRelaunch();
+                                } else {
+                                    Updater.openInstaller();
+                                }
+                            }
+                        }
+
+                        TextButton {
+                            variant: TextButton.Tonal
+                            symbol: "folder_open"
+                            text: "Показать файл"
+                            visible: Updater.status === Updater.Downloaded
+                            onClicked: Updater.openInstaller()
+                        }
+
+                        TextButton {
+                            variant: TextButton.Tonal
+                            symbol: "open_in_browser"
+                            text: "GitHub"
+                            visible: Updater.releaseUrl.length > 0
+                            onClicked: Updater.openReleasePage()
                         }
                     }
                 }
