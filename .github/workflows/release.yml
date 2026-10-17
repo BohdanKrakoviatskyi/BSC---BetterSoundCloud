@@ -150,7 +150,7 @@ jobs:
         shell: bash
         run: |
           VERSION="${RELEASE_TAG#v}"
-          DMG_PATH="release-artifacts/Swiftify-${VERSION}-macOS.dmg"
+          DMG_PATH="release-artifacts/Resonance-${VERSION}-macOS.dmg"
           xcrun notarytool submit "$DMG_PATH" \
             --apple-id "$APPLE_ID" \
             --password "$APPLE_PASSWORD" \
@@ -162,7 +162,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
-          name: Swiftify ${{ inputs.tag || github.ref_name }}
+          name: Resonance ${{ inputs.tag || github.ref_name }}
           body: "See the release assets below to download and install this version."
           draft: false
           prerelease: false

@@ -406,8 +406,8 @@ if(APPLE)
     set_target_properties(swiftify PROPERTIES
         MACOSX_BUNDLE ON
         MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/Info.plist.in
-        MACOSX_BUNDLE_BUNDLE_NAME Swiftify
-        MACOSX_BUNDLE_GUI_IDENTIFIER dev.addenator.Swiftify.Qt
+        MACOSX_BUNDLE_BUNDLE_NAME Resonance
+        MACOSX_BUNDLE_GUI_IDENTIFIER com.resonance.desktop
         MACOSX_BUNDLE_ICON_FILE swiftify.icns
         MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
         MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION})

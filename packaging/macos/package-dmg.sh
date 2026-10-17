@@ -53,7 +53,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-TARGET_APP="$STAGING_DIR/Swiftify.app"
+TARGET_APP="$STAGING_DIR/Resonance.app"
 echo "==> Copying application bundle to staging directory..."
 cp -R "$APP_BUNDLE" "$TARGET_APP"
 
@@ -105,8 +105,8 @@ codesign "${CODESIGN_FLAGS[@]}" --deep --sign "$SIGNING_IDENTITY" "$TARGET_APP"
 echo "==> Verifying code signature..."
 codesign --verify --deep --strict --verbose=2 "$TARGET_APP"
 
-DMG_NAME="Swiftify-${VERSION}-macOS.dmg"
-ZIP_NAME="Swiftify-${VERSION}-macOS.zip"
+DMG_NAME="Resonance-${VERSION}-macOS.dmg"
+ZIP_NAME="Resonance-${VERSION}-macOS.zip"
 
 echo "==> Creating Zip archive: $OUTPUT_DIR/$ZIP_NAME"
 ditto -c -k --keepParent "$TARGET_APP" "$OUTPUT_DIR/$ZIP_NAME"
@@ -119,7 +119,7 @@ ln -s /Applications "$DMG_STAGING/Applications"
 
 rm -f "$OUTPUT_DIR/$DMG_NAME"
 hdiutil create \
-    -volname "Swiftify" \
+    -volname "Resonance" \
     -srcfolder "$DMG_STAGING" \
     -ov \
     -format UDZO \
