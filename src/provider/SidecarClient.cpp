@@ -117,8 +117,10 @@ QString SidecarClient::binaryPath() const
     const QDir executableDirectory(QCoreApplication::applicationDirPath());
     const QStringList candidates {
 #ifdef Q_OS_WIN
-        // the go tool writes local-api.exe on windows, and an extensionless name
-        // is not executable there as far as QFileInfo is concerned
+        // On windows QFileInfo::isExecutable() decides by extension — .exe,
+        // .com, .bat, .pif, .cmd — because there is no execute bit to read, so
+        // the extensionless name below is never accepted there. The build names
+        // the sidecar local-api.exe on windows to match (CMakeLists.txt).
         executableDirectory.filePath(QStringLiteral("local-api.exe")),
 #endif
         executableDirectory.filePath(QStringLiteral("local-api")),

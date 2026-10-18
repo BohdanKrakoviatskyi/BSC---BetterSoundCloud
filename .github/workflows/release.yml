@@ -427,6 +427,37 @@ jobs:
           ./packaging/macos/package-dmg.sh \
             build/swiftify.app release-artifacts "$VERSION" "$SIGNING_IDENTITY"
 
+          # Self-containment check on the bundle before it is mounted and
+          # notarised. macdeployqt has already run inside the packaging script;
+          # what this confirms is that the app and its sidecar are where the
+          # app looks for them, and that the Qt frameworks were copied in rather
+          # than left pointing at the build machine's homebrew.
+          BUNDLE="build/swiftify.app/Contents"
+          REQUIRED=(
+            "MacOS/swiftify"
+            "MacOS/local-api"
+            "Frameworks/QtCore.framework/Versions/A/QtCore"
+            "Frameworks/QtQuick.framework/Versions/A/QtQuick"
+            "Frameworks/QtMultimedia.framework/Versions/A/QtMultimedia"
+            "PlugIns/platforms/libqxcb.dylib"
+          )
+          MISSING=()
+          for entry in "${REQUIRED[@]}"; do
+            [ -e "$BUNDLE/$entry" ] || MISSING+=("$entry")
+          done
+          if [ ${#MISSING[@]} -gt 0 ]; then
+            echo "::error::the app bundle is missing: ${MISSING[*]}"
+            exit 1
+          fi
+          echo "bundle is self-contained: ${#REQUIRED[@]} required entries present"
+          # an absolute path to a dylib would only resolve on the build machine
+          if otool -L "$BUNDLE/MacOS/swiftify" | grep -qE '(/opt/homebrew|/usr/local)'; then
+            echo "::error::the app links against build-machine paths:"
+            otool -L "$BUNDLE/MacOS/swiftify" | grep -E '(/opt/homebrew|/usr/local)'
+            exit 1
+          fi
+          echo "no build-machine library paths in the linked libraries"
+
       - name: Notarize DMG
         if: runner.os == 'macOS' && steps.apple.outputs.notarize == 'true'
         working-directory: swiftify
@@ -457,13 +488,54 @@ jobs:
           mkdir -p release-artifacts
           ./packaging/linux/package-appimage.sh build release-artifacts "$VERSION"
 
+          # Self-containment check on the finished AppImage. Extracting it and
+          # looking inside is the closest a runner gets to starting it: an
+          # AppImage that cannot find its own libraries shows up here as a
+          # missing runtime, a missing platform plugin or a missing binary.
+          APPIMAGE="$(find release-artifacts -maxdepth 1 -name '*-Linux*.AppImage' -print -quit)"
+          if [ -z "$APPIMAGE" ]; then
+            echo "::error::no AppImage was produced"
+            exit 1
+          fi
+          echo "unpacking $APPIMAGE"
+          APPIMAGE_EXTRACT_AND_RUN=1 "$APPIMAGE" --appimage-extract > /dev/null
+          ROOT="squashfs-root"
+          # Globs rather than exact paths: linuxdeploy chooses between
+          # usr/lib and usr/lib/<triple> for the deployed libraries, and the
+          # app and the sidecar are what must be exactly where they are.
+          MISSING=()
+          for entry in usr/bin/swiftify usr/bin/local-api \
+                        usr/share/applications/swiftify.desktop; do
+            [ -e "$ROOT/$entry" ] || MISSING+=("$entry")
+          done
+          for pattern in "libQt6Core.so*" "libQt6Quick.so*" "libQt6Multimedia.so*" \
+                         "libqxcb.so" "libqt6keychain.so*"; do
+            found=$(find "$ROOT" -name "$pattern" -print -quit 2>/dev/null)
+            [ -n "$found" ] || MISSING+=("$pattern")
+          done
+          if [ ${#MISSING[@]} -gt 0 ]; then
+            echo "::error::the AppImage is missing: ${MISSING[*]}"
+            find "$ROOT" -maxdepth 3 -type d | head -20
+            exit 1
+          fi
+          echo "AppImage is self-contained"
+          echo "size: $(du -h "$APPIMAGE" | cut -f1), unpacked: $(du -sh "$ROOT" | cut -f1)"
+          echo "qt libraries deployed: $(find "$ROOT" -name 'libQt6*.so*' | wc -l)"
+          echo "platform plugins: $(find "$ROOT" -path '*platforms*' -name '*.so' | wc -l)"
+
       - name: Package zip (Windows)
         if: runner.os == 'Windows'
         working-directory: swiftify
         shell: pwsh
-        # one archive, and only that: the updater downloads the first asset it
-        # finds with a matching extension, and a bare swiftify.exe next to a zip
-        # would be pickable and unusable
+        # The archive has to be self-contained: the qml is compiled into the exe,
+        # so what Qt needs on top of that is its dlls, the platform plugin, the
+        # image-format plugins the artwork loader relies on, and the two
+        # libraries the app links outside Qt. A release missing any of them
+        # unpacks and then fails to start — which is what the last windows build
+        # produced — so the list is checked before the archive is made. Only the
+        # zip is published: the updater downloads the first asset it finds with a
+        # matching extension, and a bare swiftify.exe beside it would be pickable
+        # and unusable.
         run: |
           $version = $env:RELEASE_TAG -replace '^v', ''
           $staging = Join-Path $env:RUNNER_TEMP 'pkg'
@@ -482,22 +554,62 @@ jobs:
           Copy-Item (Join-Path $deps '*.dll') $staging
           $env:PATH = "$deps;$env:PATH"
 
+          # --ignore-library-errors: qt's documentation states outright that
+          # third-party libraries "are not taken into account by windeployqt".
+          # Left to itself it resolves qt6keychain.dll against the Qt
+          # installation, where it is not, and gives up: exit code 1, and a
+          # release carrying an exe, one dll and no Qt at all. The flag is the
+          # documented way to say "carry on without that one", so Qt's own
+          # deployment completes and the dlls windeployqt will not carry stay
+          # staged above, where the app finds them beside the exe.
           & "$env:QT_ROOT_DIR/bin/windeployqt.exe" --release `
             --no-translations --no-system-d3d-compiler `
+            --ignore-library-errors `
             (Join-Path $staging 'swiftify.exe')
 
-          # the go sidecar sits beside the binary the app looks next to itself.
-          # the go tool names it local-api.exe on windows, and the app asks for
-          # that name there (SidecarClient)
-          $sidecar = Get-ChildItem (Join-Path $PWD 'build/sidecar') -Filter 'local-api*' |
-            Select-Object -First 1
-          if (-not $sidecar) { throw 'the go sidecar is missing from build/sidecar' }
-          Copy-Item $sidecar.FullName $staging
-          Get-ChildItem $staging
+          # the go sidecar sits beside the binary the app looks next to itself,
+          # named the way the app asks for it on windows (SidecarClient)
+          $sidecar = Join-Path $PWD 'build/sidecar/local-api.exe'
+          if (-not (Test-Path $sidecar)) { throw "the go sidecar is missing at $sidecar" }
+          Copy-Item $sidecar $staging
+
+          # self-containment check, before anything is published
+          $required = @(
+            'swiftify.exe',
+            'local-api.exe',
+            'qt6keychain.dll',
+            'Qt6Core.dll',
+            'Qt6Gui.dll',
+            'Qt6Quick.dll',
+            'Qt6Qml.dll',
+            'Qt6Multimedia.dll',
+            'Qt6DBus.dll',
+            'Qt6Widgets.dll',
+            'platforms/qwindows.dll',
+            'platforms/qminimal.dll',
+            'styles/qmodernwindowsstyle.dll',
+            'imageformats/qjpeg.dll',
+            'imageformats/qpng.dll',
+            'imageformats/qsvg.dll',
+            'tls/qtls_backends.dll'
+          )
+          $missing = @($required | Where-Object {
+              -not (Test-Path (Join-Path $staging $_))
+          })
+          if ($missing) {
+            "windeployqt left these out: $($missing -join ', ')"
+            'staging actually contains:'
+            Get-ChildItem $staging -Recurse -Name | Sort-Object | ForEach-Object { "  $_" }
+            throw "the windows package is not self-contained ($($missing.Count) of $($required.Count) missing)"
+          }
+          "package is self-contained: $($required.Count) required entries present"
+          "{0:n1} MB staged" -f ((Get-ChildItem $staging -Recurse -File |
+              Measure-Object -Property Length -Sum).Sum / 1MB)
+          Get-ChildItem $staging -Name | Sort-Object | Select-Object -First 12
 
           Compress-Archive -Path (Join-Path $staging '*') `
             -DestinationPath "release-artifacts/Resonance-${version}-Windows.zip"
-          Get-ChildItem release-artifacts
+          Get-ChildItem release-artifacts | Select-Object Name, Length
 
       # ── publish ───────────────────────────────────────────────────────────
       - name: Publish this platform's assets to the release

@@ -323,7 +323,20 @@ elseif(SWIFTIFY_SIDECAR_BUILD)
     if(SWIFTIFY_GO_EXECUTABLE AND EXISTS ${SWIFTIFY_SIDECAR_SOURCE_DIR}/go.mod)
         file(GLOB_RECURSE SWIFTIFY_SIDECAR_SOURCES CONFIGURE_DEPENDS
             ${SWIFTIFY_SIDECAR_SOURCE_DIR}/*.go)
-        set(SWIFTIFY_SIDECAR_FILE ${CMAKE_CURRENT_BINARY_DIR}/sidecar/local-api)
+        # The go tool writes exactly the name it is given, so -o local-api on
+        # windows produces a file called local-api with no .exe. Nothing can run
+        # that: CreateProcess appends .exe to a name that carries no extension
+        # and finds no such file. The app's own lookup missed it too —
+        # QFileInfo::isExecutable() judges by extension on windows and has no
+        # execute bit to read. The suffix is spelled out here instead of taken
+        # from CMAKE_EXECUTABLE_SUFFIX, which only exists once a language is
+        # enabled, and SidecarClient asks for the matching name.
+        if(WIN32)
+            set(SWIFTIFY_SIDECAR_NAME local-api.exe)
+        else()
+            set(SWIFTIFY_SIDECAR_NAME local-api)
+        endif()
+        set(SWIFTIFY_SIDECAR_FILE ${CMAKE_CURRENT_BINARY_DIR}/sidecar/${SWIFTIFY_SIDECAR_NAME})
         add_custom_command(OUTPUT ${SWIFTIFY_SIDECAR_FILE}
             COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/sidecar
             # CGO off: the result is one file with nothing to find at run time
