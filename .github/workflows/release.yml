@@ -176,15 +176,33 @@ jobs:
           set -euo pipefail
           brew update --quiet
           brew install cmake ninja qt@6 qcoro6 qtkeychain
-          # One toolchain instead of two halves: the runner's default selection
-          # is the standalone Command Line Tools, whose SDK is newer than its own
-          # linker — the .tbd files carry architectures that linker cannot read,
-          # and the one link of the app died on them. Selecting Xcode pairs its
-          # ld with its own SDK, and SDKROOT pins cmake to the same one.
+          # One toolchain instead of two halves. The runner's default selection
+          # is the standalone Command Line Tools, and its SDK is newer than the
+          # linker that has to read it — the .tbd files list arm64e.x1, which
+          # the linker reports as an unknown architecture. Selecting Xcode pairs
+          # its ld with its own SDK, and SDKROOT pins cmake to that same one.
           XCODE_APP="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
           sudo xcode-select -s "$XCODE_APP/Contents/Developer"
-          echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)" >> "$GITHUB_ENV"
-          echo "using $XCODE_APP at $(xcrun --sdk macosx --show-sdk-path)"
+          SDKROOT_PATH="$(xcrun --sdk macosx --show-sdk-path)"
+          echo "SDKROOT=$SDKROOT_PATH" >> "$GITHUB_ENV"
+          echo "using $XCODE_APP at $SDKROOT_PATH"
+
+          # Homebrew's Qt carries the sdk it was built against into every link
+          # line: an -L and an -rpath at <sdk>/usr/lib, with an explicit
+          # -lSystem -lc -lm beside them. That sdk on this image is the standalone
+          # Command Line Tools one, so ld reads its .tbd files — and dies on them
+          # looking up libraries that -isysroot already names. Repointing that
+          # path at the sdk this build uses makes those entries resolve to the
+          # same libraries the sysroot does.
+          CLT_SDK=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+          if [ -e "$CLT_SDK" ]; then
+            CLT_SDK_REAL="$(cd "$CLT_SDK" && pwd -P)"
+            if [ "$CLT_SDK_REAL" != "$SDKROOT_PATH" ]; then
+              sudo mv "$CLT_SDK" "$CLT_SDK.runner"
+              sudo ln -s "$SDKROOT_PATH" "$CLT_SDK"
+              echo "repointed $CLT_SDK at $SDKROOT_PATH"
+            fi
+          fi
 
       - name: Install Qt (Windows)
         if: runner.os == 'Windows'
