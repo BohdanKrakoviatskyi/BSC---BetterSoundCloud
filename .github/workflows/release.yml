@@ -108,7 +108,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
             build-essential cmake ninja-build pkg-config file wget \
-            git ca-certificates \
+            git ca-certificates clang-18 \
             libgl1-mesa-dev libvulkan-dev libxkbcommon-dev \
             libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-randr0 \
             libxcb-render-util0 libxcb-shape0 \
@@ -369,9 +369,17 @@ jobs:
           set -euo pipefail
           # qcoro and qtkeychain were installed into /usr/local, which cmake
           # searches by default
+          # clang, not gcc: gcc's coroutine support is still experimental and
+          # it dies with an internal compiler error in build_special_member_call
+          # on every method here returning QCoro::Task<void> — on 11.4 and on
+          # 13 alike, so moving to a newer gcc is not the answer. The mac build
+          # has always been clang, and it is the compiler this codebase is
+          # developed against.
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=OFF \
+            -DCMAKE_C_COMPILER=clang-18 \
+            -DCMAKE_CXX_COMPILER=clang++-18 \
             -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
             -DSWIFTIFY_SIDECAR_SOURCE_DIR="$PWD/../BSC---BetterSoundCloud/backend"
           cmake --build build
