@@ -52,6 +52,9 @@ fetch() {
 if ! command -v linuxdeploy >/dev/null 2>&1; then
     fetch "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage" \
         "$LINUXDEPLOY"
+    # the download is named after its architecture; the tool is invoked as
+    # linuxdeploy, so the plain name has to exist or the call below finds nothing
+    ln -sf "$LINUXDEPLOY" "$TOOLS_DIR/linuxdeploy"
 fi
 # linuxdeploy looks for its plugins beside itself or on PATH, under the plain
 # name without the architecture and the .AppImage suffix

@@ -277,12 +277,22 @@ jobs:
           cmake --build qcoro\build
           cmake --install qcoro\build
 
+          # qtkeychain is built static here. It is the one library the app links outside
+          # Qt, and Qt's documentation is explicit that windeployqt does not
+          # account for third-party libraries: it resolves qt6keychain.dll
+          # against the Qt installation, where it is not, and abandons the whole
+          # deployment. --ignore-library-errors did not prevent that, so rather
+          # than lean on a flag whose behaviour varies by version, the app is
+          # given no such dll to resolve: no import, nothing to fail on, nothing
+          # extra to ship. qcoro already builds static libs, so this is the last
+          # non-Qt dependency.
           git clone --depth 1 --branch v0.14.0 https://github.com/frankosterfeld/qtkeychain.git qtkeychain
           cmake -S qtkeychain -B qtkeychain\build -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_PREFIX_PATH="$qt;C:\qcoro-install" `
             -DCMAKE_INSTALL_PREFIX="C:\qcoro-install" `
             -DBUILD_WITH_QT6=ON -DBUILD_TEST_APPLICATION=OFF `
+            -DBUILD_SHARED_LIBS=OFF `
             -DLIBSECRET_SUPPORT=OFF
           cmake --build qtkeychain\build
           cmake --install qtkeychain\build
@@ -422,17 +432,24 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="$(brew --prefix qt@6)/bin:$PATH"
-          VERSION="${RELEASE_TAG#v}"
           mkdir -p release-artifacts
           ./packaging/macos/package-dmg.sh \
-            build/swiftify.app release-artifacts "$VERSION" "$SIGNING_IDENTITY"
+            build/swiftify.app release-artifacts "${RELEASE_TAG#v}" "$SIGNING_IDENTITY"
 
-          # Self-containment check on the bundle before it is mounted and
-          # notarised. macdeployqt has already run inside the packaging script;
-          # what this confirms is that the app and its sidecar are where the
-          # app looks for them, and that the Qt frameworks were copied in rather
-          # than left pointing at the build machine's homebrew.
-          BUNDLE="build/swiftify.app/Contents"
+          # Self-containment check on what was actually shipped. It has to be the
+          # archive, not build/swiftify.app: macdeployqt ran inside
+          # package-dmg.sh on a staging copy of the bundle, and that copy is
+          # deleted again when the script returns. The zip is the same bundle
+          # without a filesystem image wrapped round it.
+          VERSION="${RELEASE_TAG#v}"
+          ZIP="release-artifacts/Resonance-${VERSION}-macOS.zip"
+          if [ ! -f "$ZIP" ]; then
+            echo "::error::the packaging script produced no zip at $ZIP"
+            exit 1
+          fi
+          CHECK="$(mktemp -d)"
+          ditto -x -k "$ZIP" "$CHECK"
+          BUNDLE="$CHECK/Resonance.app/Contents"
           REQUIRED=(
             "MacOS/swiftify"
             "MacOS/local-api"
@@ -446,17 +463,23 @@ jobs:
             [ -e "$BUNDLE/$entry" ] || MISSING+=("$entry")
           done
           if [ ${#MISSING[@]} -gt 0 ]; then
-            echo "::error::the app bundle is missing: ${MISSING[*]}"
+            echo "::error::the shipped bundle is missing: ${MISSING[*]}"
+            echo "what it does contain:"
+            find "$BUNDLE" -maxdepth 2 | head -20
             exit 1
           fi
           echo "bundle is self-contained: ${#REQUIRED[@]} required entries present"
-          # an absolute path to a dylib would only resolve on the build machine
+          # An absolute path to a dylib would only resolve on the build machine.
+          # Homebrew's qt, qcoro and qtkeychain all live under /opt/homebrew, so
+          # this is what a bundle that was never run through macdeployqt looks
+          # like — and macos builds green while the bundle is still unpacked.
           if otool -L "$BUNDLE/MacOS/swiftify" | grep -qE '(/opt/homebrew|/usr/local)'; then
-            echo "::error::the app links against build-machine paths:"
+            echo "::error::the shipped app links against build-machine paths:"
             otool -L "$BUNDLE/MacOS/swiftify" | grep -E '(/opt/homebrew|/usr/local)'
             exit 1
           fi
           echo "no build-machine library paths in the linked libraries"
+          echo "frameworks shipped: $(find "$BUNDLE/Frameworks" -maxdepth 1 -name '*.framework' | wc -l)"
 
       - name: Notarize DMG
         if: runner.os == 'macOS' && steps.apple.outputs.notarize == 'true'
@@ -544,15 +567,17 @@ jobs:
 
           Copy-Item 'build/swiftify.exe' $staging
 
-          # QCoro and QtKeychain are not Qt's, so windeployqt does not know to
-          # deploy them — and it cannot even resolve what the app imports until
-          # they sit beside the executable. They are copied in first, and their
-          # folder is on PATH so the tool's own dependency walk finds them there
-          # too.
+          # Both dependencies are built static, so there is normally nothing here. The
+          # copy is kept as a guard: if a future change puts a dll back, it has
+          # to travel with the app, and windeployqt will not carry it.
           $deps = 'C:\qcoro-install\bin'
-          if (-not (Test-Path $deps)) { throw "no qcoro/qtkeychain dlls at $deps" }
-          Copy-Item (Join-Path $deps '*.dll') $staging
-          $env:PATH = "$deps;$env:PATH"
+          if (Test-Path $deps) {
+              $extra = @(Get-ChildItem $deps -Filter '*.dll' -ErrorAction SilentlyContinue)
+              if ($extra.Count) {
+                  "shipping $($extra.Count) non-Qt dll(s) alongside the app"
+                  Copy-Item $extra.FullName $staging
+              }
+          }
 
           # --ignore-library-errors: qt's documentation states outright that
           # third-party libraries "are not taken into account by windeployqt".
@@ -577,7 +602,6 @@ jobs:
           $required = @(
             'swiftify.exe',
             'local-api.exe',
-            'qt6keychain.dll',
             'Qt6Core.dll',
             'Qt6Gui.dll',
             'Qt6Quick.dll',
