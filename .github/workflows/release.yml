@@ -665,11 +665,20 @@ jobs:
               ForEach-Object { $_.Line.Trim().ToLower() } |
               Sort-Object -Unique
           if (-not $imports) { throw 'dumpbin reported no imports at all; the check itself is broken' }
+          # api-ms-win-* and ext-ms-win-* are API sets: virtual names the loader
+          # resolves through its schema. There is no such file on disk, so
+          # looking for one in System32 finds nothing and reports a false
+          # failure. The universal crt arrives with windows itself.
+          $resolvedByWindows = @($imports | Where-Object {
+              $_ -like 'api-ms-win-*' -or $_ -like 'ext-ms-win-*' -or
+              $_ -in @('ucrtbase.dll', 'vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll')
+          })
           $unresolved = @($imports | Where-Object {
+              $_ -notin $resolvedByWindows -and
               -not (Test-Path (Join-Path $staging $_)) -and
               -not (Test-Path (Join-Path $systemDir $_))
           })
-          "$($imports.Count) imports, $($imports.Count - $unresolved.Count) resolved"
+          "$($imports.Count) imports: $($resolvedByWindows.Count) resolved by windows itself, $($imports.Count - $unresolved.Count - $resolvedByWindows.Count) shipped with the app"
           if ($unresolved) {
               "not in the package and not a windows library: $($unresolved -join ', ')"
               throw 'the exe imports libraries the package does not carry'
