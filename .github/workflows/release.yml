@@ -607,6 +607,26 @@ jobs:
               Measure-Object -Property Length -Sum).Sum / 1MB)
           Get-ChildItem $staging -Name | Sort-Object | Select-Object -First 12
 
+          # The stronger check, and the one that generalises: every dll the exe
+          # imports must either be in the package or be a dll windows itself
+          # provides. A hardcoded list only proves what somebody thought of;
+          # this proves the loader will find everything that was asked for.
+          $systemDir = Join-Path $env:SystemRoot 'System32'
+          $imports = & dumpbin /dependents (Join-Path $staging 'swiftify.exe') |
+              Select-String -Pattern '^\s+\S+\.dll\s*$' |
+              ForEach-Object { $_.Line.Trim().ToLower() } |
+              Sort-Object -Unique
+          if (-not $imports) { throw 'dumpbin reported no imports at all; the check itself is broken' }
+          $unresolved = @($imports | Where-Object {
+              -not (Test-Path (Join-Path $staging $_)) -and
+              -not (Test-Path (Join-Path $systemDir $_))
+          })
+          "$($imports.Count) imports, $($imports.Count - $unresolved.Count) resolved"
+          if ($unresolved) {
+              "not in the package and not a windows library: $($unresolved -join ', ')"
+              throw 'the exe imports libraries the package does not carry'
+          }
+
           Compress-Archive -Path (Join-Path $staging '*') `
             -DestinationPath "release-artifacts/Resonance-${version}-Windows.zip"
           Get-ChildItem release-artifacts | Select-Object Name, Length
