@@ -116,12 +116,12 @@ jobs:
         if: runner.os == 'Linux'
         uses: jurplel/install-qt-action@v4
         with:
-          # the app requires Qt 6.9 (qt_standard_project_setup(REQUIRES 6.9)),
-          # so 6.7 is not an option. of what the app asks cmake for, QtMultimedia
-          # and QtShaderTools are not part of the base install: without
-          # qtshadertools the find_package at the top of CMakeLists.txt fails on
-          # the ShaderTools component before anything is compiled
-          version: '6.9.*'
+          # The same Qt the mac build gets from homebrew. 6.9 was enough for cmake's
+          # REQUIRES 6.9, but its qmlcachegen rejects `final` on a property,
+          # which qml/components/Segment.qml uses on four in a row — so the linux
+          # build died compiling QML. of what the app asks cmake for,
+          # QtMultimedia and QtShaderTools are not part of the base install.
+          version: '6.12.*'
           host: linux
           target: desktop
           arch: linux_gcc_64
@@ -204,18 +204,35 @@ jobs:
             fi
           fi
 
+      # The MSVC build environment, before anything runs cmake. The runner image
+      # ships a MinGW toolchain, and cmake's default compiler search found that
+      # first: qcoro and qtkeychain were then built with g++ against msvc Qt and
+      # linked with mingw's ld, which cannot resolve Qt's __imp__ imports at all.
+      # This puts the Visual Studio compiler and its environment first.
+      - name: Set up MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Install Qt (Windows)
         if: runner.os == 'Windows'
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.9.*'
+          # Qt 6.12 for the same reason as on linux: 6.9's qmlcachegen rejects the
+          # `final` properties in qml/components/Segment.qml. qtshadertools is
+          # asked for by the app's find_package and is not in the base install.
+          version: '6.12.*'
           host: windows
           target: desktop
           arch: win64_msvc2022_64
-          # qtshadertools for the same reason as on linux: the app's
-          # find_package asks for it and the base install does not carry it
           modules: 'qtmultimedia qtshadertools'
           cache: true
+
+      - name: Install Ninja (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        # both cmake calls below ask for the Ninja generator, and the runner
+        # image does not ship it
+        run: choco install ninja --no-progress -y
 
       - name: Build QCoro and QtKeychain (Windows)
         if: runner.os == 'Windows'
@@ -235,13 +252,17 @@ jobs:
 
           # the url comes first: git clone takes <repository> [directory], and getting
           # that backwards made cmake point at a directory git never created
+          # QCoro's own tests and examples are on by default and want QtTest, which the
+          # app never uses. A release builds none of it, so the test tree and the
+          # QtTest and WebSockets support are switched off.
           git clone --depth 1 --branch v0.11.0 https://github.com/danvratil/qcoro.git qcoro
           cmake -S qcoro -B qcoro\build -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_PREFIX_PATH="$qt" `
             -DCMAKE_INSTALL_PREFIX="C:\qcoro-install" `
-            -DQCORO_WITH_QTWEBSOCKETS=OFF `
-            -DQCORO_BUILD_EXAMPLES=OFF -DQCORO_ENABLE_COMPAT_METHOD_TESTS=OFF
+            -DQCORO_WITH_QTWEBSOCKETS=OFF -DQCORO_WITH_QTTEST=OFF `
+            -DQCORO_BUILD_TESTING=OFF -DQCORO_BUILD_EXAMPLES=OFF `
+            -DQCORO_ENABLE_COMPAT_METHOD_TESTS=OFF
           cmake --build qcoro\build
           cmake --install qcoro\build
 
@@ -257,10 +278,7 @@ jobs:
 
           "QCORO_PREFIX=C:\qcoro-install" >> $env:GITHUB_ENV
 
-      - name: Install Ninja (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: choco install ninja --no-progress -y
+      
 
       # ── Apple signing, used when the secrets are there ─────────────────────
       - name: Check for Apple signing secrets
