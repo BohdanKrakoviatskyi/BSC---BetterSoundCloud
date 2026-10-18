@@ -116,12 +116,13 @@ jobs:
         if: runner.os == 'Linux'
         uses: jurplel/install-qt-action@v4
         with:
-          # The same Qt the mac build gets from homebrew. 6.9 was enough for cmake's
-          # REQUIRES 6.9, but its qmlcachegen rejects `final` on a property,
-          # which qml/components/Segment.qml uses on four in a row — so the linux
-          # build died compiling QML. of what the app asks cmake for,
-          # QtMultimedia and QtShaderTools are not part of the base install.
-          version: '6.12.*'
+          # 6.9 is the oldest version CMakeLists.txt asks cmake for (REQUIRES 6.9), and
+          # the newest one Qt has actually published for windows: 6.11 and later
+          # are listed by aqt but their Updates.xml is not there yet, and 6.12
+          # makes qcoro 0.11 fail on a missing QML private module.
+          # QtMultimedia and QtShaderTools are not part of the base install,
+          # though the app's find_package asks for both.
+          version: '6.9.*'
           host: linux
           target: desktop
           arch: linux_gcc_64
@@ -137,17 +138,21 @@ jobs:
           set -euo pipefail
           echo "Using Qt at $QT_ROOT_DIR"
 
-          # QCoro defaults QCORO_WITH_QTWEBSOCKETS on, so its configure wants the
-          # websockets module even though the app links none of it; turning it off
-          # keeps that need away instead of adding a module the app never uses.
+          # QCoro turns QtWebSockets and QtTest support on by default, and its
+          # tests are built whenever BUILD_TESTING is set — which install-qt's
+          # own configure steps set. The app links QCoro Core and Network only,
+          # so all three are switched off: each one either wants a Qt module the
+          # app never uses or a test binary the release has no use for.
           # v0.14.0 is qtkeychain's newest tag — 0.15.0 does not exist.
           git clone --depth 1 --branch v0.11.0 \
             https://github.com/danvratil/qcoro.git "$RUNNER_TEMP/qcoro"
           cmake -S "$RUNNER_TEMP/qcoro" -B "$RUNNER_TEMP/qcoro/build" -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
             -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
-            -DQCORO_WITH_QTWEBSOCKETS=OFF \
-            -DQCORO_BUILD_EXAMPLES=OFF -DQCORO_ENABLE_COMPAT_METHOD_TESTS=OFF
+            -DQCORO_WITH_QTWEBSOCKETS=OFF -DQCORO_WITH_QTTEST=OFF `
+            -DQCORO_BUILD_TESTING=OFF -DQCORO_BUILD_EXAMPLES=OFF `
+            -DQCORO_ENABLE_COMPAT_METHOD_TESTS=OFF
           cmake --build "$RUNNER_TEMP/qcoro/build"
           sudo cmake --install "$RUNNER_TEMP/qcoro/build"
 
@@ -217,10 +222,11 @@ jobs:
         if: runner.os == 'Windows'
         uses: jurplel/install-qt-action@v4
         with:
-          # Qt 6.12 for the same reason as on linux: 6.9's qmlcachegen rejects the
-          # `final` properties in qml/components/Segment.qml. qtshadertools is
-          # asked for by the app's find_package and is not in the base install.
-          version: '6.12.*'
+          # 6.9 for the same reason as on linux, and it is the newest Qt windows has
+          # actually published: 6.10.3 works too and is the alternative if
+          # something in 6.9 misbehaves. qtshadertools and qtmultimedia are
+          # asked for by the app's find_package and are not in the base install.
+          version: '6.9.*'
           host: windows
           target: desktop
           arch: win64_msvc2022_64
