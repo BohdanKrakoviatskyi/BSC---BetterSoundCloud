@@ -25,6 +25,14 @@ if(WIN32)
 endif()
 if(MSVC)
     add_compile_options(/utf-8)
+    # material-color-utilities is vendored as it ships upstream, and it builds a
+    # constant with the gnu compound-literal syntax, (Type){...}. msvc accepts
+    # it under /permissive-, which cmake leaves off by default, and reports
+    # C4576 without it. The warning is silenced rather than the vendored source
+    # rewritten: every other compiler here takes the syntax already, so this
+    # keeps the windows build agreeing with them instead of carrying a local
+    # patch to a third party.
+    add_compile_options(/wd4576)
 endif()
 
 include(GNUInstallDirs)
