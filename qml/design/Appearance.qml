@@ -8,65 +8,65 @@ import Swiftify
 QtObject {
     id: root
 
-    final readonly property MaterialScheme colors: Theme.colors
+    readonly property MaterialScheme colors: Theme.colors
     /// nothing moves of its own accord, over and over: the shapes that turn
     /// with the music, the edges that run while hovered, the seek line's wave
     /// and the backdrop's flow hold still (Settings.reduceMotion). what
     /// answers a click, a hover or a change still moves. performance mode
     /// includes it
-    final readonly property bool reduceMotion: Settings.reduceMotion || Settings.performanceMode
+    readonly property bool reduceMotion: Settings.reduceMotion || Settings.performanceMode
     /// as little drawn as can be: nothing animates, not even fades
     /// (Settings.performanceMode)
-    final readonly property bool performanceMode: Settings.performanceMode
+    readonly property bool performanceMode: Settings.performanceMode
 
     component Rounding: QtObject {
-        final readonly property int unsharpen: 2
-        final readonly property int unsharpenMore: 6
-        final readonly property int verySmall: 8
-        final readonly property int small: 12
-        final readonly property int normal: 17
-        final readonly property int large: 23
-        final readonly property int veryLarge: 30
-        final readonly property int full: 9999
-        final readonly property int window: 18
+        readonly property int unsharpen: 2
+        readonly property int unsharpenMore: 6
+        readonly property int verySmall: 8
+        readonly property int small: 12
+        readonly property int normal: 17
+        readonly property int large: 23
+        readonly property int veryLarge: 30
+        readonly property int full: 9999
+        readonly property int window: 18
     }
-    final readonly property Rounding rounding: Rounding {}
+    readonly property Rounding rounding: Rounding {}
 
     component FontSizes: QtObject {
-        final readonly property int smallest: 10
-        final readonly property int smaller: 12
-        final readonly property int smallie: 13
-        final readonly property int small: 15
-        final readonly property int normal: 16
-        final readonly property int large: 17
-        final readonly property int larger: 19
-        final readonly property int huge: 22
-        final readonly property int hugeAss: 23
-        final readonly property int title: 22
-        final readonly property int headline: 30
-        final readonly property int display: 36
+        readonly property int smallest: 10
+        readonly property int smaller: 12
+        readonly property int smallie: 13
+        readonly property int small: 15
+        readonly property int normal: 16
+        readonly property int large: 17
+        readonly property int larger: 19
+        readonly property int huge: 22
+        readonly property int hugeAss: 23
+        readonly property int title: 22
+        readonly property int headline: 30
+        readonly property int display: 36
     }
-    final readonly property FontSizes fontSize: FontSizes {}
+    readonly property FontSizes fontSize: FontSizes {}
 
     // end4's google sans flex when installed (see Fonts.cpp for the fallbacks).
-    final readonly property string fontFamily: Theme.fontFamily
-    final readonly property string monoFontFamily: Theme.monoFontFamily
-    final readonly property string iconFontFamily: "Material Symbols Rounded"
+    readonly property string fontFamily: Theme.fontFamily
+    readonly property string monoFontFamily: Theme.monoFontFamily
+    readonly property string iconFontFamily: "Material Symbols Rounded"
 
     // end4's animationCurves. bezier control points for Easing.BezierSpline.
     component Curves: QtObject {
-        final readonly property list<real> expressiveFastSpatial: [0.42, 1.67, 0.21, 0.90, 1, 1]
-        final readonly property list<real> expressiveDefaultSpatial: [0.38, 1.21, 0.22, 1.00, 1, 1]
-        final readonly property list<real> expressiveSlowSpatial: [0.39, 1.29, 0.35, 0.98, 1, 1]
-        final readonly property list<real> expressiveEffects: [0.34, 0.80, 0.34, 1.00, 1, 1]
-        final readonly property list<real> emphasized: [0.05, 0, 2 / 15, 0.06, 1 / 6, 0.4, 5 / 24, 0.82, 0.25, 1, 1, 1]
-        final readonly property list<real> emphasizedAccel: [0.3, 0, 0.8, 0.15, 1, 1]
-        final readonly property list<real> emphasizedDecel: [0.05, 0.7, 0.1, 1, 1, 1]
-        final readonly property list<real> standard: [0.2, 0, 0, 1, 1, 1]
-        final readonly property list<real> standardAccel: [0.3, 0, 1, 1, 1, 1]
-        final readonly property list<real> standardDecel: [0, 0, 0, 1, 1, 1]
+        readonly property list<real> expressiveFastSpatial: [0.42, 1.67, 0.21, 0.90, 1, 1]
+        readonly property list<real> expressiveDefaultSpatial: [0.38, 1.21, 0.22, 1.00, 1, 1]
+        readonly property list<real> expressiveSlowSpatial: [0.39, 1.29, 0.35, 0.98, 1, 1]
+        readonly property list<real> expressiveEffects: [0.34, 0.80, 0.34, 1.00, 1, 1]
+        readonly property list<real> emphasized: [0.05, 0, 2 / 15, 0.06, 1 / 6, 0.4, 5 / 24, 0.82, 0.25, 1, 1, 1]
+        readonly property list<real> emphasizedAccel: [0.3, 0, 0.8, 0.15, 1, 1]
+        readonly property list<real> emphasizedDecel: [0.05, 0.7, 0.1, 1, 1, 1]
+        readonly property list<real> standard: [0.2, 0, 0, 1, 1, 1]
+        readonly property list<real> standardAccel: [0.3, 0, 1, 1, 1, 1]
+        readonly property list<real> standardDecel: [0, 0, 0, 1, 1, 1]
     }
-    final readonly property Curves curves: Curves {}
+    readonly property Curves curves: Curves {}
 
     /// a fade's or a colour's duration in ms; performance mode collapses it
     function duration(milliseconds: int): int {
@@ -88,17 +88,17 @@ QtObject {
     }
 
     component Sizes: QtObject {
-        final readonly property real elevationMargin: 10
-        final readonly property real pageMargin: 32
-        final readonly property real sectionGap: 32
-        final readonly property real shelfGap: 16
-        final readonly property real cardSize: 176
-        final readonly property real headerArtwork: 232
-        final readonly property real artworkRadius: 12
-        final readonly property real smallArtworkRadius: 7
-        final readonly property real sideSheetWidth: 320
-        final readonly property real topBarHeight: 64
-        final readonly property real playerBarClearance: 120
+        readonly property real elevationMargin: 10
+        readonly property real pageMargin: 32
+        readonly property real sectionGap: 32
+        readonly property real shelfGap: 16
+        readonly property real cardSize: 176
+        readonly property real headerArtwork: 232
+        readonly property real artworkRadius: 12
+        readonly property real smallArtworkRadius: 7
+        readonly property real sideSheetWidth: 320
+        readonly property real topBarHeight: 64
+        readonly property real playerBarClearance: 120
     }
-    final readonly property Sizes sizes: Sizes {}
+    readonly property Sizes sizes: Sizes {}
 }
