@@ -117,15 +117,15 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           # the app requires Qt 6.9 (qt_standard_project_setup(REQUIRES 6.9)),
-          # so 6.7 is not an option here. qtmultimedia is what the app links,
-          # and qtwebsockets is what QCoro's own cmake asks for by default
-          # (QCORO_WITH_QTWEBSOCKETS defaults on) — without it QCoro's
-          # configure dies on a missing component before anything is compiled
+          # so 6.7 is not an option. of what the app asks cmake for, QtMultimedia
+          # and QtShaderTools are not part of the base install: without
+          # qtshadertools the find_package at the top of CMakeLists.txt fails on
+          # the ShaderTools component before anything is compiled
           version: '6.9.*'
           host: linux
           target: desktop
           arch: linux_gcc_64
-          modules: 'qtmultimedia qtwebsockets'
+          modules: 'qtmultimedia qtshadertools'
           cache: true
 
       - name: Build QCoro (Linux)
@@ -212,7 +212,9 @@ jobs:
           host: windows
           target: desktop
           arch: win64_msvc2022_64
-          modules: 'qtmultimedia'
+          # qtshadertools for the same reason as on linux: the app's
+          # find_package asks for it and the base install does not carry it
+          modules: 'qtmultimedia qtshadertools'
           cache: true
 
       - name: Build QCoro and QtKeychain (Windows)
@@ -221,9 +223,7 @@ jobs:
         # Neither qcoro nor qtkeychain is a vcpkg port (the ports the previous
         # commit named do not exist), so both are built the way the linux job
         # builds them, from source, against the Qt install-qt-action laid down,
-        # and installed in-place so cmake's default search finds them.
-        # clang-cl is quicker than the msvc one and links the same vcruntime;
-        # everything c++20 the app needs is there either way.
+        # and installed into C:\qcoro-install, which the app's cmake is pointed at.
         run: |
           $ErrorActionPreference = 'Stop'
           $qt = $env:QT_ROOT_DIR
@@ -233,7 +233,9 @@ jobs:
 
           $env:PATH = "$qt/bin;$env:PATH"
 
-          git clone --depth 1 --branch v0.11.0 qcoro https://github.com/danvratil/qcoro.git
+          # the url comes first: git clone takes <repository> [directory], and getting
+          # that backwards made cmake point at a directory git never created
+          git clone --depth 1 --branch v0.11.0 https://github.com/danvratil/qcoro.git qcoro
           cmake -S qcoro -B qcoro\build -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_PREFIX_PATH="$qt" `
@@ -243,7 +245,7 @@ jobs:
           cmake --build qcoro\build
           cmake --install qcoro\build
 
-          git clone --depth 1 --branch v0.14.0 qtkeychain https://github.com/frankosterfeld/qtkeychain.git
+          git clone --depth 1 --branch v0.14.0 https://github.com/frankosterfeld/qtkeychain.git qtkeychain
           cmake -S qtkeychain -B qtkeychain\build -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_PREFIX_PATH="$qt;C:\qcoro-install" `
