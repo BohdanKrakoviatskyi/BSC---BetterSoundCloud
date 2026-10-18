@@ -462,7 +462,9 @@ jobs:
             "Frameworks/QtCore.framework/Versions/A/QtCore"
             "Frameworks/QtQuick.framework/Versions/A/QtQuick"
             "Frameworks/QtMultimedia.framework/Versions/A/QtMultimedia"
-            "PlugIns/platforms/libqxcb.dylib"
+            # libqcocoa, not libqxcb: qxcb is the x11 plugin, which is what linux
+            # needs and macOS never does
+            "PlugIns/platforms/libqcocoa.dylib"
           )
           MISSING=()
           for entry in "${REQUIRED[@]}"; do
