@@ -26,7 +26,7 @@ on:
         type: choice
         options:
           - all
-          - ubuntu-22.04
+          - ubuntu-24.04
           - windows-latest
           - macos-latest
 
@@ -49,7 +49,7 @@ jobs:
         # there is no input at all — expands to the full list. The filter has to
         # live here because the matrix is not available in a job-level if, and
         # fromJSON is what turns the one-element string into an array.
-        platform: ${{ inputs.platform != '' && inputs.platform != 'all' && fromJSON(format('["{0}"]', inputs.platform)) || fromJSON('["ubuntu-22.04", "windows-latest", "macos-latest"]') }}
+        platform: ${{ inputs.platform != '' && inputs.platform != 'all' && fromJSON(format('["{0}"]', inputs.platform)) || fromJSON('["ubuntu-24.04", "windows-latest", "macos-latest"]') }}
     env:
       RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
@@ -99,6 +99,11 @@ jobs:
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         shell: bash
+        # ubuntu 24.04, not 22.04: gcc 11 on the older image has an internal
+        # compiler error in build_special_member_call on a coroutine, which is
+        # what every method here returning QCoro::Task<void> compiles into. gcc
+        # 13 does not. libfuse2 is libfuse2t64 on 24.04, where the 64-bit time_t
+        # transition renamed it.
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
@@ -109,7 +114,7 @@ jobs:
             libxcb-render-util0 libxcb-shape0 \
             libwayland-dev libdbus-1-dev libpulse-dev libasound2-dev \
             libsecret-1-dev libssl-dev \
-            libfuse2 patchelf
+            libfuse2t64 patchelf
           echo "QT_ROOT_DIR check: ${QT_ROOT_DIR:-not yet set}"
 
       - name: Install Qt (Linux)
@@ -458,6 +463,17 @@ jobs:
           New-Item -ItemType Directory -Force -Path release-artifacts | Out-Null
 
           Copy-Item 'build/swiftify.exe' $staging
+
+          # QCoro and QtKeychain are not Qt's, so windeployqt does not know to
+          # deploy them — and it cannot even resolve what the app imports until
+          # they sit beside the executable. They are copied in first, and their
+          # folder is on PATH so the tool's own dependency walk finds them there
+          # too.
+          $deps = 'C:\qcoro-install\bin'
+          if (-not (Test-Path $deps)) { throw "no qcoro/qtkeychain dlls at $deps" }
+          Copy-Item (Join-Path $deps '*.dll') $staging
+          $env:PATH = "$deps;$env:PATH"
+
           & "$env:QT_ROOT_DIR/bin/windeployqt.exe" --release `
             --no-translations --no-system-d3d-compiler `
             (Join-Path $staging 'swiftify.exe')
