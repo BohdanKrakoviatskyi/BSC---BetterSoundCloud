@@ -103,12 +103,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
             build-essential cmake ninja-build pkg-config file wget \
+            git ca-certificates \
             libgl1-mesa-dev libvulkan-dev libxkbcommon-dev \
             libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-randr0 \
             libxcb-render-util0 libxcb-shape0 \
             libwayland-dev libdbus-1-dev libpulse-dev libasound2-dev \
             libsecret-1-dev libssl-dev \
             libfuse2 patchelf
+          echo "QT_ROOT_DIR check: ${QT_ROOT_DIR:-not yet set}"
 
       - name: Install Qt (Linux)
         if: runner.os == 'Linux'
@@ -124,18 +126,20 @@ jobs:
           modules: 'qtmultimedia'
           cache: true
 
-      - name: Build QCoro and QtKeychain (Linux)
+      - name: Build QCoro (Linux)
         if: runner.os == 'Linux'
         shell: bash
-        # neither is in the Qt release, and neither is packaged for ubuntu 22.04
+        # not in the Qt release and not packaged for ubuntu 22.04.
+        # install-qt-action exports QT_ROOT_DIR, not Qt6_DIR
         run: |
           set -euo pipefail
+          echo "Using Qt at $QT_ROOT_DIR"
 
           git clone --depth 1 --branch v0.11.0 \
             https://github.com/danvratil/qcoro.git "$RUNNER_TEMP/qcoro"
           cmake -S "$RUNNER_TEMP/qcoro" -B "$RUNNER_TEMP/qcoro/build" -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="$Qt6_DIR" \
+            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
             -DQCORO_BUILD_EXAMPLES=OFF -DQCORO_ENABLE_COMPAT_METHOD_TESTS=OFF
           cmake --build "$RUNNER_TEMP/qcoro/build"
           sudo cmake --install "$RUNNER_TEMP/qcoro/build"
@@ -144,18 +148,36 @@ jobs:
             https://github.com/frankosterfeld/qtkeychain.git "$RUNNER_TEMP/qtkeychain"
           cmake -S "$RUNNER_TEMP/qtkeychain" -B "$RUNNER_TEMP/qtkeychain/build" -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="$Qt6_DIR" \
+            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
             -DBUILD_WITH_QT6=ON -DBUILD_TEST_APPLICATION=OFF \
-            -DLIBSECRET_SUPPORT=ON
+            -DLIBSECRET_SUPPORT=OFF
           cmake --build "$RUNNER_TEMP/qtkeychain/build"
           sudo cmake --install "$RUNNER_TEMP/qtkeychain/build"
+
+      - name: Install libsecret (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        # the keyring behind qtkeychain; libsecret-1-dev above provides pkg-config,
+        # but the library the AppImage must bundle comes through here too
+        run: |
+          sudo apt-get install --yes --no-install-recommends libsecret-1-0
 
       - name: Install macOS build dependencies
         if: runner.os == 'macOS'
         shell: bash
         run: |
+          set -euo pipefail
           brew update --quiet
           brew install cmake ninja qt@6 qcoro6 qtkeychain
+          # One toolchain instead of two halves: the runner's default selection
+          # is the standalone Command Line Tools, whose SDK is newer than its own
+          # linker — the .tbd files carry architectures that linker cannot read,
+          # and the one link of the app died on them. Selecting Xcode pairs its
+          # ld with its own SDK, and SDKROOT pins cmake to the same one.
+          XCODE_APP="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)" >> "$GITHUB_ENV"
+          echo "using $XCODE_APP at $(xcrun --sdk macosx --show-sdk-path)"
 
       - name: Install Qt (Windows)
         if: runner.os == 'Windows'
@@ -171,9 +193,41 @@ jobs:
       - name: Build QCoro and QtKeychain (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
+        # Neither qcoro nor qtkeychain is a vcpkg port (the ports the previous
+        # commit named do not exist), so both are built the way the linux job
+        # builds them, from source, against the Qt install-qt-action laid down,
+        # and installed in-place so cmake's default search finds them.
+        # clang-cl is quicker than the msvc one and links the same vcruntime;
+        # everything c++20 the app needs is there either way.
         run: |
-          vcpkg install qcoro-qt6:x64-windows qtkeychain-qt6:x64-windows
-          "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+          $ErrorActionPreference = 'Stop'
+          $qt = $env:QT_ROOT_DIR
+          if (-not $qt) { $qt = $env:Qt6_DIR }
+          if (-not $qt) { throw 'QT_ROOT_DIR is not set; install-qt-action ran?' }
+          "QT_ROOT_DIR is $qt"
+
+          $env:PATH = "$qt/bin;$env:PATH"
+
+          git clone --depth 1 --branch v0.11.0 "$env:RUNNER_TEMP\qcoro-src" qcoro
+          cmake -S qcoro -B qcoro\build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_PREFIX_PATH="$qt" `
+            -DCMAKE_INSTALL_PREFIX="C:\qcoro-install" `
+            -DQCORO_BUILD_EXAMPLES=OFF -DQCORO_ENABLE_COMPAT_METHOD_TESTS=OFF
+          cmake --build qcoro\build
+          cmake --install qcoro\build
+
+          git clone --depth 1 --branch v0.15.0 "$env:RUNNER_TEMP\qtkeychain-src" qtkeychain
+          cmake -S qtkeychain -B qtkeychain\build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_PREFIX_PATH="$qt;C:\qcoro-install" `
+            -DCMAKE_INSTALL_PREFIX="C:\qcoro-install" `
+            -DBUILD_WITH_QT6=ON -DBUILD_TEST_APPLICATION=OFF `
+            -DLIBSECRET_SUPPORT=OFF
+          cmake --build qtkeychain\build
+          cmake --install qtkeychain\build
+
+          "QCORO_PREFIX=C:\qcoro-install" >> $env:GITHUB_ENV
 
       - name: Install Ninja (Windows)
         if: runner.os == 'Windows'
@@ -261,7 +315,7 @@ jobs:
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=OFF \
-            -DCMAKE_PREFIX_PATH="$Qt6_DIR" \
+            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
             -DSWIFTIFY_SIDECAR_SOURCE_DIR="$PWD/../BSC---BetterSoundCloud/backend"
           cmake --build build
 
@@ -270,11 +324,12 @@ jobs:
         working-directory: swiftify
         shell: pwsh
         run: |
+          # qcoro and qtkeychain are installed into C:\qcoro-install and
+          # brought in via CMAKE_PREFIX_PATH
           cmake -B build -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
             -DBUILD_TESTING=OFF `
-            -DCMAKE_PREFIX_PATH="$env:Qt6_DIR;$env:VCPKG_ROOT/installed/x64-windows" `
-            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR;C:\qcoro-install" `
             -DSWIFTIFY_SIDECAR_SOURCE_DIR="$PWD/../BSC---BetterSoundCloud/backend"
           cmake --build build
 
@@ -332,6 +387,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export QMAKE="$QT_ROOT_DIR/bin/qmake6"
           VERSION="${RELEASE_TAG#v}"
           mkdir -p release-artifacts
           ./packaging/linux/package-appimage.sh build release-artifacts "$VERSION"
@@ -350,7 +406,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path release-artifacts | Out-Null
 
           Copy-Item 'build/swiftify.exe' $staging
-          & "$env:Qt6_DIR/bin/windeployqt.exe" --release `
+          & "$env:QT_ROOT_DIR/bin/windeployqt.exe" --release `
             --no-translations --no-system-d3d-compiler `
             (Join-Path $staging 'swiftify.exe')
 
