@@ -173,36 +173,56 @@ void UpdateManager::checkForUpdates()
             return;
         }
 
-        // Find appropriate download asset for current platform
+        // Find appropriate download asset for current platform. The asset names
+        // carry the platform (Resonance-<version>-macOS.dmg and so on), and more
+        // than one platform ships a zip, so matching on the extension alone
+        // handed Windows the macOS zip whenever the assets happened to be
+        // listed that way. The platform token in the name is what decides.
         const QJsonArray assets = release.value(QStringLiteral("assets")).toArray();
         QJsonObject chosenAsset;
 
-        for (const auto &val : assets) {
-            const QJsonObject asset = val.toObject();
-            const QString name = asset.value(QStringLiteral("name")).toString();
-
 #ifdef Q_OS_MACOS
-            if (name.endsWith(QLatin1String(".dmg"), Qt::CaseInsensitive)) {
-                chosenAsset = asset;
-                break;
-            }
-            if (name.endsWith(QLatin1String(".zip"), Qt::CaseInsensitive) && chosenAsset.isEmpty()) {
-                chosenAsset = asset;
-            }
+        const QString platformToken = QStringLiteral("macOS");
+        const QStringList extensions { QStringLiteral(".dmg"), QStringLiteral(".zip") };
 #elif defined(Q_OS_WIN)
-            if (name.endsWith(QLatin1String(".zip"), Qt::CaseInsensitive) || name.endsWith(QLatin1String(".exe"), Qt::CaseInsensitive)) {
-                chosenAsset = asset;
-                break;
-            }
+        const QString platformToken = QStringLiteral("Windows");
+        const QStringList extensions { QStringLiteral(".zip"), QStringLiteral(".exe") };
 #else
-            if (name.endsWith(QLatin1String(".AppImage"), Qt::CaseInsensitive)) {
-                chosenAsset = asset;
+        const QString platformToken = QStringLiteral("Linux");
+        const QStringList extensions { QStringLiteral(".AppImage"), QStringLiteral(".tar.gz") };
+#endif
+
+        for (const QString &extension : extensions) {
+            for (const auto &val : assets) {
+                const QJsonObject asset = val.toObject();
+                const QString name = asset.value(QStringLiteral("name")).toString();
+                if (name.contains(platformToken, Qt::CaseInsensitive)
+                    && name.endsWith(extension, Qt::CaseInsensitive)) {
+                    chosenAsset = asset;
+                    break;
+                }
+            }
+            if (!chosenAsset.isEmpty()) {
                 break;
             }
-            if (name.endsWith(QLatin1String(".tar.gz"), Qt::CaseInsensitive) && chosenAsset.isEmpty()) {
-                chosenAsset = asset;
+        }
+
+        // a release from before the names carried a platform has one unlabelled
+        // asset: fall back to the extension alone rather than offer no download
+        if (chosenAsset.isEmpty()) {
+            for (const QString &extension : extensions) {
+                for (const auto &val : assets) {
+                    const QJsonObject asset = val.toObject();
+                    const QString name = asset.value(QStringLiteral("name")).toString();
+                    if (name.endsWith(extension, Qt::CaseInsensitive)) {
+                        chosenAsset = asset;
+                        break;
+                    }
+                }
+                if (!chosenAsset.isEmpty()) {
+                    break;
+                }
             }
-#endif
         }
 
         if (!chosenAsset.isEmpty()) {

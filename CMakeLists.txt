@@ -354,10 +354,34 @@ if(APPLE)
     set(SWIFTIFY_ICON_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/packaging/icons)
     # the swift app's icon composer icon, compiled as xcode compiles it: an
     # asset catalog that macos 26 draws with its glass and its dark and tinted
-    # looks, and an .icns for older systems. without xcode's actool, an .icns
-    # made from the rendered pngs instead.
+    # looks, and an .icns for older systems. without xcode's actool, or with one
+    # that cannot open this .icon bundle, an .icns made from the rendered pngs
+    # instead.
+    option(SWIFTIFY_ICON_ASSET_CATALOG
+        "Compile packaging/icons/swiftify.icon with actool, when actool accepts it" ON)
     execute_process(COMMAND xcrun --find actool
         OUTPUT_VARIABLE SWIFTIFY_ACTOOL OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    if(SWIFTIFY_ACTOOL AND SWIFTIFY_ICON_ASSET_CATALOG)
+        # actool is only trusted with the .icon bundle once it has compiled it
+        # here, at configure time. the first release runs died at the last build
+        # step with 'Could not open "swiftify.icon"' — a build-machine xcode
+        # that would not take the bundle — and probing is the difference between
+        # falling back to the png icon and failing the build.
+        file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/icon-probe)
+        execute_process(
+            COMMAND ${SWIFTIFY_ACTOOL} --compile ${CMAKE_CURRENT_BINARY_DIR}/icon-probe
+                --platform macosx --minimum-deployment-target 13.0 --app-icon swiftify
+                --output-partial-info-plist ${CMAKE_CURRENT_BINARY_DIR}/icon-probe/icon.plist
+                ${SWIFTIFY_ICON_SOURCE}/swiftify.icon
+            RESULT_VARIABLE SWIFTIFY_ACTOOL_RESULT
+            OUTPUT_QUIET ERROR_QUIET)
+        if(NOT SWIFTIFY_ACTOOL_RESULT STREQUAL "0")
+            message(STATUS "actool cannot compile swiftify.icon; the png icon is used instead")
+            set(SWIFTIFY_ACTOOL "")
+        endif()
+    else()
+        set(SWIFTIFY_ACTOOL "")
+    endif()
     if(SWIFTIFY_ACTOOL)
         set(SWIFTIFY_ICON_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/icon)
         file(GLOB SWIFTIFY_ICON_PARTS LIST_DIRECTORIES false CONFIGURE_DEPENDS ${SWIFTIFY_ICON_SOURCE}/swiftify.icon/*

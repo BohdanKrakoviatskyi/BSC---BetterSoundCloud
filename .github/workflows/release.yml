@@ -1,5 +1,14 @@
 name: Publish desktop release
 
+# The shape of this workflow is the one the Tauri app's release workflow
+# (BSC---BetterSoundCloud/.github/workflows/release.yml) already proved:
+# one job with a platform matrix, a dispatch input that narrows the matrix to a
+# single platform, a version synced from the tag before anything is built, and
+# Apple signing that is used when the secrets are there and reported when they
+# are not. What differs is only the middle: there is no tauri-action to bundle
+# and publish for a cmake/qt app, so each platform builds and packages with its
+# own toolchain and publishes its own assets into the same release.
+
 on:
   push:
     tags:
@@ -7,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Version tag to build and publish (for example, v0.3.4)'
+        description: Version tag to build and publish (for example, v0.3.4)
         required: true
         type: string
       platform:
@@ -17,6 +26,8 @@ on:
         type: choice
         options:
           - all
+          - ubuntu-22.04
+          - windows-latest
           - macos-latest
 
 permissions:
@@ -28,21 +39,37 @@ jobs:
     runs-on: ${{ matrix.platform }}
     strategy:
       fail-fast: false
+      # one platform at a time: every job appends to the same release, and
+      # serialising them keeps the asset list in a predictable order
       max-parallel: 1
       matrix:
-        platform:
-          - macos-latest
+        # A platform picked in the dispatch input narrows the matrix to that one
+        # runner, so a single platform can be rebuilt after a failure without
+        # rebuilding the other two. An empty inputs.platform — a tag push, where
+        # there is no input at all — expands to the full list. The filter has to
+        # live here because the matrix is not available in a job-level if, and
+        # fromJSON is what turns the one-element string into an array.
+        platform: ${{ inputs.platform != '' && inputs.platform != 'all' && fromJSON(format('["{0}"]', inputs.platform)) || fromJSON('["ubuntu-22.04", "windows-latest", "macos-latest"]') }}
+    env:
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
-      - name: Check out Swiftify repository
+      - name: Check out the app
         uses: actions/checkout@v4
         with:
+          # The app goes into ./swiftify rather than the workspace root, because
+          # cmake finds the soundcloud sidecar at ../BSC---BetterSoundCloud/backend
+          # (SWIFTIFY_SIDECAR_SOURCE_DIR): the two checkouts have to sit side by
+          # side for that default to resolve.
           path: swiftify
 
-      - name: Check out BSC backend sidecar source
+      # The go sidecar is one copy of the local-api that lives in the better
+      # soundcloud repository, not a copy vendored here: a release builds it
+      # from that source, exactly as a local build does.
+      - name: Check out the soundcloud sidecar source
         uses: actions/checkout@v4
-        continue-on-error: true
         with:
           repository: BohdanKrakoviatskyi/BSC---BetterSoundCloud
+          ref: main
           path: BSC---BetterSoundCloud
           sparse-checkout: |
             backend
@@ -52,20 +79,76 @@ jobs:
         with:
           node-version: 22
 
-      - name: Sync release version
+      - name: Sync version from the release tag
         working-directory: swiftify
         shell: bash
-        env:
-          RELEASE_VERSION: ${{ github.event.inputs.tag || github.ref_name }}
-        run: node scripts/sync-release-version.mjs
+        # the tag is the version: every file that carries one is rewritten here,
+        # so the bundle, the core and the updater agree on what this build is
+        run: node scripts/sync-release-version.mjs "$RELEASE_TAG"
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version-file: BSC---BetterSoundCloud/backend/go.mod
+          cache-dependency-path: BSC---BetterSoundCloud/backend/go.sum
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
+
+      # ── build dependencies, per platform ───────────────────────────────────
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential cmake ninja-build pkg-config file wget \
+            libgl1-mesa-dev libvulkan-dev libxkbcommon-dev \
+            libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-shape0 \
+            libwayland-dev libdbus-1-dev libpulse-dev libasound2-dev \
+            libsecret-1-dev libssl-dev \
+            libfuse2 patchelf
+
+      - name: Install Qt (Linux)
+        if: runner.os == 'Linux'
+        uses: jurplel/install-qt-action@v4
+        with:
+          # the app requires Qt 6.9 (qt_standard_project_setup(REQUIRES 6.9)),
+          # so 6.7 is not an option here; qtmultimedia is not part of the Qt
+          # that install-qt-action brings by default
+          version: '6.9.*'
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          modules: 'qtmultimedia'
+          cache: true
+
+      - name: Build QCoro and QtKeychain (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        # neither is in the Qt release, and neither is packaged for ubuntu 22.04
+        run: |
+          set -euo pipefail
+
+          git clone --depth 1 --branch v0.11.0 \
+            https://github.com/danvratil/qcoro.git "$RUNNER_TEMP/qcoro"
+          cmake -S "$RUNNER_TEMP/qcoro" -B "$RUNNER_TEMP/qcoro/build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$Qt6_DIR" \
+            -DQCORO_BUILD_EXAMPLES=OFF -DQCORO_ENABLE_COMPAT_METHOD_TESTS=OFF
+          cmake --build "$RUNNER_TEMP/qcoro/build"
+          sudo cmake --install "$RUNNER_TEMP/qcoro/build"
+
+          git clone --depth 1 --branch v0.15.0 \
+            https://github.com/frankosterfeld/qtkeychain.git "$RUNNER_TEMP/qtkeychain"
+          cmake -S "$RUNNER_TEMP/qtkeychain" -B "$RUNNER_TEMP/qtkeychain/build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$Qt6_DIR" \
+            -DBUILD_WITH_QT6=ON -DBUILD_TEST_APPLICATION=OFF \
+            -DLIBSECRET_SUPPORT=ON
+          cmake --build "$RUNNER_TEMP/qtkeychain/build"
+          sudo cmake --install "$RUNNER_TEMP/qtkeychain/build"
 
       - name: Install macOS build dependencies
         if: runner.os == 'macOS'
@@ -74,6 +157,30 @@ jobs:
           brew update --quiet
           brew install cmake ninja qt@6 qcoro6 qtkeychain
 
+      - name: Install Qt (Windows)
+        if: runner.os == 'Windows'
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.9.*'
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          modules: 'qtmultimedia'
+          cache: true
+
+      - name: Build QCoro and QtKeychain (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          vcpkg install qcoro-qt6:x64-windows qtkeychain-qt6:x64-windows
+          "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+
+      - name: Install Ninja (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install ninja --no-progress -y
+
+      # ── Apple signing, used when the secrets are there ─────────────────────
       - name: Check for Apple signing secrets
         id: apple
         if: runner.os == 'macOS'
@@ -93,18 +200,19 @@ jobs:
             fi
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
+            # Ad-hoc signing. The identity must not be empty: cmake passes it to
+            # codesign, and codesign with no identity at all fails the build.
             echo "identity=-" >> "$GITHUB_OUTPUT"
             echo "notarize=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Import Apple Developer certificate
-        if: runner.os == 'macOS' && steps.apple.outputs.enabled == 'true'
+        if: steps.apple.outputs.enabled == 'true'
+        shell: bash
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
-        shell: bash
         run: |
           set -euo pipefail
           KEYCHAIN="$RUNNER_TEMP/build.keychain"
@@ -119,10 +227,15 @@ jobs:
           security list-keychain -d user -s "$KEYCHAIN" login.keychain-db
           rm -f "$RUNNER_TEMP/cert.p12"
 
-      - name: Build Swiftify
+      # ── build ─────────────────────────────────────────────────────────────
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
         working-directory: swiftify
         shell: bash
+        env:
+          SIGNING_IDENTITY: ${{ steps.apple.outputs.identity }}
         run: |
+          set -euo pipefail
           QT_PREFIX="$(brew --prefix qt@6)"
           QCORO_PREFIX="$(brew --prefix qcoro6)"
           KEYCHAIN_PREFIX="$(brew --prefix qtkeychain)"
@@ -130,63 +243,182 @@ jobs:
 
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
             -DCMAKE_PREFIX_PATH="$QT_PREFIX;$QCORO_PREFIX;$KEYCHAIN_PREFIX" \
-            -DSWIFTIFY_CODESIGN_IDENTITY="${{ steps.apple.outputs.identity }}"
+            -DSWIFTIFY_SIDECAR_SOURCE_DIR="$PWD/../BSC---BetterSoundCloud/backend" \
+            -DSWIFTIFY_CODESIGN_IDENTITY="$SIGNING_IDENTITY"
 
           cmake --build build --target swiftify
 
-      - name: Package macOS release bundle & DMG
+      - name: Build (Linux)
+        if: runner.os == 'Linux'
+        working-directory: swiftify
+        shell: bash
+        run: |
+          set -euo pipefail
+          # qcoro and qtkeychain were installed into /usr/local, which cmake
+          # searches by default
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
+            -DCMAKE_PREFIX_PATH="$Qt6_DIR" \
+            -DSWIFTIFY_SIDECAR_SOURCE_DIR="$PWD/../BSC---BetterSoundCloud/backend"
+          cmake --build build
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        working-directory: swiftify
+        shell: pwsh
+        run: |
+          cmake -B build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DBUILD_TESTING=OFF `
+            -DCMAKE_PREFIX_PATH="$env:Qt6_DIR;$env:VCPKG_ROOT/installed/x64-windows" `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DSWIFTIFY_SIDECAR_SOURCE_DIR="$PWD/../BSC---BetterSoundCloud/backend"
+          cmake --build build
+
+      - name: Check the soundcloud sidecar was built in
+        shell: bash
+        working-directory: swiftify
+        # a missing sidecar is silent at run time — the app just says the service
+        # is missing — so a release fails here instead of shipping without it
+        run: |
+          set -euo pipefail
+          # the go tool writes local-api.exe on windows and local-api elsewhere
+          if ! ls build/sidecar/local-api* > /dev/null 2>&1; then
+            echo "::error::the soundcloud sidecar was not built; check the go source at ../BSC---BetterSoundCloud/backend"
+            exit 1
+          fi
+          ls -l build/sidecar/local-api*
+
+      # ── package ───────────────────────────────────────────────────────────
+      - name: Package DMG and zip (macOS)
+        if: runner.os == 'macOS'
         working-directory: swiftify
         shell: bash
         env:
-          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
           SIGNING_IDENTITY: ${{ steps.apple.outputs.identity }}
         run: |
+          set -euo pipefail
           export PATH="$(brew --prefix qt@6)/bin:$PATH"
           VERSION="${RELEASE_TAG#v}"
           mkdir -p release-artifacts
-          ./packaging/macos/package-dmg.sh build/swiftify.app release-artifacts "$VERSION" "$SIGNING_IDENTITY"
+          ./packaging/macos/package-dmg.sh \
+            build/swiftify.app release-artifacts "$VERSION" "$SIGNING_IDENTITY"
 
-      - name: Notarize DMG (Apple Developer)
+      - name: Notarize DMG
         if: runner.os == 'macOS' && steps.apple.outputs.notarize == 'true'
         working-directory: swiftify
+        shell: bash
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
-        shell: bash
         run: |
+          set -euo pipefail
           VERSION="${RELEASE_TAG#v}"
-          DMG_PATH="release-artifacts/Resonance-${VERSION}-macOS.dmg"
-          xcrun notarytool submit "$DMG_PATH" \
+          DMG="release-artifacts/Resonance-${VERSION}-macOS.dmg"
+          xcrun notarytool submit "$DMG" \
             --apple-id "$APPLE_ID" \
             --password "$APPLE_PASSWORD" \
             --team-id "$APPLE_TEAM_ID" \
             --wait
-          xcrun stapler staple "$DMG_PATH"
+          xcrun stapler staple "$DMG"
 
-      - name: Publish release to GitHub
+      - name: Package AppImage (Linux)
+        if: runner.os == 'Linux'
+        working-directory: swiftify
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${RELEASE_TAG#v}"
+          mkdir -p release-artifacts
+          ./packaging/linux/package-appimage.sh build release-artifacts "$VERSION"
+
+      - name: Package zip (Windows)
+        if: runner.os == 'Windows'
+        working-directory: swiftify
+        shell: pwsh
+        # one archive, and only that: the updater downloads the first asset it
+        # finds with a matching extension, and a bare swiftify.exe next to a zip
+        # would be pickable and unusable
+        run: |
+          $version = $env:RELEASE_TAG -replace '^v', ''
+          $staging = Join-Path $env:RUNNER_TEMP 'pkg'
+          New-Item -ItemType Directory -Force -Path $staging | Out-Null
+          New-Item -ItemType Directory -Force -Path release-artifacts | Out-Null
+
+          Copy-Item 'build/swiftify.exe' $staging
+          & "$env:Qt6_DIR/bin/windeployqt.exe" --release `
+            --no-translations --no-system-d3d-compiler `
+            (Join-Path $staging 'swiftify.exe')
+
+          # the go sidecar sits beside the binary the app looks next to itself.
+          # the go tool names it local-api.exe on windows, and the app asks for
+          # that name there (SidecarClient)
+          $sidecar = Get-ChildItem (Join-Path $PWD 'build/sidecar') -Filter 'local-api*' |
+            Select-Object -First 1
+          if (-not $sidecar) { throw 'the go sidecar is missing from build/sidecar' }
+          Copy-Item $sidecar.FullName $staging
+          Get-ChildItem $staging
+
+          Compress-Archive -Path (Join-Path $staging '*') `
+            -DestinationPath "release-artifacts/Resonance-${version}-Windows.zip"
+          Get-ChildItem release-artifacts
+
+      # ── publish ───────────────────────────────────────────────────────────
+      - name: Publish this platform's assets to the release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-          name: Resonance ${{ github.event.inputs.tag || github.ref_name }}
-          body: "See the release assets below to download and install this version."
+          # every platform writes to the same tag, so the release is the union of
+          # what the three runners produced. Re-running a single platform appends
+          # to it rather than starting over.
+          tag_name: ${{ env.RELEASE_TAG }}
+          # a tag created here points at the commit that was built, not at the
+          # default branch: a dispatch with a brand new tag used to leave the tag
+          # pointing somewhere the sources never were
+          target_commitish: ${{ github.sha }}
+          name: Resonance ${{ env.RELEASE_TAG }}
+          body: |
+            ## Resonance ${{ env.RELEASE_TAG }}
+
+            ### Downloads
+
+            | Platform | File |
+            |----------|------|
+            | 🍎 macOS | `Resonance-*-macOS.dmg` |
+            | 🪟 Windows | `Resonance-*-Windows.zip` |
+            | 🐧 Linux | `Resonance-*-Linux.AppImage` |
+
+            > [!NOTE]
+            > **macOS**: the app is signed ad hoc unless the Apple secrets are set; if Gatekeeper
+            > blocks it, right-click → Open, or run `xattr -cr Resonance.app`.
+            > **Linux**: `chmod +x Resonance-*.AppImage` before running it.
+            > **Windows**: extract the zip and run `swiftify.exe`.
           draft: false
           prerelease: false
-          files: |
-            swiftify/release-artifacts/*.dmg
-            swiftify/release-artifacts/*.zip
+          # the updater reads the latest release, so a draft would be invisible
+          # to it; asset names carry the platform, which is what it matches on
+          files: swiftify/release-artifacts/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Report signing mode
+        # Windows defaults to PowerShell, where this bash is spelled out
         shell: bash
-        run: |
-          if [ "$APPLE_SIGNED" = "true" ]; then
-            echo "macOS build: Apple Developer signed and notarised"
-          else
-            echo "::warning::macOS build is ad-hoc signed and NOT notarised; Gatekeeper blocks it on first launch until allowed via System Settings or xattr -cr Swiftify.app."
-          fi
         env:
           APPLE_SIGNED: ${{ steps.apple.outputs.enabled == 'true' }}
+          APPLE_NOTARIZED: ${{ steps.apple.outputs.notarize == 'true' }}
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            if [ "$APPLE_SIGNED" = "true" ] && [ "$APPLE_NOTARIZED" = "true" ]; then
+              echo "macOS build: Apple Developer signed and notarised"
+            elif [ "$APPLE_SIGNED" = "true" ]; then
+              echo "::warning::macOS build is signed but NOT notarised; Gatekeeper still blocks it on first launch. Set APPLE_ID, APPLE_PASSWORD and APPLE_TEAM_ID."
+            else
+              echo "::warning::macOS build is ad-hoc signed and NOT notarised. Set APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY, APPLE_KEYCHAIN_PASSWORD to sign it."
+            fi
+          else
+            echo "$RUNNER_OS build: platform code signing is not configured; the installer is unsigned."
+          fi

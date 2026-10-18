@@ -56,11 +56,19 @@ if (!selectedTag) {
     return 0;
   };
 
-  let packageVersion = '0.3.3';
+  let packageVersion;
   try {
     const packageJson = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
     packageVersion = packageJson.version;
-  } catch {}
+  } catch {
+    console.error('Не удалось прочитать version из package.json.');
+    process.exit(1);
+  }
+
+  if (!packageVersion) {
+    console.error('В package.json нет поля version.');
+    process.exit(1);
+  }
 
   const remoteLines = (remoteTags.stdout || '')
     .split(/\r?\n/)

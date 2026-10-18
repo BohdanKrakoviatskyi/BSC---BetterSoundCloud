@@ -116,6 +116,11 @@ QString SidecarClient::binaryPath() const
     }
     const QDir executableDirectory(QCoreApplication::applicationDirPath());
     const QStringList candidates {
+#ifdef Q_OS_WIN
+        // the go tool writes local-api.exe on windows, and an extensionless name
+        // is not executable there as far as QFileInfo is concerned
+        executableDirectory.filePath(QStringLiteral("local-api.exe")),
+#endif
         executableDirectory.filePath(QStringLiteral("local-api")),
         executableDirectory.filePath(QStringLiteral("../Resources/local-api")),
         executableDirectory.filePath(QStringLiteral("../Frameworks/local-api")),

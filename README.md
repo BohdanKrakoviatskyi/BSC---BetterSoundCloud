@@ -149,7 +149,44 @@ bind = , XF86AudioPrev, exec, swiftify --previous
 
 ## Releases & Automated Builds
 
-Production builds are automated with GitHub Actions (`.github/workflows/release.yml`):
-- Pushing a version tag (e.g. `git tag v0.3.4 && git push origin v0.3.4`) triggers an automated build.
-- Generates notarized and codesigned standalone macOS `.dmg` and `.zip` distribution bundles.
-- Automatically publishes release assets to the repository release page.
+Releases are built by `.github/workflows/release.yml`, one platform per runner, and
+all three publish into the same GitHub release. Asset names carry the platform
+(`Resonance-<version>-macOS.dmg`, `-Windows.zip`, `-Linux.AppImage`), which is what
+the in-app updater matches on, so a name has to keep its platform token.
+
+Pushing a version tag builds and publishes every platform:
+
+```bash
+git tag v0.3.4 && git push origin v0.3.4
+```
+
+`npm run release` picks the next patch tag from the highest of `package.json` and the
+local and remote tags, and dispatches the workflow for it; pass one to pin it:
+
+```bash
+npm run release
+npm run release -- v0.3.4
+```
+
+The workflow can also be started by hand from the Actions tab. Its `platform` input
+narrows the matrix to a single runner, so one platform can be rebuilt after a failure
+without rebuilding the other two.
+
+The version in the tag is written into `CMakeLists.txt`, `spotify-core/Cargo.toml`,
+`spotify-core/Cargo.lock` and `package.json` before anything is built, so nothing has
+to be bumped by hand. A version that cannot be written fails the run instead of
+shipping a build that reports the previous one.
+
+macOS builds are signed ad hoc and are not notarized unless the Apple secrets are set.
+Add them under Settings → Secrets and variables → Actions to get a signed and
+notarized `.dmg`:
+
+| Secret | Used for |
+|---|---|
+| `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD` | the Developer ID certificate, base64 encoded |
+| `APPLE_SIGNING_IDENTITY` | the certificate's identity, for example `Developer ID Application: …` |
+| `APPLE_KEYCHAIN_PASSWORD` | a throwaway password for the temporary keychain |
+| `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` | notarization |
+
+Without them the run still succeeds and warns in the log about the mode it used. The
+Windows and Linux installers are unsigned.

@@ -9,53 +9,47 @@ const tag = process.env.RELEASE_VERSION || process.argv[2];
 const version = tag?.replace(/^v/, '');
 
 if (!version || !/^\d+\.\d+\.\d+(?:[-+].+)?$/.test(version)) {
-  console.error(`Invalid release version tag: ${tag ?? '(missing)'}`);
-  process.exit(1);
+  throw new Error(`Invalid release version tag: ${tag ?? '(missing)'}`);
 }
 
-// 1. Update CMakeLists.txt
-const cmakePath = path.join(rootDir, 'CMakeLists.txt');
-if (fs.existsSync(cmakePath)) {
-  let cmakeContent = fs.readFileSync(cmakePath, 'utf8');
-  cmakeContent = cmakeContent.replace(
-    /(project\(\s*Swiftify\s+VERSION\s+)\d+\.\d+\.\d+(?:[-+][\w.-]+)?/i,
-    `$1${version}`
-  );
-  fs.writeFileSync(cmakePath, cmakeContent, 'utf8');
-  console.log(`Updated CMakeLists.txt -> ${version}`);
+// Every file that carries the version is rewritten from the tag, and every
+// rewrite is checked against what it found: a pattern that no longer matches
+// used to leave the file untouched and still print success, which is how a
+// release could ship carrying the previous version in one of them. Failing here
+// is the point — the tag is the one version every build has to agree on.
+function rewrite(relativePath, pattern, replacement) {
+  const absolutePath = path.join(rootDir, relativePath);
+  if (!fs.existsSync(absolutePath)) {
+    throw new Error(`Missing ${relativePath}`);
+  }
+  const before = fs.readFileSync(absolutePath, 'utf8');
+  if (!pattern.test(before)) {
+    throw new Error(`No version to replace in ${relativePath}`);
+  }
+  const after = before.replace(pattern, replacement);
+  fs.writeFileSync(absolutePath, after, 'utf8');
+  console.log(`Updated ${relativePath} -> ${version}`);
 }
 
-// 2. Update spotify-core/Cargo.toml
-const cargoTomlPath = path.join(rootDir, 'spotify-core', 'Cargo.toml');
-if (fs.existsSync(cargoTomlPath)) {
-  let cargoToml = fs.readFileSync(cargoTomlPath, 'utf8');
-  cargoToml = cargoToml.replace(
-    /^(version\s*=\s*)"[^"]+"/m,
-    `$1"${version}"`
-  );
-  fs.writeFileSync(cargoTomlPath, cargoToml, 'utf8');
-  console.log(`Updated spotify-core/Cargo.toml -> ${version}`);
-}
+// the number the app reports as its own: SWIFTIFY_VERSION comes from here
+rewrite('CMakeLists.txt',
+  /(project\(\s*Swiftify\s+VERSION\s+)\d+\.\d+\.\d+(?:[-+][\w.-]+)?/i,
+  `$1${version}`);
 
-// 3. Update spotify-core/Cargo.lock
-const cargoLockPath = path.join(rootDir, 'spotify-core', 'Cargo.lock');
-if (fs.existsSync(cargoLockPath)) {
-  let cargoLock = fs.readFileSync(cargoLockPath, 'utf8');
-  cargoLock = cargoLock.replace(
-    /(name = "spotify-core"\r?\nversion = )"[^"]+"/,
-    `$1"${version}"`
-  );
-  fs.writeFileSync(cargoLockPath, cargoLock, 'utf8');
-  console.log(`Updated spotify-core/Cargo.lock -> ${version}`);
-}
+// the rust core, and the same version in its lock file. \r? because the lock is
+// CRLF on a Windows checkout and LF everywhere else
+rewrite('spotify-core/Cargo.toml',
+  /^(version\s*=\s*)"[^"]+"/m,
+  `$1"${version}"`);
 
-// 4. Update package.json if present
-const pkgJsonPath = path.join(rootDir, 'package.json');
-if (fs.existsSync(pkgJsonPath)) {
-  const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
-  pkg.version = version;
-  fs.writeFileSync(pkgJsonPath, `${JSON.stringify(pkg, null, 2)}\n`, 'utf8');
-  console.log(`Updated package.json -> ${version}`);
-}
+rewrite('spotify-core/Cargo.lock',
+  /(name = "spotify-core"\r?\nversion = )"[^"]+"/,
+  `$1"${version}"`);
 
-console.log(`Successfully synchronized release version: ${version}`);
+// the package.json version is not part of any build, but the release script
+// reads it to pick the next patch tag, so it has to follow the tag too
+rewrite('package.json',
+  /"version"\s*:\s*"[^"]+"/,
+  `"version": "${version}"`);
+
+console.log(`Synchronized release version: ${version}`);
