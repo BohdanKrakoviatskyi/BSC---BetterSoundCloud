@@ -170,6 +170,12 @@ jobs:
             -DLIBSECRET_SUPPORT=ON
           cmake --build "$RUNNER_TEMP/qtkeychain/build"
           sudo cmake --install "$RUNNER_TEMP/qtkeychain/build"
+          # ldconfig rebuilds the loader cache so the freshly installed
+          # /usr/local/lib is searched. Without it the library is on disk and
+          # findable by path, but ld.so has no entry for it, and the packaging
+          # step — which resolves dependencies the way the loader does — reports
+          # "Could not find dependency: libqt6keychain.so.1" and stops.
+          sudo ldconfig
 
       - name: Install libsecret (Linux)
         if: runner.os == 'Linux'
@@ -508,6 +514,13 @@ jobs:
           set -euo pipefail
           export QMAKE="$QT_ROOT_DIR/bin/qmake6"
           VERSION="${RELEASE_TAG#v}"
+          # The same loader cache as a belt to the ldconfig above: qcoro and
+          # qtkeychain install into /usr/local/lib, which on debian may be
+          # lib/x86_64-linux-gnu instead. Both are named explicitly so the
+          # packaging tool can resolve them without consulting the cache.
+          export LD_LIBRARY_PATH="/usr/local/lib:/usr/local/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
+          echo "non-Qt libraries on disk:"
+          find /usr/local/lib -name 'libqt6keychain*' -o -name 'libQCoro*' 2>/dev/null | sort
           mkdir -p release-artifacts
           ./packaging/linux/package-appimage.sh build release-artifacts "$VERSION"
 
@@ -587,7 +600,12 @@ jobs:
           # documented way to say "carry on without that one", so Qt's own
           # deployment completes and the dlls windeployqt will not carry stay
           # staged above, where the app finds them beside the exe.
+          # --qmldir: the qml is compiled into the exe, so windeployqt cannot see what
+          # it imports. Without this it deploys nothing that only qml asks for —
+          # QtMultimedia is exactly that, and its absence is a build that starts
+          # and then cannot play anything.
           & "$env:QT_ROOT_DIR/bin/windeployqt.exe" --release `
+            --qmldir (Join-Path $PWD 'qml') `
             --no-translations --no-system-d3d-compiler `
             --ignore-library-errors `
             (Join-Path $staging 'swiftify.exe')
@@ -599,6 +617,12 @@ jobs:
           Copy-Item $sidecar $staging
 
           # self-containment check, before anything is published
+          # Deliberately not listed: platforms/qminimal.dll (a fallback used only when
+          # qwindows is absent), imageformats/qpng.dll (png has been built into
+          # QtGui since 6.2), and tls/qtls_backends.dll (that plugin is for
+          # openssl; on windows QtNetwork uses schannel, which needs no plugin).
+          # windeployqt itself deploys none of them, so demanding them would be
+          # demanding a different package than the one being built.
           $required = @(
             'swiftify.exe',
             'local-api.exe',
@@ -608,14 +632,12 @@ jobs:
             'Qt6Qml.dll',
             'Qt6Multimedia.dll',
             'Qt6DBus.dll',
+            'Qt6Network.dll',
             'Qt6Widgets.dll',
             'platforms/qwindows.dll',
-            'platforms/qminimal.dll',
-            'styles/qmodernwindowsstyle.dll',
+            'iconengines/qsvgicon.dll',
             'imageformats/qjpeg.dll',
-            'imageformats/qpng.dll',
-            'imageformats/qsvg.dll',
-            'tls/qtls_backends.dll'
+            'imageformats/qsvg.dll'
           )
           $missing = @($required | Where-Object {
               -not (Test-Path (Join-Path $staging $_))
