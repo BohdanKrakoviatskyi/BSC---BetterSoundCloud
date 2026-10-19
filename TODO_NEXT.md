@@ -8,11 +8,10 @@ Read-only source: `C:\Users\krako\Desktop\BSC-main`
 ## Resume here first
 
 1. In PowerShell, enter the migration repo and run `git status --short` and `git branch --show-current`. Stay on `codex/resonance-tauri-migration`; do not change repository access or contributors.
-2. Latest pushed commit: `e346601 fix: normalize bundle icons and artifact paths`. It points CI to `target/release/bundle/**` and uses the normalized RGBA8 icon.
-3. CI run `39293399821` passed all jobs: Playwright, quality, Windows NSIS, macOS DMG, Linux AppImage/DEB, and artifact upload on all three platforms.
-4. Local checks at `e346601`: 47 Rust tests, strict Clippy, rustfmt, frontend lint/Vitest/build, Playwright, Windows NSIS bundle, and `git diff --check` passed.
-5. Uncommitted Phase 2 work adds deterministic 8/16/24/32-bit PCM WAV decoding at 22.05/44.1/48/96 kHz and a queue retry regression for failed next-track opens. All seven playback tests and the queue recovery test pass; full workspace suite has 49 passing Rust tests. Strict Clippy, rustfmt and diff checks pass. Commit/push this checkpoint.
-6. Remaining audio checks: real compressed-format fixtures, output-device runtime/listening, and prior spectrum comparison. Native file picker and queue UI also remain.
+2. Latest pushed commit: `6c73913 test: preserve queue entries after playback errors`. It adds PCM WAV bit-depth/sample-rate fixtures and queue retry regression on top of the cross-platform packaging fixes.
+3. CI run `39293399821` passed all jobs on `e346601`: Playwright, quality, Windows NSIS, macOS DMG, Linux AppImage/DEB, and artifact upload on all three platforms. Runs for `9ccbe80` and `6c73913` are pending/in progress.
+4. Local checks at `6c73913`: 49 Rust tests, strict Clippy, rustfmt, and `git diff --check` pass. Frontend checks and all three platform bundles passed on parent commit `e346601`.
+5. Remaining audio checks: real compressed-format fixtures, output-device runtime/listening, and legacy spectrum comparisons. Native file picker and queue UI also remain.
 6. Keep Cargo output outside the repo when space is limited: `$env:CARGO_TARGET_DIR="$env:TEMP\resonance-target"`.
 
 ## Completed and pushed
