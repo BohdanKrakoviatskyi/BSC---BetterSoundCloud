@@ -1,5 +1,9 @@
 use audio_core::{AudioPlayer, DspSettings, PlaybackSnapshot};
 use serde::Serialize;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use tauri::{Emitter, Manager, Runtime, WebviewWindow};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -119,6 +123,14 @@ async fn crossfade_local_file(
 }
 
 #[tauri::command]
+async fn preload_next_local(player: tauri::State<'_, AudioPlayer>) -> Result<bool, String> {
+    let player = player.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || player.preload_next().map_err(|e| e.to_string()))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 fn playback_snapshot(player: tauri::State<'_, AudioPlayer>) -> PlaybackSnapshot {
     player.snapshot()
 }
@@ -135,7 +147,33 @@ fn playback_resume(player: tauri::State<'_, AudioPlayer>) {
 
 #[tauri::command]
 fn playback_next(player: tauri::State<'_, AudioPlayer>) {
-    player.next_track();
+    let player = player.inner().clone();
+    let app = player.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        match player.next_queued(
+            DspSettings::default(),
+            std::time::Duration::from_millis(500),
+        ) {
+            Ok(true) => Ok(()),
+            Ok(false) => {
+                app.next_track();
+                Ok(())
+            }
+            Err(error) => Err(error.to_string()),
+        }
+    });
+}
+
+#[tauri::command]
+fn queue_local_files(paths: Vec<String>, player: tauri::State<'_, AudioPlayer>) {
+    for path in paths {
+        player.enqueue(path);
+    }
+}
+
+#[tauri::command]
+fn local_queue(player: tauri::State<'_, AudioPlayer>) -> Vec<String> {
+    player.queue()
 }
 
 #[tauri::command]
@@ -175,6 +213,21 @@ fn playback_set_equalizer(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let initial = parse_launch_action(std::env::args().skip(1));
+    let playback = AudioPlayer::new();
+    let playback_worker = playback.clone();
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let worker_shutdown = Arc::clone(&shutdown);
+    let _ = std::thread::Builder::new()
+        .name("resonance-playback-queue".into())
+        .spawn(move || {
+            while !worker_shutdown.load(Ordering::Acquire) {
+                let _ = playback_worker.advance_if_finished(
+                    DspSettings::default(),
+                    std::time::Duration::from_millis(500),
+                );
+                std::thread::sleep(std::time::Duration::from_millis(250));
+            }
+        });
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
@@ -187,7 +240,7 @@ pub fn run() {
             let _ = app.emit("launch-action", action);
         }))
         .manage(initial)
-        .manage(AudioPlayer::new())
+        .manage(playback)
         .invoke_handler(tauri::generate_handler![
             initial_action,
             report_error,
@@ -200,6 +253,9 @@ pub fn run() {
             playback_pause,
             playback_resume,
             playback_next,
+            queue_local_files,
+            local_queue,
+            preload_next_local,
             playback_stop,
             playback_seek,
             playback_set_volume,

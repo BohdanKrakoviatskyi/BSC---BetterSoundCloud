@@ -70,15 +70,16 @@ Migration workspace is this sibling directory and has its own git repository on 
 ## Phase 2 checkpoint — 2026-10-19 (local Windows validation)
 - Added `crates/audio-core`: six-band RBJ EQ, tempo/pitch processing via WSOLA and linear resampling, decoder-backed local playback for MP3/FLAC/Vorbis/WAV/AAC/ALAC/AIFF, stereo output, seek/reset, device-backed Rodio player, volume/pause/resume/stop/seek state and a 48-band dual-window FFT spectrum analyzer. Added a two-sink gain-ramped local-track crossfade and source-frame position reporting.
 - Wired player commands into Tauri and React state/dock. The desktop shell accepts a local path and drag-and-drop audio files; native file picker has not yet been integrated. Crossfade is available for explicit crossfade transitions; playlist queue/preload scheduling and live EQ-retuning remain.
-- `cargo test --offline --workspace`: passed (16 audio-core tests and 1 CLI test).
+- `cargo test --offline --workspace`: passed (17 audio-core tests and 1 CLI test).
 - `cargo clippy --offline --workspace --all-targets -- -D warnings`: passed after the latest Rust changes.
 - `cargo fmt --all -- --check`: passed after the latest Rust changes.
 - `npm.cmd run lint`, `npm.cmd run build`, and `npm.cmd test`: passed (2 frontend unit tests).
 - `npm.cmd run test:e2e`: passed (1 shell and preferences persistence scenario).
+- `npm.cmd run desktop:build -- --no-bundle`: passed after the audio engine, spectrum worker, and queue integration; produced `resonance.exe` under `%TEMP%\resonance-target\release`.
 - Build artifacts are directed to `%TEMP%\resonance-target` because sandbox denies writes to the sibling `target` folder. Cargo/rustfmt permission prompts were accepted by the automatic reviewer for operations scoped to the migration repo.
 - `SpectrumAnalyzer` follows the source dual FFT sizes, stereo complex packing, windowing, reference gain, compression, smoothing and logarithmic band-bin mapping, with an additional test for bass/main boundary bins.
 - Deviation: no `@tauri-apps/plugin-dialog` package was cached and network access failed; the shell currently uses path entry + drag-and-drop. Replace with a native file picker when package access is available.
-- Phase 2 remains in progress: automatic next-track preload/crossfade scheduling, output-device rate conversion parity, broader spectrum behavior comparison against legacy tests, full playback command tests, and completion validation remain. Explicit crossfade-to-file is implemented; next currently skips its source because a queue is not yet implemented. The shared analyzer queue is lock-free at enqueue time and drops when full; UI reads it at 4 Hz.
+- Phase 2 remains in progress: output-device rate conversion parity, broader spectrum behavior comparison against legacy tests, full playback command/device tests and completion validation remain. Local path queue, explicit decoder preload with reuse, next/manual and automatic crossfade transitions are implemented. Previous-track navigation and queue editing UI remain for later shell/library phases. The shared analyzer queue is non-blocking and drops when full; UI polls it at 4 Hz. Automatic queue advancement is checked every 250 ms in Tauri.
 
 ## Remote branches
 - codex/resonance-tauri-migration: correct migration repository branch, pushed at cec46e7.

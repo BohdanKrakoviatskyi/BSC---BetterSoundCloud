@@ -55,10 +55,12 @@ function App() {
       void listen<string>('app-error', (event) => showError(event.payload)).then((unlisten) => { unlistenError = unlisten; });
       void listen('open-settings', () => setSettingsOpen(true)).then((unlisten) => { unlistenSettings = unlisten; });
       void listen<{ paths: string[] }>('tauri://drag-drop', (event) => {
-        const path = event.payload.paths[0];
+        const paths = event.payload.paths;
+        const path = paths[0];
         if (path) {
           const crossfade = trackPath && playback.duration_ms && playback.position_ms >= playback.duration_ms - 5_000;
           setTrackPath(path);
+          if (paths.length > 1) void commands.queueLocalFiles(paths.slice(1));
           void (crossfade ? commands.crossfadeLocalFile(path, 5000) : commands.playLocalFile(path)).catch((reason: unknown) => showError(String(reason)));
         }
       });

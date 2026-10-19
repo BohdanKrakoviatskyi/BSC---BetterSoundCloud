@@ -23,12 +23,12 @@ Inventory of the legacy version 0.2.6. An item is checked only after implementat
 - [ ] Local playback: M4A/AAC (decoder configured; fixture verification pending)
 - [ ] Local playback: ALAC (decoder configured; fixture verification pending)
 - [ ] Local playback: AIFF (decoder configured; fixture verification pending)
-- [ ] Playback queue and queue editing
-- [ ] Play/pause/next/previous controls (play/pause/next exist; previous/queue unavailable)
+- [ ] Playback queue and queue editing (path queue + next are wired; editing UI and previous remain)
+- [ ] Play/pause/next/previous controls (play/pause/next exist; previous remains)
 - [x] Seek and duration reporting (local sink/source; device runtime verification pending)
 - [x] Volume control (local sink)
-- [ ] Crossfade between tracks
-- [ ] Next-track preload
+- [x] Crossfade between tracks (manual/queued switch, 500 ms; automatic policy configuration pending)
+- [x] Next-track preload (explicit preload command retains the next decoder; automatic schedule on queue changes pending)
 - [ ] 10-band equalizer (source actually uses six bands; DSP implemented with six legacy centers, UI integration pending)
 - [x] Spectrum stream (48 band analyzer on worker thread; polled over Tauri command, device runtime verification pending)
 - [ ] Synced lyrics

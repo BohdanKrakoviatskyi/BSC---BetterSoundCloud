@@ -1,6 +1,8 @@
 use crate::{AudioError, DspSettings, LocalTrack, SharedSpectrum};
 use rodio::{OutputStream, OutputStreamBuilder, Sink, Source};
 use std::{
+    collections::VecDeque,
+    path::PathBuf,
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
@@ -32,6 +34,8 @@ struct State {
 pub struct AudioPlayer {
     state: Arc<Mutex<Option<State>>>,
     spectrum: SharedSpectrum,
+    queue: Arc<Mutex<VecDeque<String>>>,
+    preloaded: Arc<Mutex<Option<(PathBuf, LocalTrack)>>>,
 }
 
 impl Default for AudioPlayer {
@@ -45,6 +49,8 @@ impl AudioPlayer {
         Self {
             state: Arc::new(Mutex::new(None)),
             spectrum: SharedSpectrum::new(),
+            queue: Arc::new(Mutex::new(VecDeque::new())),
+            preloaded: Arc::new(Mutex::new(None)),
         }
     }
     pub fn play_file(&self, path: String, settings: DspSettings) -> Result<(), AudioError> {
@@ -89,6 +95,79 @@ impl AudioPlayer {
     pub fn stop(&self) {
         if let Ok(mut state) = self.state.lock() {
             *state = None;
+        }
+    }
+    fn open_next(&self, path: String, settings: DspSettings) -> Result<LocalTrack, AudioError> {
+        let mut preloaded = self
+            .preloaded
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some((cached_path, source)) = preloaded.take()
+            && cached_path == std::path::Path::new(&path)
+        {
+            return Ok(source);
+        }
+        LocalTrack::open(path, settings)
+    }
+    pub fn enqueue(&self, path: String) {
+        if let Ok(mut queue) = self.queue.lock() {
+            queue.push_back(path);
+        }
+    }
+    pub fn queue(&self) -> Vec<String> {
+        self.queue
+            .lock()
+            .map(|queue| queue.iter().cloned().collect())
+            .unwrap_or_default()
+    }
+    pub fn preload_next(&self) -> Result<bool, AudioError> {
+        let path = self
+            .queue
+            .lock()
+            .ok()
+            .and_then(|queue| queue.front().cloned());
+        let Some(path) = path else {
+            return Ok(false);
+        };
+        let decoder = LocalTrack::open(&path, DspSettings::default())?;
+        *self
+            .preloaded
+            .lock()
+            .map_err(|_| std::io::Error::other("preload lock poisoned"))? =
+            Some((PathBuf::from(path), decoder));
+        Ok(true)
+    }
+    pub fn next_queued(
+        &self,
+        settings: DspSettings,
+        crossfade: Duration,
+    ) -> Result<bool, AudioError> {
+        let path = self
+            .queue
+            .lock()
+            .ok()
+            .and_then(|mut queue| queue.pop_front());
+        let Some(path) = path else {
+            return Ok(false);
+        };
+        self.crossfade_to(path, settings, crossfade)?;
+        Ok(true)
+    }
+    pub fn advance_if_finished(
+        &self,
+        settings: DspSettings,
+        crossfade: Duration,
+    ) -> Result<bool, AudioError> {
+        let finished = self
+            .state
+            .lock()
+            .ok()
+            .and_then(|state| state.as_ref().map(|s| s.sink.empty()))
+            .unwrap_or(false);
+        if finished {
+            self.next_queued(settings, crossfade)
+        } else {
+            Ok(false)
         }
     }
     pub fn next_track(&self) {
@@ -188,7 +267,7 @@ impl AudioPlayer {
         settings: DspSettings,
         duration: Duration,
     ) -> Result<(), AudioError> {
-        let mut next = LocalTrack::open(path, settings)?;
+        let mut next = self.open_next(path, settings)?;
         let duration_ms = next.total_duration().map(|d| d.as_millis() as u64);
         let stream = OutputStreamBuilder::open_default_stream()
             .map_err(|e| std::io::Error::other(e.to_string()))?;
@@ -198,12 +277,12 @@ impl AudioPlayer {
         sink.set_volume(0.0);
         sink.append(next);
         sink.play();
-        let old_sink = {
+        let old_state = {
             let mut state = self
                 .state
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            let old = state.take().map(|s| s.sink);
+            let old = state.take();
             *state = Some(State {
                 _stream: stream,
                 sink: sink.clone(),
@@ -214,19 +293,36 @@ impl AudioPlayer {
             });
             old
         };
-        if let Some(old) = old_sink {
+        if let Some(old_state) = old_state {
+            let old = Arc::clone(&old_state.sink);
+            let old_volume = old_state.volume;
             let steps = 30_u32;
             let interval = duration / steps;
             for i in 1..=steps {
                 let t = i as f32 / steps as f32;
-                old.set_volume(1.0 - t);
+                old.set_volume(old_volume * (1.0 - t));
                 sink.set_volume(t);
                 thread::sleep(interval);
             }
             old.stop();
+            drop(old_state);
         } else {
             sink.set_volume(1.0);
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn local_queue_preserves_order_and_preload_is_safe_without_a_device() {
+        let player = AudioPlayer::new();
+        player.enqueue("first.wav".into());
+        player.enqueue("second.wav".into());
+        assert_eq!(player.queue(), vec!["first.wav", "second.wav"]);
+        assert!(player.preload_next().is_err());
+        assert_eq!(player.queue(), vec!["first.wav", "second.wav"]);
     }
 }
