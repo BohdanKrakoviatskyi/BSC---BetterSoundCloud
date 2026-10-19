@@ -8,9 +8,9 @@ Read-only source: `C:\Users\krako\Desktop\BSC-main`
 ## Resume here first
 
 1. In PowerShell, enter the migration repo and run `git status --short` and `git branch --show-current`. Stay on `codex/resonance-tauri-migration`; do not change repository access or contributors.
-2. Latest pushed commit: `4c6606f docs: refresh audio migration handoff`. Current uncommitted work adds the initial Rust provider crate and SoundCloud client; finish workspace verification, then commit and push this checkpoint.
-3. CI run `39293399821` passed all jobs on `e346601`: Playwright, quality, Windows NSIS, macOS DMG, Linux AppImage/DEB, and artifact upload on all three platforms. Runs for `9ccbe80`, `6c73913`, and `4c6606f` were in progress at last check; query GitHub Actions before updating this status.
-4. Local checks at this uncommitted provider checkpoint: full `cargo test --workspace` passes (55 tests total), workspace strict Clippy passes, and `cargo fmt --all -- --check` plus `git diff --check` must be rerun after final doc updates.
+2. Latest pushed commit: `332e149 feat: add unified provider foundation and SoundCloud client`. Follow-up local work adds SoundCloud stream selection, Spotify PKCE/token exchange, and native keyring storage; finish checks and commit this next checkpoint.
+3. CI run `39293399821` passed all jobs on `e346601`: Playwright, quality, Windows NSIS, macOS DMG, Linux AppImage/DEB, and artifact upload on all three platforms. Runs `39295637824`, `39295861081`, and `39295925773` passed; `39296948888` for `332e149` remained in progress at last check.
+4. Current local checks: full `cargo test --workspace` passes (61 tests total) and workspace strict Clippy passes. Re-run `cargo fmt --all -- --check` and `git diff --check` after final handoff edits.
 5. Remaining audio checks: real compressed-format fixtures, output-device runtime/listening, and legacy spectrum comparisons. Native file picker and queue UI also remain.
 6. Keep Cargo output outside the repo when space is limited: `$env:CARGO_TARGET_DIR="$env:TEMP\resonance-target"`.
 
@@ -28,7 +28,7 @@ Read-only source: `C:\Users\krako\Desktop\BSC-main`
 
 1. **Phase 2:** output-device runtime checks; real MP3/FLAC/Vorbis/AAC/ALAC/AIFF fixtures and seek; remaining legacy spectrum comparisons; previous/queue UI and native file picker.
 2. **Phase 3:** broaden `tst_local`, `tst_covers`, `tst_session`, `tst_settings` parity/integration tests; add command/UI flow coverage; verify scan cancellation/stale-result behavior and native folder picking.
-3. **Phase 4:** initial `crates/providers` trait/models and SoundCloud HTTP paths are implemented locally, with legacy card mapping and pagination-origin tests. Not yet integrated into Tauri commands/UI. Continue full profile/details/stream behavior, auth/keyring, native playlists, lyrics, Spotify OAuth/API/keyring/librespot; inspect each old Spotify source file completely before porting it. The old checkout has no Go files or `go.mod`; `docs/SOUNDCLOUD_API_REFERENCE.md` is incomplete. In particular, confirm the account-playlist endpoint against the actual old sidecar before treating it as parity.
+3. **Phase 4:** shared provider types/trait and SoundCloud REST client are committed. Local follow-up now resolves progressive/HLS/preview stream choice and implements Spotify PKCE URL/state validation, token exchange/refresh, invalid_grant handling, and a platform keyring credential store for isolated playback/library accounts. These pieces are not yet integrated into Tauri commands/UI, and SoundCloud's stream download/cache, lyrics, full details, provider UI, Spotify API/librespot remain. Spotify `WebApi.cpp`, `OAuthFlow.cpp`, `CredentialStore.cpp`, `SpotifyTypes.*`, `SpotifyJson.*`, and `SpotifySession.*` have now been read in full. The old checkout has no Go files or `go.mod`; `docs/SOUNDCLOUD_API_REFERENCE.md` is incomplete. Confirm SoundCloud's account-playlist endpoint against sidecar source if it becomes available.
 4. **Phase 5:** Material 3 artwork palette, design tokens, 15 motion primitives, 40 controls, theme/settings parity.
 5. **Phase 6:** inventory/port 25 shaders to WebGL2; spectrum/backdrop/material components, frame pacing and benchmark.
 6. **Phase 7:** port all 18 screens, shell navigation and window/view behavior.
@@ -54,3 +54,11 @@ The specification defines Phases 0–11. Phase 0–1 and parts of 2–3 are done
 - SoundCloud card mapping accepts both legacy sidecar camelCase fields and v2 API snake_case fields. Pagination is restricted to the configured API origin so a malicious `next_href` cannot receive the OAuth header or client ID.
 - Focused provider suite: 6 tests pass; workspace strict Clippy passes. Full workspace test build is still running. No provider commands/UI or auth/keyring integration has shipped yet; do not mark Phase 4 complete.
 - Follow-up: add stream resolution/download/cache, artist/track details, lyrics parity, robust HTTP contract tests; inspect Spotify `WebApi.cpp`, `OAuthFlow.cpp`, `CredentialStore.cpp` and types in full before porting. Confirm `playlists.mine` against sidecar source if available; current native route is a best-effort inference.
+
+## Phase 4 OAuth and stream follow-up - 2026-10-19
+- Spotify's complete legacy Web API, OAuth, credential store, types/JSON and session files have now been read. They use PKCE at fixed loopback `/login`, two separate Spotify accounts (librespot playback and Web API library), and carefully ordered refresh-token rotation.
+- Added SoundCloud progressive-first / HLS-next / preview-last stream option selection, supporting both legacy sidecar and native v2 response shapes.
+- Added Spotify PKCE challenge/state construction, strict callback host/path/state checks, x-www-form-urlencoded code exchange and refresh requests, rotated-token response parsing, and `invalid_grant` as a revoked-login error. Verifiers are zeroized when dropped.
+- Added `KeyringCredentialStore` using native OS credential storage, with isolated Spotify playback/library and SoundCloud entries. The app has not yet wired this crate into Tauri or React.
+- Focused provider coverage is now 12 tests. Full Rust workspace passes 61 tests; strict Clippy, rustfmt check and `git diff --check` pass. The docs checkpoint is updated; commit/push and CI for this follow-up remain.
+- Next: implement Tauri's loopback callback lifecycle and browser opening, persist login state through the native keyring, build Spotify Web API and SoundCloud stream cache, then expose provider data to the shell/search/library UI. Continue with API contract fixtures and platform CI. No claim of Phase 4 parity until live account flows and playback are integrated and verified.

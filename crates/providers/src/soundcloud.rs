@@ -1,5 +1,6 @@
 use crate::{
-    MusicProvider, ProviderArtist, ProviderError, ProviderPage, ProviderPlaylist, ProviderTrack,
+    MusicProvider, ProviderArtist, ProviderError, ProviderPage, ProviderPlaylist, ProviderStream,
+    ProviderTrack,
 };
 use async_trait::async_trait;
 use reqwest::{Client, RequestBuilder, StatusCode, Url};
@@ -261,6 +262,13 @@ impl MusicProvider for SoundCloudProvider {
         url.query_pairs_mut().append_pair("limit", "15");
         Ok(self.page_url(url, ProviderTrack::from_json).await?.items)
     }
+
+    async fn resolve_stream(&self, id: &str) -> Result<ProviderStream, ProviderError> {
+        let payload = self
+            .get(self.endpoint(&format!("tracks/{}/streams", encode_segment(id)))?)
+            .await?;
+        stream_from_json(payload)
+    }
 }
 
 impl ProviderTrack {
@@ -312,6 +320,80 @@ fn playlist_from_json(value: Value) -> Result<ProviderPlaylist, ProviderError> {
             .and_then(|user| first_text(user, &["username"]))
             .unwrap_or_default(),
     })
+}
+
+fn stream_from_json(value: Value) -> Result<ProviderStream, ProviderError> {
+    let mut choices = Vec::new();
+    for key in ["http_mp3_128_url", "http_aac_160_url"] {
+        if let Some(url) = text(value.get(key)) {
+            choices.push(ProviderStream {
+                url,
+                hls: false,
+                preview: false,
+                quality: Some("progressive".into()),
+            });
+        }
+    }
+    for key in ["hls_mp3_128_url", "hls_aac_160_url"] {
+        if let Some(url) = text(value.get(key)) {
+            choices.push(ProviderStream {
+                url,
+                hls: true,
+                preview: false,
+                quality: Some("hls".into()),
+            });
+        }
+    }
+    for key in ["preview_mp3_128_url", "preview_url"] {
+        if let Some(url) = text(value.get(key)) {
+            choices.push(ProviderStream {
+                url,
+                hls: false,
+                preview: true,
+                quality: Some("preview".into()),
+            });
+        }
+    }
+    if let Some(url) = text(value.get("url")) {
+        choices.push(ProviderStream {
+            url,
+            hls: value.get("hls").and_then(Value::as_bool).unwrap_or(false),
+            preview: value
+                .get("preview")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            quality: text(value.get("quality")),
+        });
+    }
+    if let Some(alternatives) = value.get("alternatives").and_then(Value::as_array) {
+        for alternative in alternatives {
+            if let Some(url) = text(alternative.get("url")) {
+                choices.push(ProviderStream {
+                    url,
+                    hls: alternative
+                        .get("hls")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
+                    preview: alternative
+                        .get("preview")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
+                    quality: text(alternative.get("quality")),
+                });
+            }
+        }
+    }
+    choices
+        .iter()
+        .find(|choice| !choice.url.is_empty() && !choice.hls && !choice.preview)
+        .or_else(|| {
+            choices
+                .iter()
+                .find(|choice| !choice.url.is_empty() && choice.hls)
+        })
+        .or_else(|| choices.iter().find(|choice| !choice.url.is_empty()))
+        .cloned()
+        .ok_or_else(|| ProviderError::InvalidData("SoundCloud returned no playable stream".into()))
 }
 
 fn http_error(status: StatusCode, body: String) -> ProviderError {
@@ -416,6 +498,31 @@ mod tests {
             provider
                 .pagination_url("https://api.soundcloud.test/users/1/likes?offset=20")
                 .is_ok()
+        );
+    }
+
+    #[test]
+    fn prefers_progressive_audio_then_hls_and_preview() {
+        let stream = stream_from_json(serde_json::json!({
+            "hls_mp3_128_url": "https://cdn.test/hls",
+            "http_mp3_128_url": "https://cdn.test/progressive"
+        }))
+        .unwrap();
+        assert_eq!(stream.url, "https://cdn.test/progressive");
+        assert!(!stream.hls);
+
+        let hls = stream_from_json(serde_json::json!({"hls_mp3_128_url":"https://cdn.test/hls"}))
+            .unwrap();
+        assert!(hls.hls);
+        let preview =
+            stream_from_json(serde_json::json!({"preview_mp3_128_url":"https://cdn.test/preview"}))
+                .unwrap();
+        assert!(preview.preview);
+        assert!(
+            stream_from_json(serde_json::json!({}))
+                .unwrap_err()
+                .to_string()
+                .contains("no playable stream")
         );
     }
 }

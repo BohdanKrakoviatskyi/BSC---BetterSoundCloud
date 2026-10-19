@@ -1,4 +1,6 @@
+pub mod credentials;
 pub mod soundcloud;
+pub mod spotify;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -54,6 +56,15 @@ pub struct ProviderPage<T> {
     pub next: Option<String>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderStream {
+    pub url: String,
+    pub hls: bool,
+    pub preview: bool,
+    pub quality: Option<String>,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ProviderError {
     #[error("provider request failed: {0}")]
@@ -62,6 +73,10 @@ pub enum ProviderError {
     Http { status: u16, message: String },
     #[error("provider returned invalid data: {0}")]
     InvalidData(String),
+    #[error("Spotify authorization failed: {0}")]
+    OAuth(String),
+    #[error("Spotify refresh token was revoked; sign in again")]
+    LoginRevoked,
 }
 
 #[async_trait]
@@ -89,4 +104,5 @@ pub trait MusicProvider: Send + Sync {
     ) -> Result<Vec<ProviderTrack>, ProviderError>;
     async fn track(&self, id: &str) -> Result<ProviderTrack, ProviderError>;
     async fn related_tracks(&self, id: &str) -> Result<Vec<ProviderTrack>, ProviderError>;
+    async fn resolve_stream(&self, id: &str) -> Result<ProviderStream, ProviderError>;
 }
