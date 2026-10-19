@@ -212,3 +212,9 @@ Migration workspace is this sibling directory and has its own git repository on 
 - macOS bundle reached Tauri packaging and failed with `Failed to create app icon: unsupported ColorType: Rgba16`. The 256x256 configured PNG was 16-bit RGBA. Generated `src-tauri/icons/icon-8bit.png` in 8-bit RGBA preserving the image appearance and selected it in Tauri config.
 - Corrected the generated WAV integration fixture to declare and contain stereo PCM frames (two samples per frame), and adjusted the bounded read-ahead expectation to the actual 2048 frames per channel. All five local playback/seek tests now pass; strict Clippy passes.
 - Re-run bundle verification after these fixes; macOS package and successful artifact uploads remain unconfirmed.
+
+## Cross-platform bundle checkpoint and PCM decoder coverage - 2026-10-19
+- CI run `39293399821` passed all workflow jobs: frontend lint/unit tests/build, Rust fmt/Clippy/tests, Playwright, Windows NSIS, macOS DMG, Linux AppImage/DEB, and artifact uploads.
+- Added deterministic PCM WAV fixtures for 8-, 16-, 24-, and 32-bit integer samples at 22.05, 44.1, 48, and 96 kHz. Tests validate sample rate, approximate 50 ms duration, stereo output sample count, finite PCM, and non-silence. This expanded local playback coverage from five to six integration tests.
+- The workspace now has 48 Rust tests. `cargo test --workspace`, strict Clippy, `cargo fmt --all -- --check`, and `git diff --check` pass.
+- Remaining Phase 2 validation: compressed MP3/FLAC/Vorbis/AAC/ALAC/AIFF fixtures, output-device runtime/listening, legacy spectrum comparison, native file picker and queue UI.
