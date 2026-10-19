@@ -147,3 +147,9 @@ Migration workspace is this sibling directory and has its own git repository on 
 - Copy storage is isolated per source occurrence folder. Garbage collection checks those folders individually, preserving folders still referenced by any playlist occurrence and deleting unheld folders after removals/deletions.
 - Regression coverage checks same-copy reuse, occurrence IDs, order, persistence, remove-all-occurrences and delete cleanup. Run full verification before commit.
 - Remaining Phase 3 gaps: legacy playlist JSON migration, playlist metadata/artwork editor, cover replacement UI, tag editing in playlist copies and broader Tauri/UI parity tests.
+
+## Phase 3 local cover editing follow-up - 2026-10-19
+- Added JPEG/PNG file selection to the indexed local track tag editor. Selected bytes are read with `FileReader` and passed to the existing `local_song_edit_tags` command; unsupported MIME types are rejected in the UI. The backend replaces only the front-cover picture and rescans the indexed library after the write.
+- Added a Vitest regression verifying byte-for-byte conversion of a selected image blob to the numeric array used by Tauri IPC.
+- Verification: Rust workspace tests (36), strict Clippy, rustfmt check, ESLint, TypeScript/Vite build, Vitest (3), Playwright (1), Windows Tauri `--no-bundle` release build and `git diff --check` all pass.
+- Phase 3 remains open: legacy playlist JSON migration, playlist metadata/artwork editing, editing tags in playlist-owned copies and broader parity/integration tests.
