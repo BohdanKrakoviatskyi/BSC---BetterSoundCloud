@@ -29,6 +29,8 @@ function App() {
   const setPlayback = useAppStore((state) => state.setPlayback);
   const spectrum = useAppStore((state) => state.spectrum);
   const setSpectrum = useAppStore((state) => state.setSpectrum);
+  const localSongs = useAppStore((state) => state.localSongs);
+  const setLocalLibrary = useAppStore((state) => state.setLocalLibrary);
 
   useEffect(() => { if (isTauri()) void commands.spectrumEnable(); }, []);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
@@ -41,6 +43,7 @@ function App() {
     let unlistenAction: (() => void) | undefined;
     let unlistenError: (() => void) | undefined;
     let unlistenSettings: (() => void) | undefined;
+    let unlistenLibrary: (() => void) | undefined;
 
     const applyAction = (action: { type: string; route?: string }) => {
       if (action.type === 'navigate' && action.route && ['home', 'search', 'playlists', 'songs'].includes(action.route)) navigate(action.route as 'home' | 'search' | 'playlists' | 'songs');
@@ -54,6 +57,14 @@ function App() {
       void listen<LaunchAction>('launch-action', (event) => applyAction(event.payload)).then((unlisten) => { unlistenAction = unlisten; });
       void listen<string>('app-error', (event) => showError(event.payload)).then((unlisten) => { unlistenError = unlisten; });
       void listen('open-settings', () => setSettingsOpen(true)).then((unlisten) => { unlistenSettings = unlisten; });
+      const refreshLibrary = async () => {
+        try {
+          const [songs, sources] = await Promise.all([commands.localLibrarySongs(), commands.localLibrarySources()]);
+          setLocalLibrary(songs, sources);
+        } catch (reason) { showError(String(reason)); }
+      };
+      void refreshLibrary();
+      void listen<number>('local-library-scanned', () => { void refreshLibrary(); }).then((unlisten) => { unlistenLibrary = unlisten; });
       void listen<{ paths: string[] }>('tauri://drag-drop', (event) => {
         const paths = event.payload.paths;
         const path = paths[0];
@@ -66,8 +77,8 @@ function App() {
       });
     }
 
-    return () => { unlistenAction?.(); unlistenError?.(); unlistenSettings?.(); };
-  }, [navigate, setSource, setTheme, showError, playback.playing]);
+    return () => { unlistenAction?.(); unlistenError?.(); unlistenSettings?.(); unlistenLibrary?.(); };
+  }, [navigate, setLocalLibrary, setSource, setTheme, showError, playback.playing]);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -89,7 +100,7 @@ function App() {
     if (route === 'home') return <><section className="welcome-card"><div className="welcome-copy"><p className="eyebrow">A LITTLE SPACE FOR SOUND</p><h2>Your music,<br /><em>your atmosphere.</em></h2><p>Bring your favorite music together in one calm, expressive player.</p><button className="primary-button" onClick={() => setSettingsOpen(true)}>Choose a music source <span aria-hidden="true">&#8599;</span></button></div><div className="art-orbit" aria-hidden="true"><div className="orbit orbit-one"/><div className="orbit orbit-two"/><div className="orbit-core">{("\u266b")}</div><div className="orbit-star">{("\u2733")}</div></div></section><section className="getting-started"><div><p className="eyebrow">GETTING STARTED</p><h3>Make it yours</h3><p>Connect a source in settings to start building your listening space.</p></div><button className="text-button" onClick={() => setSettingsOpen(true)}>Open settings <span aria-hidden="true">&#8594;</span></button></section></>;
     if (route === 'search') return <section className="empty-view"><span className="empty-symbol">{("\u2315")}</span><h2>Find your next favorite</h2><p>Search across your connected music sources.</p><button className="primary-button" onClick={() => setSettingsOpen(true)}>Connect a source</button></section>;
     if (route === 'playlists') return <section className="empty-view"><span className="empty-symbol">{("\u25a4")}</span><h2>Your playlists will live here</h2><p>Connect a music source to browse and organize playlists.</p><button className="primary-button" onClick={() => setSettingsOpen(true)}>Connect a source</button></section>;
-    return <section className="empty-view"><span className="empty-symbol">{("\u266b")}</span><h2>A home for the songs you love</h2><p>Your saved songs will appear after you connect a source.</p><button className="primary-button" onClick={() => setSettingsOpen(true)}>Connect a source</button></section>;
+    return <section className="local-library-view"><div className="local-library-heading"><div><p className="eyebrow">LOCAL FILES</p><h2>{localSongs.length ? `${localSongs.length} songs` : 'Your music collection'}</h2><p>Scanned folders and audio files on this device.</p></div><button className="primary-button" onClick={() => void chooseLocalFile()}>Add audio</button></div>{localSongs.length ? <ul className="local-song-list">{localSongs.map((song) => <li key={song.instance_id}><button className="local-song-row" onClick={() => { setTrackPath(song.path); void commands.playLocalFile(song.path).catch((reason: unknown) => showError(String(reason))); }}><span className="song-art">{song.artwork_path ? <img src={`asset://localhost/${song.artwork_path}`} alt="" /> : '♫'}</span><span className="song-meta"><strong>{song.name}</strong><small>{song.artists} · {song.album_name}</small></span><span className="song-duration">{song.duration_ms ? `${Math.floor(song.duration_ms / 60000)}:${String(Math.floor(song.duration_ms / 1000) % 60).padStart(2, '0')}` : '—'}</span></button></li>)}</ul> : <div className="empty-view"><span className="empty-symbol">{("\u266b")}</span><h2>A home for the songs you love</h2><p>Add an audio file from your device to start your local library.</p><button className="primary-button" onClick={() => void chooseLocalFile()}>Open audio file</button></div>}</section>;
   };
 
   return <div className="app-frame">

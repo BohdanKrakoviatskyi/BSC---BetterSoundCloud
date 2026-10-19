@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { LocalSong } from './commands';
 
 export type Route = 'home' | 'playlists' | 'songs' | 'search';
 export type ThemeMode = 'system' | 'light' | 'dark';
@@ -12,6 +13,8 @@ type AppStore = {
   trackPath: string | null;
   playback: { playing: boolean; position_ms: number; duration_ms: number | null; volume: number };
   spectrum: number[];
+  localSongs: LocalSong[];
+  localSources: string[];
   navigate: (route: Route) => void;
   setTheme: (theme: ThemeMode) => void;
   setSource: (source: MusicSource) => void;
@@ -20,6 +23,7 @@ type AppStore = {
   setTrackPath: (path: string | null) => void;
   setPlayback: (playback: AppStore['playback']) => void;
   setSpectrum: (spectrum: number[]) => void;
+  setLocalLibrary: (songs: LocalSong[], sources?: string[]) => void;
 };
 
 export const useAppStore = create<AppStore>((set) => ({
@@ -30,6 +34,8 @@ export const useAppStore = create<AppStore>((set) => ({
   trackPath: null,
   playback: { playing: false, position_ms: 0, duration_ms: null, volume: 1 },
   spectrum: Array.from({ length: 48 }, () => 0),
+  localSongs: [],
+  localSources: [],
   navigate: (route) => set({ route }),
   setTheme: (theme) => set({ theme }),
   setSource: (source) => set({ source }),
@@ -38,4 +44,5 @@ export const useAppStore = create<AppStore>((set) => ({
   setTrackPath: (trackPath) => set({ trackPath }),
   setPlayback: (playback) => set({ playback }),
   setSpectrum: (spectrum) => set({ spectrum }),
+  setLocalLibrary: (localSongs, localSources) => set((state) => ({ localSongs, localSources: localSources ?? state.localSources })),
 }));

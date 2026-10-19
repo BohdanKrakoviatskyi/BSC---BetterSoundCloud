@@ -176,9 +176,7 @@ mod tests {
                 sequence: next,
             })
         };
-        assert!(
-            submit().is_ok()
-        );
+        assert!(submit().is_ok());
         assert!(submit().is_err());
         let received = receiver.try_recv().unwrap();
         assert_eq!(received.sequence, 0);

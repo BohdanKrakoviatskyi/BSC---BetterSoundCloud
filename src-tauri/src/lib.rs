@@ -1,10 +1,63 @@
 use audio_core::{AudioPlayer, DspSettings, PlaybackSnapshot};
+use library::{LocalLibrary, Song};
 use serde::Serialize;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
 use tauri::{Emitter, Manager, Runtime, WebviewWindow};
+
+struct LibraryState(Arc<std::sync::Mutex<LocalLibrary>>);
+
+#[tauri::command]
+fn local_library_sources(state: tauri::State<'_, LibraryState>) -> Result<Vec<String>, String> {
+    let state = state
+        .inner()
+        .0
+        .lock()
+        .map_err(|_| "local library lock poisoned")?;
+    Ok(state
+        .sources()
+        .iter()
+        .map(|source| source.path().to_string_lossy().into_owned())
+        .collect())
+}
+
+#[tauri::command]
+fn local_library_songs(state: tauri::State<'_, LibraryState>) -> Result<Vec<Song>, String> {
+    let state = state
+        .inner()
+        .0
+        .lock()
+        .map_err(|_| "local library lock poisoned")?;
+    Ok(state.songs().to_vec())
+}
+
+#[tauri::command]
+async fn local_library_add_sources(
+    app: tauri::AppHandle,
+    paths: Vec<String>,
+    state: tauri::State<'_, LibraryState>,
+) -> Result<usize, String> {
+    let state = Arc::clone(&state.inner().0);
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let (added, count) = {
+            let mut library = state.lock().map_err(|_| "local library lock poisoned")?;
+            let added = library
+                .add_sources_persisted(paths)
+                .map_err(|error| error.to_string())?;
+            library
+                .rescan_with_lofty()
+                .map_err(|error| error.to_string())?;
+            (added, library.songs().len())
+        };
+        let _ = app.emit("local-library-scanned", count);
+        Ok::<_, String>(added)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
@@ -214,6 +267,15 @@ fn playback_set_equalizer(
 pub fn run() {
     let initial = parse_launch_action(std::env::args().skip(1));
     let playback = AudioPlayer::new();
+    let library_dir = dirs::data_local_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join("Resonance");
+    std::fs::create_dir_all(&library_dir).expect("could not create local library directory");
+    let mut local_library = LocalLibrary::open(library_dir.join("local-files.json"))
+        .expect("could not open local library cache");
+    local_library
+        .load_persisted_sources()
+        .expect("could not load local library sources");
     let playback_worker = playback.clone();
     let shutdown = Arc::new(AtomicBool::new(false));
     let worker_shutdown = Arc::clone(&shutdown);
@@ -241,6 +303,7 @@ pub fn run() {
         }))
         .manage(initial)
         .manage(playback)
+        .manage(LibraryState(Arc::new(std::sync::Mutex::new(local_library))))
         .invoke_handler(tauri::generate_handler![
             initial_action,
             report_error,
@@ -263,9 +326,35 @@ pub fn run() {
             playback_set_equalizer,
             spectrum_set_enabled,
             spectrum_enable,
-            spectrum_levels
+            spectrum_levels,
+            local_library_sources,
+            local_library_songs,
+            local_library_add_sources,
         ])
         .setup(|app| {
+            let state = Arc::clone(&app.state::<LibraryState>().0);
+            let handle = app.handle().clone();
+            let _ = std::thread::Builder::new()
+                .name("resonance-local-library-scan".into())
+                .spawn(move || {
+                    let result = state
+                        .lock()
+                        .map_err(|_| "local library lock poisoned".to_owned())
+                        .and_then(|mut library| {
+                            library
+                                .rescan_with_lofty()
+                                .map(|songs| songs.len())
+                                .map_err(|error| error.to_string())
+                        });
+                    match result {
+                        Ok(count) => {
+                            let _ = handle.emit("local-library-scanned", count);
+                        }
+                        Err(error) => {
+                            let _ = handle.emit("app-error", error);
+                        }
+                    }
+                });
             let config = app.path().app_config_dir()?;
             std::fs::create_dir_all(config)?;
             #[cfg(target_os = "macos")]

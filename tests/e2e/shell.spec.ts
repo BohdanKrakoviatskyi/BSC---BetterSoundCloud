@@ -7,7 +7,8 @@ test('navigation and appearance preferences persist between launches', async ({ 
   await page.getByRole('button', { name: 'Playlists' }).click();
   await expect(page.getByRole('heading', { name: 'Your playlists will live here' })).toBeVisible();
   await page.getByRole('button', { name: 'Saved songs' }).click();
-  await expect(page.getByRole('heading', { name: 'A home for the songs you love' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your music collection' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open audio file' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Open settings' }).click();
   await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible();

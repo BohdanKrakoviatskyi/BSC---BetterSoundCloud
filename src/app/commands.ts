@@ -10,6 +10,7 @@ export type LaunchAction =
   | { type: 'focus-window' };
 
 export type PlaybackSnapshot = { playing: boolean; position_ms: number; duration_ms: number | null; volume: number };
+export type LocalSong = { instance_id: number; uri: string; path: string; name: string; artists: string; album_name: string; duration_ms: number; artwork_path: string | null };
 
 export const commands = {
   initialAction: () => invoke<LaunchAction | null>('initial_action'),
@@ -34,5 +35,8 @@ export const commands = {
   spectrumSetEnabled: (enabled: boolean) => invoke<void>('spectrum_set_enabled', { enabled }),
   spectrumEnable: () => invoke<void>('spectrum_enable'),
   spectrumLevels: () => invoke<number[]>('spectrum_levels'),
+  localLibrarySources: () => invoke<string[]>('local_library_sources'),
+  localLibrarySongs: () => invoke<LocalSong[]>('local_library_songs'),
+  localLibraryAddSources: (paths: string[]) => invoke<number>('local_library_add_sources', { paths }),
   pickLocalFile: async () => window.prompt('Enter the full path to an audio file') || null,
 };

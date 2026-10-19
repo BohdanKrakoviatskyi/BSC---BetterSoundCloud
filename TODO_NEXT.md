@@ -17,21 +17,21 @@ Working directory: `C:\Users\krako\Desktop\resonance-tauri`
   - Shared DSP updates can retune the current track's EQ/tempo.
   - Separate 44.1 kHz to 48 kHz linear-rate-converter utility with irregular-block continuity and reset tests. Rodio's output mixer performs the actual device-rate conversion at runtime.
   - Pause handling uses Rodio's sink pause, so the decoder source remains alive for resume.
-- Verification on Windows: current audio-core suite has 13 unit + 8 DSP + 5 playback tests, plus 1 Tauri CLI test (27 total). Rust fmt, strict Clippy, release Rust build and Tauri desktop build have passed for this checkpoint. Prior frontend ESLint, TypeScript/Vite build, Vitest (2) and Playwright (1) checks passed; no frontend code changed in the current audio-core checkpoint.
-- The current uncommitted checkpoint fixes seek position accounting and bounded read-ahead; adds provider-volume compensation and spectrum tests; and makes the spectrum worker account for dropped chunks so FFT history and release timing advance correctly.
+- Phase 2 checkpoint `7ddca52` is committed and pushed. It fixed seek accounting/read-ahead and added volume-compensated spectrum analysis with dropped-worker-chunk timing.
+- Current Phase 3.1 work adds the `library` crate (Lofty tags, persistent cache/source list, recursive scanner and Local Songs UI). Workspace currently passes 34 Rust tests (13 audio-core unit, 8 DSP, 5 local playback, 7 library, 1 CLI), strict Clippy/fmt, frontend lint/build/Vitest (2), Playwright (1) and Windows Tauri desktop build.
 
 ## Exact stopping point
 
-The working tree contains Phase 2 corrections in `local.rs`, `spectrum.rs`, `spectrum_worker.rs` and playback tests. Seek now counts source frames once and clamps past-duration positions; decoder read-ahead respects the legacy 4096-scalar block size; the analyzer compensates provider output gain and ages FFT/release state when its bounded worker queue drops chunks. The Rust and Tauri builds and strict checks pass. Commit and push this checkpoint, then continue Phase 2 parity.
+The working tree contains an uncommitted Phase 3.1 scanner/tag reader and Local Songs UI. Cache reuse follows file size + modification time; sources and cache are atomically persisted; source hierarchy, hidden files, natural sorting, tag fallbacks and stable song identity have tests. Tauri startup restores sources and scans off the UI thread. The desktop UI can list and play scanned local songs.
 
 The native file picker is not integrated. The current shell has drag-and-drop plus a temporary full-path prompt because the Tauri dialog plugin was absent from local caches and package-registry network access failed. The original repository contains no audio fixtures, so only generated WAV decoding and seeking are directly fixture-verified; verify the remaining decoder formats when fixtures or an encoder are available.
 
 ## Next actions, in order
 
-1. Complete strict Rust workspace checks and verify the Windows Tauri executable.
-2. Update this handoff, the migration log and parity ledger, commit the Phase 2 checkpoint on `codex/resonance-tauri-migration`, and push it to `origin`.
-3. Continue Phase 2: investigate native file picker dependency, add real codec fixtures if available locally, test output-device handling, port remaining spectrum signal tests and playback controls. Keep Phase 2 open until evidence supports completion.
-4. Proceed to Phase 3 by fully reading the legacy library sources, then implement scanning/indexing, metadata/cover editing, playlist operations, settings/session migration and tests.
+1. Continue Phase 2 parity as tooling/device/fixtures permit, keeping open gaps explicit.
+2. Update `PHASE3_PLAN.md`, the migration log and parity ledger; commit/push current scanner and UI checkpoint.
+3. Complete Phase 3.2 source settings parity and robust async/stale scan semantics, including add/remove/rescan UI and real `read_local_tags` coverage.
+4. Phase 3.3–3.4: implement copy-backed local playlists, metadata/tag and artwork editing; wire commands/events/UI; verify and checkpoint.
 5. Continue in order through Phases 4–11, updating this task list/log/checklist and committing each verified checkpoint. Do not claim overall completion until the Phase 11 audit passes.
 
 ## Known issues and limits

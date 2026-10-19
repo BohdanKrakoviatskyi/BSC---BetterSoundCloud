@@ -15,7 +15,7 @@ Inventory of the legacy version 0.2.6. An item is checked only after implementat
 - [ ] Spotify playlists
 - [ ] Spotify search
 - [ ] Unified provider selection
-- [ ] Local library scanning and indexing
+- [ ] Local library scanning and indexing (Phase 3.1 scanner/cache and Saved Songs list implemented; source management UI, full metadata/artwork and parity scenarios remain)
 - [ ] Local playback: MP3 (decoder configured; fixture verification pending)
 - [ ] Local playback: FLAC (decoder configured; fixture verification pending)
 - [ ] Local playback: OGG/Vorbis (decoder configured; fixture verification pending)

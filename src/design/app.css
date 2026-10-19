@@ -61,6 +61,18 @@ h1, h2, h3, p { margin-top: 0; }
 .empty-symbol { display: grid; place-items: center; width: 62px; height: 62px; margin-bottom: 20px; border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--outline)); border-radius: 23px 23px 23px 8px; background: var(--surface-soft); color: var(--accent); font-size: 31px; }
 .empty-view h2 { margin-bottom: 8px; font-size: 21px; font-weight: 590; letter-spacing: -.5px; }
 .empty-view p { margin-bottom: 19px; color: var(--text-muted); font-size: 11px; }
+.local-library-view { display: flex; min-height: 360px; flex-direction: column; gap: 20px; }
+.local-library-heading { display: flex; align-items: center; justify-content: space-between; padding: 22px 25px; border: 1px solid var(--outline-soft); border-radius: var(--radius-card); background: var(--surface); }
+.local-library-heading h2 { margin: 0 0 6px; font-size: 20px; }
+.local-library-heading p:not(.eyebrow) { margin: 0; color: var(--text-muted); font-size: 10px; }
+.local-song-list { display: flex; flex-direction: column; gap: 3px; margin: 0; padding: 0; list-style: none; }
+.local-song-row { display: flex; width: 100%; align-items: center; gap: 13px; padding: 9px 13px; border: 1px solid transparent; border-radius: 12px; background: transparent; color: var(--text); text-align: left; cursor: pointer; }
+.local-song-row:hover { border-color: var(--outline-soft); background: var(--surface); }
+.song-art { display: grid; width: 39px; height: 39px; flex: 0 0 39px; place-items: center; overflow: hidden; border-radius: 11px; background: var(--surface-raised); color: var(--accent); }
+.song-art img { width: 100%; height: 100%; object-fit: cover; }
+.song-meta { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 4px; }
+.song-meta strong { overflow: hidden; font-size: 10px; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
+.song-meta small,.song-duration { color: var(--text-faint); font-size: 9px; }
 .player-dock { display: flex; flex: 0 0 76px; align-items: center; gap: 13px; padding: 0 26px; border-top: 1px solid var(--outline-soft); background: var(--surface); }
 .dock-empty-art { display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid var(--outline); border-radius: 14px; background: var(--surface-raised); color: var(--text-faint); font-size: 20px; }
 .dock-track { display: flex; min-width: 170px; flex-direction: column; gap: 4px; }
