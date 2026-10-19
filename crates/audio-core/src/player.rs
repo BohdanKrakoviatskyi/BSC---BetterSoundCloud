@@ -458,4 +458,21 @@ mod tests {
         assert!(player.play_file(missing, DspSettings::default()).is_err());
         assert!(!player.snapshot().playing);
     }
+
+    #[test]
+    fn failed_next_track_remains_queued_for_retry() {
+        let player = AudioPlayer::new();
+        let missing = std::env::temp_dir()
+            .join(format!("resonance-missing-next-{}.wav", std::process::id()))
+            .display()
+            .to_string();
+        player.enqueue(missing.clone());
+
+        assert!(
+            player
+                .next_queued(DspSettings::default(), Duration::ZERO)
+                .is_err()
+        );
+        assert_eq!(player.queue(), vec![missing]);
+    }
 }

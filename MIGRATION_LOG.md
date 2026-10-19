@@ -218,3 +218,4 @@ Migration workspace is this sibling directory and has its own git repository on 
 - Added deterministic PCM WAV fixtures for 8-, 16-, 24-, and 32-bit integer samples at 22.05, 44.1, 48, and 96 kHz. Tests validate sample rate, approximate 50 ms duration, stereo output sample count, finite PCM, and non-silence. This expanded local playback coverage from five to six integration tests.
 - The workspace now has 48 Rust tests. `cargo test --workspace`, strict Clippy, `cargo fmt --all -- --check`, and `git diff --check` pass.
 - Remaining Phase 2 validation: compressed MP3/FLAC/Vorbis/AAC/ALAC/AIFF fixtures, output-device runtime/listening, legacy spectrum comparison, native file picker and queue UI.
+- Queue retry regression: a missing next-track file makes `next_queued` return an error while keeping the path queued for retry. Focused test and strict audio-core Clippy pass; workspace total is now 49 tests.
