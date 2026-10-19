@@ -8,10 +8,10 @@ Read-only source: `C:\Users\krako\Desktop\BSC-main`
 ## Resume here first
 
 1. In PowerShell, enter the migration repo and run `git status --short` and `git branch --show-current`. Stay on `codex/resonance-tauri-migration`; do not change repository access or contributors.
-2. Latest implementation adds JPEG/PNG replacement in the indexed local song tag editor. `src/app/artwork.ts` reads selected cover bytes using `FileReader`; a Vitest regression covers byte preservation. This checkpoint is not committed yet.
+2. Current uncommitted change adds playlist name/description editing and owned JPEG/PNG covers, with cover validation, safe data-URL display, persistence and cleanup. The implementation is in `crates/library/src/playlists.rs`, `src-tauri/src/lib.rs`, `src/app/commands.ts`, `src/App.tsx`, and `src/design/app.css`.
 3. Keep Cargo output outside the repo: `$env:CARGO_TARGET_DIR="$env:TEMP\resonance-target"`.
-4. Full Windows verification passed on this checkpoint: Rust workspace 36 tests, strict Clippy/fmt, ESLint, TypeScript/Vite build, Vitest (3 tests), Playwright (1), Tauri release no-bundle build (`%TEMP%\resonance-target\release\resonance.exe`) and `git diff --check`.
-5. Update `MIGRATION_LOG.md`, `PHASE3_PLAN.md` and `PARITY_CHECKLIST.md` from these results, commit and push to the existing branch. Continue Phase 3 before Phase 4.
+4. This checkpoint passed: Rust workspace (38 tests), strict Clippy/fmt, ESLint, TypeScript/Vite build, Vitest (3), Playwright (1), Tauri release no-bundle build (`%TEMP%\resonance-target\release\resonance.exe`) and `git diff --check`.
+5. Update `MIGRATION_LOG.md`, `PHASE3_PLAN.md` and `PARITY_CHECKLIST.md`, commit and push the checkpoint to the existing branch. Continue Phase 3 before Phase 4.
 
 ## Completed and pushed
 
@@ -20,13 +20,13 @@ Read-only source: `C:\Users\krako\Desktop\BSC-main`
 - Phase 3.1 scanner/Saved Songs and 3.2 local source management/settings migration.
 - Phase 3.3 playlist CRUD, copy-on-add, persistence/order, play/add/remove/reorder UI and desktop build.
 - Phase 3.4 indexed local tag editing via Lofty, plus embedded/folder artwork extraction and validated artwork data URLs.
-- Latest pushed checkpoint before current work: `2b88aa1 fix: reuse playlist track copies`.
-- This artwork replacement checkpoint passed full Windows verification: 36 Rust tests, strict Clippy/fmt, ESLint, TypeScript/Vite build, Vitest (3), Playwright (1), Windows Tauri no-bundle build and `git diff --check`.
+- Latest pushed checkpoint before current work: `ed967ae feat: replace local track artwork`.
+- Local track cover replacement passed full Windows verification. The current playlist metadata/cover checkpoint also passed full Windows verification with 38 Rust tests and the same frontend, e2e, clippy/fmt and Tauri checks.
 
 ## Remaining work by phase
 
 1. **Phase 2:** output-device runtime checks; real MP3/FLAC/Vorbis/AAC/ALAC/AIFF fixtures and seek; remaining legacy spectrum comparisons; previous/queue UI and native file picker.
-2. **Phase 3:** migrate legacy playlist JSON; playlist metadata/artwork editing; tag writes to playlist-owned copies; broader `tst_local`, `tst_covers`, `tst_session`, `tst_settings` parity tests.
+2. **Phase 3:** migrate legacy playlist JSON; tag writes to playlist-owned copies; broader `tst_local`, `tst_covers`, `tst_session`, `tst_settings` parity/integration tests.
 3. **Phase 4:** inspect old SoundCloud and Spotify implementations in full; implement Rust providers, OAuth, keyring credential storage, librespot playback, library/search and unified provider trait.
 4. **Phase 5:** Material 3 artwork palette, design tokens, 15 motion primitives, 40 controls, theme/settings parity.
 5. **Phase 6:** inventory/port 25 shaders to WebGL2; spectrum/backdrop/material components, frame pacing and benchmark.

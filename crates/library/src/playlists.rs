@@ -23,6 +23,8 @@ pub enum PlaylistError {
     Missing,
     #[error("playlist name cannot be empty")]
     EmptyName,
+    #[error("playlist artwork must be a JPEG or PNG smaller than 20 MiB")]
+    InvalidArtwork,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -53,6 +55,7 @@ struct Envelope {
 pub struct LocalPlaylistStore {
     data_path: PathBuf,
     tracks_dir: PathBuf,
+    artwork_dir: PathBuf,
     playlists: Vec<LocalPlaylist>,
 }
 
@@ -60,6 +63,7 @@ impl LocalPlaylistStore {
     pub fn open(data_path: impl Into<PathBuf>) -> Result<Self, PlaylistError> {
         let data_path = data_path.into();
         let tracks_dir = data_path.with_file_name("local-playlist-tracks");
+        let artwork_dir = data_path.with_file_name("local-playlist-covers");
         let playlists = match fs::read(&data_path) {
             Ok(bytes) => serde_json::from_slice::<Envelope>(&bytes)
                 .ok()
@@ -72,6 +76,7 @@ impl LocalPlaylistStore {
         Ok(Self {
             data_path,
             tracks_dir,
+            artwork_dir,
             playlists,
         })
     }
@@ -107,14 +112,42 @@ impl LocalPlaylistStore {
         Ok(&self.playlists[0])
     }
 
-    pub fn update(&mut self, id: &str, name: &str, description: &str) -> Result<(), PlaylistError> {
+    pub fn update(
+        &mut self,
+        id: &str,
+        name: &str,
+        description: &str,
+        artwork: Option<&[u8]>,
+    ) -> Result<(), PlaylistError> {
         if name.trim().is_empty() {
             return Err(PlaylistError::EmptyName);
         }
+        let new_cover = artwork
+            .map(|bytes| write_artwork(&self.artwork_dir, bytes))
+            .transpose()?;
+        let previous = self.find_mut(id)?.clone();
         let playlist = self.find_mut(id)?;
         playlist.name = name.trim().to_owned();
         playlist.description = description.trim().to_owned();
-        self.persist()
+        if let Some(cover) = &new_cover {
+            playlist.artwork_path = Some(cover.clone());
+        }
+        if let Err(error) = self.persist() {
+            if let Some(playlist) = self.playlists.iter_mut().find(|playlist| playlist.id == id) {
+                *playlist = previous.clone();
+            }
+            if let Some(cover) = new_cover {
+                let _ = fs::remove_file(cover);
+            }
+            return Err(error);
+        }
+        if let (Some(old_cover), Some(new_cover)) = (previous.artwork_path, new_cover)
+            && old_cover != new_cover
+            && self.stored_artwork_path(&old_cover)
+        {
+            let _ = fs::remove_file(old_cover);
+        }
+        Ok(())
     }
 
     pub fn add_songs(&mut self, id: &str, songs: &[Song]) -> Result<usize, PlaylistError> {
@@ -185,6 +218,16 @@ impl LocalPlaylistStore {
             .ok_or(PlaylistError::Missing)
     }
 
+    fn stored_artwork_path(&self, path: &Path) -> bool {
+        let Ok(directory) = fs::canonicalize(&self.artwork_dir) else {
+            return false;
+        };
+        let Ok(path) = fs::canonicalize(path) else {
+            return false;
+        };
+        path.starts_with(directory)
+    }
+
     fn persist(&self) -> Result<(), PlaylistError> {
         let bytes = serde_json::to_vec_pretty(&Envelope {
             version: VERSION,
@@ -205,7 +248,7 @@ impl LocalPlaylistStore {
                 })
                 .collect();
         if !self.tracks_dir.exists() {
-            return Ok(());
+            return self.collect_unheld_artwork();
         }
         for playlist_entry in fs::read_dir(&self.tracks_dir)? {
             let playlist_entry = playlist_entry?;
@@ -228,8 +271,53 @@ impl LocalPlaylistStore {
                 fs::remove_dir(playlist_folder)?;
             }
         }
+        self.collect_unheld_artwork()?;
         Ok(())
     }
+
+    fn collect_unheld_artwork(&self) -> Result<(), PlaylistError> {
+        if !self.artwork_dir.exists() {
+            return Ok(());
+        }
+        let Ok(artwork_directory) = fs::canonicalize(&self.artwork_dir) else {
+            return Ok(());
+        };
+        let held: HashSet<PathBuf> = self
+            .playlists
+            .iter()
+            .filter_map(|playlist| playlist.artwork_path.as_ref())
+            .filter_map(|path| fs::canonicalize(path).ok())
+            .filter(|path| path.starts_with(&artwork_directory))
+            .collect();
+        for entry in fs::read_dir(&self.artwork_dir)? {
+            let entry = entry?;
+            if !entry.file_type()?.is_file() {
+                continue;
+            }
+            let path = fs::canonicalize(entry.path())?;
+            if !held.contains(&path) {
+                fs::remove_file(entry.path())?;
+            }
+        }
+        Ok(())
+    }
+}
+
+fn write_artwork(directory: &Path, bytes: &[u8]) -> Result<PathBuf, PlaylistError> {
+    if bytes.len() > 20 * 1024 * 1024 {
+        return Err(PlaylistError::InvalidArtwork);
+    }
+    let extension = if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        "png"
+    } else if bytes.starts_with(b"\xff\xd8\xff") {
+        "jpg"
+    } else {
+        return Err(PlaylistError::InvalidArtwork);
+    };
+    let sequence = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+    let path = directory.join(format!("cover-{sequence:x}.{extension}"));
+    atomic_write(&path, bytes)?;
+    Ok(path)
 }
 
 fn append_song(
@@ -436,5 +524,75 @@ mod tests {
         assert!(reopened.delete(&id).unwrap());
         assert!(!remaining.exists());
         assert!(reopened.playlists().is_empty());
+    }
+
+    #[test]
+    fn playlist_update_persists_metadata_and_replaces_its_owned_cover() {
+        let dir = TempDir::new();
+        let data = dir.0.join("local-playlists.json");
+        let mut store = LocalPlaylistStore::open(&data).unwrap();
+        let id = store
+            .create("Old", "old description", &[])
+            .unwrap()
+            .id
+            .clone();
+
+        store
+            .update(
+                &id,
+                "New",
+                "new description",
+                Some(b"\x89PNG\r\n\x1a\nfirst"),
+            )
+            .unwrap();
+        let first_cover = store.playlists()[0].artwork_path.clone().unwrap();
+        assert!(first_cover.starts_with(dir.0.join("local-playlist-covers")));
+        assert_eq!(fs::read(&first_cover).unwrap(), b"\x89PNG\r\n\x1a\nfirst");
+
+        store
+            .update(&id, "New", "updated description", None)
+            .unwrap();
+        assert_eq!(
+            store.playlists()[0].artwork_path.as_ref(),
+            Some(&first_cover)
+        );
+
+        store
+            .update(
+                &id,
+                "Renamed",
+                "latest description",
+                Some(b"\xff\xd8\xffsecond"),
+            )
+            .unwrap();
+        let second_cover = store.playlists()[0].artwork_path.clone().unwrap();
+        assert_ne!(first_cover, second_cover);
+        assert!(!first_cover.exists());
+        assert_eq!(fs::read(&second_cover).unwrap(), b"\xff\xd8\xffsecond");
+
+        let mut reopened = LocalPlaylistStore::open(&data).unwrap();
+        let playlist = &reopened.playlists()[0];
+        assert_eq!(playlist.name, "Renamed");
+        assert_eq!(playlist.description, "latest description");
+        assert_eq!(playlist.artwork_path.as_ref(), Some(&second_cover));
+        assert!(reopened.delete(&id).unwrap());
+        assert!(!second_cover.exists());
+    }
+
+    #[test]
+    fn playlist_update_rejects_invalid_cover_without_changing_metadata() {
+        let dir = TempDir::new();
+        let data = dir.0.join("local-playlists.json");
+        let mut store = LocalPlaylistStore::open(&data).unwrap();
+        let id = store.create("Old", "description", &[]).unwrap().id.clone();
+
+        assert!(
+            store
+                .update(&id, "New", "changed", Some(b"not an image"))
+                .is_err()
+        );
+        assert_eq!(store.playlists()[0].name, "Old");
+        assert_eq!(store.playlists()[0].description, "description");
+        assert_eq!(store.playlists()[0].artwork_path, None);
     }
 }

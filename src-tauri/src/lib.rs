@@ -11,6 +11,7 @@ struct LibraryState {
     library: Arc<std::sync::Mutex<LocalLibrary>>,
     playlists: Arc<std::sync::Mutex<LocalPlaylistStore>>,
     artwork_dir: std::path::PathBuf,
+    playlist_artwork_dir: std::path::PathBuf,
     scanning: Arc<AtomicBool>,
 }
 
@@ -22,14 +23,52 @@ struct LocalSongView {
     artwork_url: Option<String>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LocalPlaylistView {
+    #[serde(flatten)]
+    playlist: LocalPlaylist,
+    artwork_url: Option<String>,
+}
+
 #[tauri::command]
-fn local_playlists(state: tauri::State<'_, LibraryState>) -> Result<Vec<LocalPlaylist>, String> {
+fn local_playlists(
+    state: tauri::State<'_, LibraryState>,
+) -> Result<Vec<LocalPlaylistView>, String> {
+    let artwork_dir = &state.inner().playlist_artwork_dir;
     let playlists = state
         .inner()
         .playlists
         .lock()
         .map_err(|_| "playlist lock poisoned")?;
-    Ok(playlists.playlists().to_vec())
+    Ok(playlists
+        .playlists()
+        .iter()
+        .cloned()
+        .map(|playlist| {
+            let artwork_url = playlist.artwork_path.as_ref().and_then(|path| {
+                let directory = std::fs::canonicalize(artwork_dir).ok()?;
+                let path = std::fs::canonicalize(path).ok()?;
+                if !path.starts_with(directory) {
+                    return None;
+                }
+                let bytes = std::fs::read(&path).ok()?;
+                let mime = if path
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("png"))
+                {
+                    "image/png"
+                } else {
+                    "image/jpeg"
+                };
+                Some(format!("data:{mime};base64,{}", base64_encode(&bytes)))
+            });
+            LocalPlaylistView {
+                playlist,
+                artwork_url,
+            }
+        })
+        .collect())
 }
 
 #[tauri::command]
@@ -45,6 +84,23 @@ fn local_playlist_create(
     playlists
         .create(&name, "", &[])
         .cloned()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn local_playlist_update(
+    id: String,
+    name: String,
+    description: String,
+    artwork: Option<Vec<u8>>,
+    state: tauri::State<'_, LibraryState>,
+) -> Result<(), String> {
+    state
+        .inner()
+        .playlists
+        .lock()
+        .map_err(|_| "playlist lock poisoned")?
+        .update(&id, &name, &description, artwork.as_deref())
         .map_err(|error| error.to_string())
 }
 
@@ -618,6 +674,7 @@ pub fn run() {
             library: Arc::new(std::sync::Mutex::new(local_library)),
             playlists: Arc::new(std::sync::Mutex::new(playlist_store)),
             artwork_dir: library_dir.join("local-artwork"),
+            playlist_artwork_dir: library_dir.join("local-playlist-covers"),
             scanning: Arc::new(AtomicBool::new(true)),
         })
         .invoke_handler(tauri::generate_handler![
@@ -653,6 +710,7 @@ pub fn run() {
             local_song_edit_tags,
             local_playlists,
             local_playlist_create,
+            local_playlist_update,
             local_playlist_add_songs,
             local_playlist_delete,
             local_playlist_remove_song,

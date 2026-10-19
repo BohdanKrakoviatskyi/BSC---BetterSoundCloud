@@ -153,3 +153,10 @@ Migration workspace is this sibling directory and has its own git repository on 
 - Added a Vitest regression verifying byte-for-byte conversion of a selected image blob to the numeric array used by Tauri IPC.
 - Verification: Rust workspace tests (36), strict Clippy, rustfmt check, ESLint, TypeScript/Vite build, Vitest (3), Playwright (1), Windows Tauri `--no-bundle` release build and `git diff --check` all pass.
 - Phase 3 remains open: legacy playlist JSON migration, playlist metadata/artwork editing, editing tags in playlist-owned copies and broader parity/integration tests.
+
+## Phase 3 playlist metadata and cover editing - 2026-10-19
+- Added playlist name/description editing and owned JPEG/PNG cover storage. Cover updates validate image signatures and a 20 MiB limit, persist via an atomic file write, keep the previous cover if JSON persistence fails, remove replaced covers after success and collect cover files when their playlist is deleted.
+- `local_playlists` returns an artwork data URL only after canonical path validation under the application-owned playlist cover directory. The React playlist view now displays and edits playlist name, description and cover via the typed Tauri command.
+- Added Rust tests for metadata and cover persistence across reopen, replacing/deleting old covers, preserving covers during text-only updates, and rejecting invalid images without mutating metadata.
+- Verification: workspace Rust tests (38), strict Clippy, rustfmt, ESLint, TypeScript/Vite build, Vitest (3), Playwright (1), Windows Tauri release no-bundle build and `git diff --check` all pass.
+- Phase 3 remains open: migrate legacy playlist JSON; allow tag edits on playlist-owned copies; broaden local playlist/tag command and UI parity tests.

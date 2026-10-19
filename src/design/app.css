@@ -80,6 +80,18 @@ h1, h2, h3, p { margin-top: 0; }
 .tag-editor input:not([type="checkbox"]) { width: 100%; min-width: 0; padding: 7px 9px; border: 1px solid var(--outline-soft); border-radius: 7px; background: var(--surface); color: var(--text); }
 .tag-editor .tag-remove-art { display: flex; align-items: center; gap: 7px; }
 .tag-editor .primary-button { justify-self: end; }
+.playlist-editor { margin: 12px 0; color: var(--text-muted); font-size: 12px; }
+.playlist-editor summary { width: fit-content; cursor: pointer; }
+.playlist-editor form { display: grid; max-width: 540px; grid-template-columns: repeat(2, minmax(140px, 1fr)); gap: 8px; padding: 10px 0; }
+.playlist-editor label { display: grid; gap: 4px; }
+.playlist-editor label:nth-child(3) { grid-column: 1 / -1; }
+.playlist-editor input:not([type="checkbox"]) { width: 100%; min-width: 0; padding: 7px 9px; border: 1px solid var(--outline-soft); border-radius: 7px; background: var(--surface); color: var(--text); }
+.playlist-editor .primary-button { justify-self: end; }
+.playlist-detail-heading { display: flex; align-items: center; gap: 14px; margin: 14px 0; }
+.playlist-detail-heading img,.playlist-detail-heading .song-art { width: 72px; height: 72px; border-radius: 16px; object-fit: cover; }
+.playlist-detail-heading div { display: grid; gap: 6px; }
+.playlist-detail-heading strong { color: var(--text); font-size: 16px; }
+.playlist-detail-heading small { color: var(--text-faint); }
 .song-art { display: grid; width: 39px; height: 39px; flex: 0 0 39px; place-items: center; overflow: hidden; border-radius: 11px; background: var(--surface-raised); color: var(--accent); }
 .song-art img { width: 100%; height: 100%; object-fit: cover; }
 .song-meta { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 4px; }
