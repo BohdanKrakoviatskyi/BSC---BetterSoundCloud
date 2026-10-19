@@ -1,4 +1,4 @@
-use crate::ProviderError;
+use crate::{ProviderError, ProviderPlaylist, ProviderTrack};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use reqwest::{Client, StatusCode};
 use serde_json::Value;
@@ -11,6 +11,116 @@ use url::Url;
 use zeroize::Zeroizing;
 
 const REDIRECT_URI: &str = "http://127.0.0.1:8898/login";
+
+pub fn spotify_track_from_json(value: Value) -> Option<ProviderTrack> {
+    if value
+        .get("type")
+        .and_then(Value::as_str)
+        .is_some_and(|kind| kind != "track")
+    {
+        return None;
+    }
+    let id = value.get("id")?.as_str()?.trim();
+    if id.is_empty() {
+        return None;
+    }
+    let artists = value.get("artists").and_then(Value::as_array);
+    let artist = artists
+        .and_then(|items| items.first())
+        .and_then(|item| item.get("name"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let album = value.get("album");
+    Some(ProviderTrack {
+        provider: "spotify".into(),
+        id: id.to_owned(),
+        uri: value
+            .get("uri")
+            .and_then(Value::as_str)
+            .filter(|uri| !uri.is_empty())
+            .map(str::to_owned)
+            .unwrap_or_else(|| format!("spotify:track:{id}")),
+        title: value
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+        permalink: value
+            .get("external_urls")
+            .and_then(|urls| urls.get("spotify"))
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        artwork_url: album.and_then(|album| preferred_image(album.get("images"))),
+        duration_ms: value
+            .get("duration_ms")
+            .and_then(Value::as_u64)
+            .unwrap_or_default(),
+        artist_id: artists
+            .and_then(|items| items.first())
+            .and_then(|item| item.get("id"))
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        artist_name: artist.to_owned(),
+        playback_count: 0,
+        likes_count: 0,
+    })
+}
+
+pub fn spotify_playlist_from_json(value: Value) -> Option<ProviderPlaylist> {
+    let id = value.get("id")?.as_str()?.trim();
+    if id.is_empty() {
+        return None;
+    }
+    Some(ProviderPlaylist {
+        provider: "spotify".into(),
+        id: id.to_owned(),
+        uri: value
+            .get("uri")
+            .and_then(Value::as_str)
+            .filter(|uri| !uri.is_empty())
+            .map(str::to_owned)
+            .unwrap_or_else(|| format!("spotify:playlist:{id}")),
+        title: value
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+        permalink: value
+            .get("external_urls")
+            .and_then(|urls| urls.get("spotify"))
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        artwork_url: preferred_image(value.get("images")),
+        track_count: value
+            .get("items")
+            .and_then(|items| items.get("total"))
+            .or_else(|| value.get("tracks").and_then(|tracks| tracks.get("total")))
+            .and_then(Value::as_u64)
+            .unwrap_or_default(),
+        owner_name: value
+            .get("owner")
+            .and_then(|owner| owner.get("display_name"))
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+    })
+}
+
+fn preferred_image(images: Option<&Value>) -> Option<String> {
+    images?
+        .as_array()?
+        .iter()
+        .filter_map(|image| {
+            let url = image.get("url")?.as_str()?;
+            if url.is_empty() {
+                return None;
+            }
+            let width = image.get("width").and_then(Value::as_u64).unwrap_or(640);
+            Some((width.abs_diff(640), url.to_owned()))
+        })
+        .min_by_key(|(distance, _)| *distance)
+        .map(|(_, url)| url)
+}
 
 pub struct PendingSpotifyAuthorization {
     client_id: String,
