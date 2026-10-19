@@ -8,9 +8,9 @@ Read-only source: `C:\Users\krako\Desktop\BSC-main`
 ## Resume here first
 
 1. In PowerShell, enter the migration repo and run `git status --short` and `git branch --show-current`. Stay on `codex/resonance-tauri-migration`; do not change repository access or contributors.
-2. Latest pushed commit: `6c73913 test: preserve queue entries after playback errors`. It adds PCM WAV bit-depth/sample-rate fixtures and queue retry regression on top of the cross-platform packaging fixes.
-3. CI run `39293399821` passed all jobs on `e346601`: Playwright, quality, Windows NSIS, macOS DMG, Linux AppImage/DEB, and artifact upload on all three platforms. Runs for `9ccbe80` and `6c73913` are pending/in progress.
-4. Local checks at `6c73913`: 49 Rust tests, strict Clippy, rustfmt, and `git diff --check` pass. Frontend checks and all three platform bundles passed on parent commit `e346601`.
+2. Latest pushed commit: `4c6606f docs: refresh audio migration handoff`. Current uncommitted work adds the initial Rust provider crate and SoundCloud client; finish workspace verification, then commit and push this checkpoint.
+3. CI run `39293399821` passed all jobs on `e346601`: Playwright, quality, Windows NSIS, macOS DMG, Linux AppImage/DEB, and artifact upload on all three platforms. Runs for `9ccbe80`, `6c73913`, and `4c6606f` were in progress at last check; query GitHub Actions before updating this status.
+4. Local checks at this uncommitted provider checkpoint: full `cargo test --workspace` passes (55 tests total), workspace strict Clippy passes, and `cargo fmt --all -- --check` plus `git diff --check` must be rerun after final doc updates.
 5. Remaining audio checks: real compressed-format fixtures, output-device runtime/listening, and legacy spectrum comparisons. Native file picker and queue UI also remain.
 6. Keep Cargo output outside the repo when space is limited: `$env:CARGO_TARGET_DIR="$env:TEMP\resonance-target"`.
 
@@ -28,7 +28,7 @@ Read-only source: `C:\Users\krako\Desktop\BSC-main`
 
 1. **Phase 2:** output-device runtime checks; real MP3/FLAC/Vorbis/AAC/ALAC/AIFF fixtures and seek; remaining legacy spectrum comparisons; previous/queue UI and native file picker.
 2. **Phase 3:** broaden `tst_local`, `tst_covers`, `tst_session`, `tst_settings` parity/integration tests; add command/UI flow coverage; verify scan cancellation/stale-result behavior and native folder picking.
-3. **Phase 4:** inspect old SoundCloud and Spotify implementations in full; implement Rust providers, OAuth, keyring credential storage, librespot playback, library/search and unified provider trait.
+3. **Phase 4:** initial `crates/providers` trait/models and SoundCloud HTTP paths are implemented locally, with legacy card mapping and pagination-origin tests. Not yet integrated into Tauri commands/UI. Continue full profile/details/stream behavior, auth/keyring, native playlists, lyrics, Spotify OAuth/API/keyring/librespot; inspect each old Spotify source file completely before porting it. The old checkout has no Go files or `go.mod`; `docs/SOUNDCLOUD_API_REFERENCE.md` is incomplete. In particular, confirm the account-playlist endpoint against the actual old sidecar before treating it as parity.
 4. **Phase 5:** Material 3 artwork palette, design tokens, 15 motion primitives, 40 controls, theme/settings parity.
 5. **Phase 6:** inventory/port 25 shaders to WebGL2; spectrum/backdrop/material components, frame pacing and benchmark.
 6. **Phase 7:** port all 18 screens, shell navigation and window/view behavior.
@@ -47,3 +47,10 @@ The specification defines Phases 0–11. Phase 0–1 and parts of 2–3 are done
 - Legacy source contains no audio fixture corpus; generated WAVs do not validate every decoder.
 - Enabling Tauri asset protocol with empty scope was rejected by automatic approval review as potentially broad local-file access. The change was not applied; indexed artwork is sent through validated IPC as data URLs.
 - Do not change contributor or repository access settings.
+
+## Phase 4 provider foundation - 2026-10-19
+- Read `src/provider/SoundCloud.cpp`, `SoundCloud.h`, `SidecarClient.cpp`, `SidecarClient.h`, and `docs/SOUNDCLOUD_API_REFERENCE.md` from the old read-only checkout. The Go sidecar source is absent, so old RPC details beyond these files/docs cannot be verified yet.
+- Added `crates/providers` to the workspace with shared provider track/artist/playlist/page types, a `MusicProvider` trait, and an async SoundCloud REST client for search, artist profile/tracks/likes, playlists/playlist tracks, track details, and related tracks.
+- SoundCloud card mapping accepts both legacy sidecar camelCase fields and v2 API snake_case fields. Pagination is restricted to the configured API origin so a malicious `next_href` cannot receive the OAuth header or client ID.
+- Focused provider suite: 6 tests pass; workspace strict Clippy passes. Full workspace test build is still running. No provider commands/UI or auth/keyring integration has shipped yet; do not mark Phase 4 complete.
+- Follow-up: add stream resolution/download/cache, artist/track details, lyrics parity, robust HTTP contract tests; inspect Spotify `WebApi.cpp`, `OAuthFlow.cpp`, `CredentialStore.cpp` and types in full before porting. Confirm `playlists.mine` against sidecar source if available; current native route is a best-effort inference.
