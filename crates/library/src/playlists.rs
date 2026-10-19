@@ -1,6 +1,7 @@
 use crate::Song;
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::HashMap,
     collections::HashSet,
     fs, io,
     path::{Path, PathBuf},
@@ -32,6 +33,15 @@ pub struct LocalPlaylist {
     pub description: String,
     pub artwork_path: Option<PathBuf>,
     pub songs: Vec<Song>,
+    #[serde(default)]
+    origins: HashMap<String, SourceCopy>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct SourceCopy {
+    size: u64,
+    modified_ns: u128,
+    path: PathBuf,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -87,9 +97,10 @@ impl LocalPlaylistStore {
             description: description.trim().to_owned(),
             artwork_path: None,
             songs: Vec::new(),
+            origins: HashMap::new(),
         };
         for song in songs {
-            playlist.songs.push(self.copy_song(&id, song)?);
+            append_song(&self.tracks_dir, &mut playlist, song)?;
         }
         self.playlists.insert(0, playlist);
         self.persist()?;
@@ -107,12 +118,12 @@ impl LocalPlaylistStore {
     }
 
     pub fn add_songs(&mut self, id: &str, songs: &[Song]) -> Result<usize, PlaylistError> {
-        let mut copied = Vec::new();
+        let tracks_dir = self.tracks_dir.clone();
+        let playlist = self.find_mut(id)?;
         for song in songs {
-            copied.push(self.copy_song(id, song)?);
+            append_song(&tracks_dir, playlist, song)?;
         }
-        let count = copied.len();
-        self.find_mut(id)?.songs.extend(copied);
+        let count = songs.len();
         self.persist()?;
         Ok(count)
     }
@@ -167,46 +178,6 @@ impl LocalPlaylistStore {
         Ok(true)
     }
 
-    fn copy_song(&self, id: &str, song: &Song) -> Result<Song, PlaylistError> {
-        if !song.path.is_file() {
-            return Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                format!("{} is unavailable", song.path.display()),
-            )
-            .into());
-        }
-        let source = fs::canonicalize(&song.path)?;
-        let safe_id = id.replace(':', "_");
-        let folder = self.tracks_dir.join(safe_id);
-        fs::create_dir_all(&folder)?;
-        let mut target = folder.join(source.file_name().unwrap_or_default());
-        if target.exists() {
-            let stem = source.file_stem().unwrap_or_default().to_string_lossy();
-            let ext = source
-                .extension()
-                .map(|value| format!(".{}", value.to_string_lossy()))
-                .unwrap_or_default();
-            let index = fs::read_dir(&folder)?.count();
-            target = folder.join(format!("{stem}-{index}{ext}"));
-        }
-        fs::copy(&source, &target)?;
-        copy_companion(&source, &target, "lrc")?;
-        copy_companion(&source, &target, "jpg")?;
-        copy_companion(&source, &target, "jpeg")?;
-        copy_companion(&source, &target, "png")?;
-        let mut tags = song.tags.clone();
-        if let Some(art) = tags.artwork_path.as_ref().filter(|path| path.is_file()) {
-            let art_target = target
-                .with_extension("cover")
-                .with_extension(art.extension().unwrap_or_default());
-            fs::copy(art, &art_target)?;
-            tags.artwork_path = Some(art_target.clone());
-        }
-        let mut kept = Song::from_tags(&target, tags);
-        kept.instance_id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-        Ok(kept)
-    }
-
     fn find_mut(&mut self, id: &str) -> Result<&mut LocalPlaylist, PlaylistError> {
         self.playlists
             .iter_mut()
@@ -236,18 +207,119 @@ impl LocalPlaylistStore {
         if !self.tracks_dir.exists() {
             return Ok(());
         }
-        for entry in fs::read_dir(&self.tracks_dir)? {
-            let entry = entry?;
-            if entry.file_type()?.is_dir() {
-                let folder = fs::canonicalize(entry.path())?;
-                let is_held = held.iter().any(|path| path.starts_with(&folder));
-                if !is_held {
-                    fs::remove_dir_all(entry.path())?;
+        for playlist_entry in fs::read_dir(&self.tracks_dir)? {
+            let playlist_entry = playlist_entry?;
+            if !playlist_entry.file_type()?.is_dir() {
+                continue;
+            }
+            let playlist_folder = playlist_entry.path();
+            for copy_entry in fs::read_dir(&playlist_folder)? {
+                let copy_entry = copy_entry?;
+                if !copy_entry.file_type()?.is_dir() {
+                    continue;
                 }
+                let copy_folder = fs::canonicalize(copy_entry.path())?;
+                let is_held = held.iter().any(|path| path.starts_with(&copy_folder));
+                if !is_held {
+                    fs::remove_dir_all(copy_entry.path())?;
+                }
+            }
+            if fs::read_dir(&playlist_folder)?.next().is_none() {
+                fs::remove_dir(playlist_folder)?;
             }
         }
         Ok(())
     }
+}
+
+fn append_song(
+    tracks_dir: &Path,
+    playlist: &mut LocalPlaylist,
+    song: &Song,
+) -> Result<(), PlaylistError> {
+    if !song.path.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("{} is unavailable", song.path.display()),
+        )
+        .into());
+    }
+    let source = fs::canonicalize(&song.path)?;
+    let key = source.to_string_lossy().into_owned();
+    let metadata = fs::metadata(&source)?;
+    let modified_ns = metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    if let Some(origin) = playlist.origins.get(&key)
+        && origin.size == metadata.len()
+        && origin.modified_ns == modified_ns
+        && origin.path.is_file()
+        && let Some(mut reused) = playlist
+            .songs
+            .iter()
+            .find(|item| item.path == origin.path)
+            .cloned()
+    {
+        reused.instance_id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+        playlist.songs.push(reused);
+        return Ok(());
+    }
+    let kept = copy_song(tracks_dir, &playlist.id, song, &source)?;
+    playlist.origins.insert(
+        key,
+        SourceCopy {
+            size: metadata.len(),
+            modified_ns,
+            path: kept.path.clone(),
+        },
+    );
+    playlist.songs.push(kept);
+    Ok(())
+}
+
+fn copy_song(
+    tracks_dir: &Path,
+    id: &str,
+    song: &Song,
+    source: &Path,
+) -> Result<Song, PlaylistError> {
+    let safe_id = id.replace(':', "_");
+    let folder = tracks_dir
+        .join(safe_id)
+        .join(format!("{:x}", NEXT_ID.fetch_add(1, Ordering::Relaxed)));
+    fs::create_dir_all(&folder)?;
+    let target = folder.join(source.file_name().unwrap_or_default());
+    fs::copy(source, &target)?;
+    copy_companion(source, &target, "lrc")?;
+    for stem in ["cover", "folder", "front", "album", "albumart", "artwork"] {
+        for extension in ["jpg", "jpeg", "png", "webp"] {
+            let companion = source
+                .parent()
+                .unwrap_or(Path::new("."))
+                .join(format!("{stem}.{extension}"));
+            if companion.is_file() {
+                fs::copy(
+                    &companion,
+                    folder.join(companion.file_name().unwrap_or_default()),
+                )?;
+            }
+        }
+    }
+    let mut tags = song.tags.clone();
+    if let Some(art) = tags.artwork_path.as_ref().filter(|path| path.is_file()) {
+        let art_target = folder.join(format!(
+            "artwork.{}",
+            art.extension().unwrap_or_default().to_string_lossy()
+        ));
+        fs::copy(art, &art_target)?;
+        tags.artwork_path = Some(art_target);
+    }
+    let mut kept = Song::from_tags(&target, tags);
+    kept.instance_id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+    Ok(kept)
 }
 
 fn copy_companion(source: &Path, target: &Path, extension: &str) -> Result<(), PlaylistError> {
@@ -342,19 +414,23 @@ mod tests {
             assert_eq!(playlist.name, "Night");
             assert_eq!(playlist.songs.len(), 3);
             assert_ne!(playlist.songs[0].uri, one.uri);
-            assert_ne!(playlist.songs[0].path, playlist.songs[2].path);
+            assert_eq!(playlist.songs[0].path, playlist.songs[2].path);
             assert_ne!(playlist.songs[0].instance_id, playlist.songs[2].instance_id);
             assert!(playlist.songs[0].path.with_extension("lrc").exists());
             copied_uri = playlist.songs[0].uri.clone();
+            let second_uri = playlist.songs[1].uri.clone();
+            let occurrence_ids_differ =
+                playlist.songs[0].instance_id != playlist.songs[2].instance_id;
+            assert!(occurrence_ids_differ);
             store
-                .reorder(&id, &[playlist.songs[1].uri.clone(), copied_uri.clone()])
+                .reorder(&id, &[second_uri, copied_uri.clone()])
                 .unwrap();
             assert_eq!(store.playlists()[0].songs[0].name, "Two");
-            assert_eq!(store.remove_uri(&id, &copied_uri).unwrap(), 1);
+            assert_eq!(store.remove_uri(&id, &copied_uri).unwrap(), 2);
             assert!(!one_path.with_file_name("nope").exists());
         }
         let mut reopened = LocalPlaylistStore::open(&data).unwrap();
-        assert_eq!(reopened.playlists()[0].songs.len(), 2);
+        assert_eq!(reopened.playlists()[0].songs.len(), 1);
         let remaining = reopened.playlists()[0].songs[0].path.clone();
         assert!(remaining.exists());
         assert!(reopened.delete(&id).unwrap());

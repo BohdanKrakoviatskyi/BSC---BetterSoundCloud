@@ -7,49 +7,43 @@ Read-only source: `C:\Users\krako\Desktop\BSC-main`
 
 ## Resume here first
 
-1. Open PowerShell in `C:\Users\krako\Desktop\resonance-tauri` and run `git status --short` and `git branch --show-current`. Stay on `codex/resonance-tauri-migration`; do not change contributor settings or repository access.
-2. Current uncommitted artwork follow-up touches `crates/library/src/lib.rs`, `crates/library/src/local.rs`, `crates/library/src/tags_edit.rs`, `src-tauri/src/lib.rs`, `src/App.tsx`, and `src/app/commands.ts`. Previous pushed checkpoint `00a220a` includes tag writing/edit form.
-3. Set Cargo output outside the repo: `$env:CARGO_TARGET_DIR="$env:TEMP\resonance-target"`.
-4. The initial copy cleanup failure is fixed; the targeted playlist copy/reopen/delete test passes. Re-run it after any storage edits.
-5. Artwork extraction is implemented: embedded pictures are hashed into `local-artwork`; album-folder cover names are fallback; Tauri sends validated artwork bytes for indexed songs as data URLs. Do not enable Tauri asset protocol without a narrowly scoped reviewed design. Next expose cover replacement UI and finish playlist deduplication/migration.
-6. Rerun `cargo fmt --all`, `cargo test --offline --workspace`, `cargo clippy --offline --workspace --all-targets -- -D warnings`, `cargo fmt --all --check`, `npm.cmd run lint`, `npm.cmd run build`, `npm.cmd test`, and `npm.cmd run test:e2e`. Use scoped sandbox escalation only when writes to this sibling repo are denied.
-7. Tauri/React create/list/add/remove/reorder/delete integrations exist. Current artwork changes passed workspace tests (36), Clippy/fmt, frontend checks and Windows Tauri desktop build. Update docs, commit and push this checkpoint, then continue with playlist deduplication/migration and artwork replacement UI.
+1. In PowerShell, enter the migration repo and run `git status --short` and `git branch --show-current`. Stay on `codex/resonance-tauri-migration`; do not change repository access or contributors.
+2. The current uncommitted change is `crates/library/src/playlists.rs`: repeated unchanged source tracks in one playlist reuse a stored copy, each occurrence gets a distinct ID, and garbage collection removes copied subfolders only when no occurrence refers to them.
+3. Keep Cargo output outside the repo: `$env:CARGO_TARGET_DIR="$env:TEMP\resonance-target"`.
+4. Run the focused regression: `cargo test --offline -p library playlists::tests::playlist_copies_tracks_and_companions_persists_order_and_collects_on_delete -- --nocapture`.
+5. Run complete Windows verification: `cargo fmt --all`; `cargo test --offline --workspace`; `cargo clippy --offline --workspace --all-targets -- -D warnings`; `cargo fmt --all --check`; `npm.cmd run lint`; `npm.cmd run build`; `npm.cmd test`; `npm.cmd run test:e2e`; `npm.cmd run desktop:build -- --no-bundle`; `git diff --check`.
+6. Update `MIGRATION_LOG.md`, `PHASE3_PLAN.md` and `PARITY_CHECKLIST.md` from the results, then commit and push to the existing branch. Continue Phase 3 before Phase 4.
 
 ## Completed and pushed
 
-- Phase 0 reconnaissance documents and parity baseline.
-- Phase 1 Tauri 2 / React 19 / TypeScript / Vite shell and Windows desktop build setup.
-- Phase 2 substantial audio core: local decoding, output, seek, queue/preload, crossfade/advance, DSP, spectrum. Checkpoints pushed through `7ddca52`.
-- Phase 3.1 scanner and Saved Songs view; Phase 3.2 source add/remove/rescan and settings migration. Commit `589dd51 feat: manage local library sources` is pushed to `origin/codex/resonance-tauri-migration`.
-- Phase 3.3/3.4 candidate checks: 36 Rust tests, strict Clippy/fmt, ESLint, frontend build, Vitest (2), Playwright (1) and Windows desktop Tauri build pass. Executable: `%TEMP%\\resonance-target\\release\\resonance.exe`.
-
-## In progress
-
-- Phase 3.3 local playlist data layer has been started but is verified at crate/workspace/frontend/desktop-build level, but not yet full legacy parity; not committed. `playlists.rs` currently copies selected files and companion files, stores ordered song records atomically, and implements CRUD/reorder operations. The copy cleanup test passes after canonical-path comparison fix.
-- Current parity gaps: legacy playlists reuse an unchanged source copy per playlist, migrate old outside-path playlist records and support cover editing. Embedded/folder artwork is extracted for display; cover replacement UI and editing playlist-owned copies remain.
+- Phase 0 reconnaissance documents and parity baseline; Phase 1 Tauri 2 / React 19 / TypeScript / Vite shell.
+- Substantial Phase 2 audio core: local decoding/output, seek, queue/preload, crossfade/advance, DSP and spectrum. Phase remains open.
+- Phase 3.1 scanner/Saved Songs and 3.2 local source management/settings migration.
+- Phase 3.3 playlist CRUD, copy-on-add, persistence/order, play/add/remove/reorder UI and desktop build.
+- Phase 3.4 indexed local tag editing via Lofty, plus embedded/folder artwork extraction and validated artwork data URLs.
+- Latest pushed checkpoint `67baab0 feat: extract local artwork safely`.
+- Most recent full verification before the current playlist follow-up: 36 Rust tests, strict Clippy/fmt, ESLint, frontend build, Vitest (2), Playwright (1), and Windows Tauri no-bundle build passed.
 
 ## Remaining work by phase
 
-1. **Phase 2 completion:** output-device runtime check; fixture-based MP3/FLAC/Vorbis/AAC/ALAC/AIFF decoding and seek checks; remaining legacy spectrum comparisons; previous-track and queue UI; native file picker. Some require fixtures/tooling and runtime environments not present on this Windows machine.
-2. **Phase 3 completion:** finish playlist copy/persistence/migration and UI; Lofty tag writes and embedded/folder art extraction/editor; playlist art; parity tests for `tst_local`, `tst_covers`, `tst_session`, and `tst_settings`.
-3. **Phase 4 providers:** inspect old SoundCloud Go sidecar and Spotify session/web API/librespot sources in full; implement SoundCloud and Spotify in Rust, keyring credentials, OAuth and unified provider interface.
-4. **Phase 5 design:** port artwork-derived Material 3 palette, design tokens, all 15 motion primitives and 40 controls; add settings UI and theme parity.
-5. **Phase 6 graphics:** inventory and port all 25 shaders to WebGL2, spectrum/backdrop/material components, frame pacing and benchmark.
-6. **Phase 7 screens:** inspect and port all 18 screens, shell navigation and window/view behavior.
-7. **Phase 8 immersive:** lyrics, queue, backdrop, equalizer, sound/sleep panels and image/GIF/video wallpapers.
-8. **Phase 9 system integration:** MPRIS, media keys, Now Playing, tray, lock screen and updater progress.
-9. **Phase 10 packaging:** macOS DMG, Windows ZIP/MSI, Linux AppImage/PKGBUILD, version sync and release CI.
-10. **Phase 11 final audit:** walk every checkbox, run all release builds/tests/lints on target platforms, search for stubs/TODO markers, document evidence and limitations. Do not call migration complete before this passes.
+1. **Phase 2:** output-device runtime checks; real MP3/FLAC/Vorbis/AAC/ALAC/AIFF fixtures and seek; remaining legacy spectrum comparisons; previous/queue UI and native file picker.
+2. **Phase 3:** finish playlist deduplication verification; migrate legacy playlist JSON; playlist metadata/artwork editing; cover replacement UI and tag writes to playlist-owned copies; broader `tst_local`, `tst_covers`, `tst_session`, `tst_settings` parity tests.
+3. **Phase 4:** inspect old SoundCloud and Spotify implementations in full; implement Rust providers, OAuth, keyring credential storage, librespot playback, library/search and unified provider trait.
+4. **Phase 5:** Material 3 artwork palette, design tokens, 15 motion primitives, 40 controls, theme/settings parity.
+5. **Phase 6:** inventory/port 25 shaders to WebGL2; spectrum/backdrop/material components, frame pacing and benchmark.
+6. **Phase 7:** port all 18 screens, shell navigation and window/view behavior.
+7. **Phase 8:** immersive lyrics/queue/backdrop/equalizer/sound/sleep panels and image/GIF/video wallpapers.
+8. **Phase 9:** MPRIS, media keys, Now Playing, tray, lock screen and updater progress.
+9. **Phase 10:** macOS DMG, Windows ZIP/MSI, Linux AppImage/PKGBUILD, version sync and release CI.
+10. **Phase 11:** audit every parity checkbox, run release builds/tests/lints across target platforms, search for stubs/TODO markers, document evidence and limitations.
 
-## Approximate remaining size
+## Progress estimate and constraints
 
-The source specification contains 12 phases (0Р Р†Р вЂљРІР‚Сљ11); Phases 0Р Р†Р вЂљРІР‚Сљ1 and portions of 2Р Р†Р вЂљРІР‚Сљ3 are done. Roughly 8 full phases plus the remaining portions of Phases 2Р Р†Р вЂљРІР‚Сљ3 remain. This is a large migration, likely many implementation/checkpoint cycles; do not equate a passing shell build with feature parity. Update this estimate when a phase is audited against `PARITY_CHECKLIST.md`.
+The specification defines Phases 0–11. Phase 0–1 and parts of 2–3 are done; approximately eight full phases plus the remainder of Phases 2–3 are left. This is a large migration with many implementation/checkpoint cycles; no claim of full feature parity is warranted yet.
 
-## Important decisions and constraints
-
-- Legacy DSP source uses six EQ bands; preserve that observed behavior although the prompt summary mentions ten.
-- Existing user explicitly authorized autonomous local work and creating/committing/pushing a branch. The migration branch exists and the previous verified checkpoint push succeeded. Do not add contributors or change access settings.
-- Keep `BSC-main` read-only. Do not modify or delete anything there.
-- Only Windows has been checked locally; macOS/Linux need CI evidence.
-- Native dialog plugin was unavailable from local cache/network; path entry and drag/drop remain temporary until a supported dialog dependency can be obtained.
-- Original source tests contain no audio fixture corpus; generated WAV fixtures do not validate every decoder.
+- Keep `BSC-main` read-only.
+- Only Windows has been verified locally; macOS and Linux need CI evidence.
+- Native dialog dependency was unavailable locally; path entry/drag-drop remain interim.
+- Legacy source contains no audio fixture corpus; generated WAVs do not validate every decoder.
+- Enabling Tauri asset protocol with empty scope was rejected by automatic approval review as potentially broad local-file access. The change was not applied; indexed artwork is sent through validated IPC as data URLs.
+- Do not change contributor or repository access settings.

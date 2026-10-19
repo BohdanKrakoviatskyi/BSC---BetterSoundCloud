@@ -141,3 +141,9 @@ Migration workspace is this sibling directory and has its own git repository on 
 - Tauri local-song responses include a data URL only for the indexed track's artwork path, after checking that the path is either under the app artwork cache or adjacent to that indexed track. The frontend no longer needs a local-file URL protocol to display covers.
 - Tauri asset protocol enablement with empty scope was rejected by automatic approval review because it could broaden webview access to local files. That config was not applied; the narrower indexed-artwork IPC path is used instead.
 - Verification: workspace tests (36), strict Clippy/fmt, ESLint, Vite build, Vitest (2), Playwright (1), and Windows Tauri no-bundle release build pass.
+
+## Phase 3 playlist-copy follow-up - 2026-10-19
+- Repeated additions of an unchanged canonical source within a playlist now reuse one app-owned audio/companion copy while each playlist occurrence receives a unique playback identity.
+- Copy storage is isolated per source occurrence folder. Garbage collection checks those folders individually, preserving folders still referenced by any playlist occurrence and deleting unheld folders after removals/deletions.
+- Regression coverage checks same-copy reuse, occurrence IDs, order, persistence, remove-all-occurrences and delete cleanup. Run full verification before commit.
+- Remaining Phase 3 gaps: legacy playlist JSON migration, playlist metadata/artwork editor, cover replacement UI, tag editing in playlist copies and broader Tauri/UI parity tests.

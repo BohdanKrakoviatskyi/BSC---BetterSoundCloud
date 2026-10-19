@@ -38,7 +38,7 @@ Inventory of the legacy version 0.2.6. An item is checked only after implementat
 - [ ] Dynamic artwork palette extraction
 - [ ] Material 3 color scheme generation
 - [ ] Playlist cover generation
-- [ ] Playlist editing (local create/add/remove/reorder/delete and track playback exist; update, repeated-source copy reuse, migration and cover editing remain)
+- [ ] Playlist editing (local create/add/remove/reorder/delete and playback exist; repeated unchanged sources now reuse copies with distinct occurrence IDs; legacy migration and playlist metadata/artwork editing remain)
 - [x] Local metadata editing (indexed local song fields write to file, empty clears, unspecified fields persist; generated WAV write/read regression test)
 - [ ] Local cover editing
 - [ ] Image wallpaper
