@@ -16,21 +16,21 @@ Inventory of the legacy version 0.2.6. An item is checked only after implementat
 - [ ] Spotify search
 - [ ] Unified provider selection
 - [ ] Local library scanning and indexing
-- [ ] Local playback: MP3
-- [ ] Local playback: FLAC
-- [ ] Local playback: OGG/Vorbis
-- [ ] Local playback: WAV
-- [ ] Local playback: M4A/AAC
-- [ ] Local playback: ALAC
-- [ ] Local playback: AIFF
+- [ ] Local playback: MP3 (decoder configured; fixture verification pending)
+- [ ] Local playback: FLAC (decoder configured; fixture verification pending)
+- [ ] Local playback: OGG/Vorbis (decoder configured; fixture verification pending)
+- [x] Local playback: WAV (decoder and seek verified with generated PCM fixture)
+- [ ] Local playback: M4A/AAC (decoder configured; fixture verification pending)
+- [ ] Local playback: ALAC (decoder configured; fixture verification pending)
+- [ ] Local playback: AIFF (decoder configured; fixture verification pending)
 - [ ] Playback queue and queue editing
-- [ ] Play/pause/next/previous controls
-- [ ] Seek and duration reporting
-- [ ] Volume control
+- [ ] Play/pause/next/previous controls (play/pause/next exist; previous/queue unavailable)
+- [x] Seek and duration reporting (local sink/source; device runtime verification pending)
+- [x] Volume control (local sink)
 - [ ] Crossfade between tracks
 - [ ] Next-track preload
-- [ ] 10-band equalizer
-- [ ] Spectrum stream
+- [ ] 10-band equalizer (source actually uses six bands; DSP implemented with six legacy centers, UI integration pending)
+- [x] Spectrum stream (48 band analyzer on worker thread; polled over Tauri command, device runtime verification pending)
 - [ ] Synced lyrics
 - [ ] Karaoke lyric highlight and ambient glow
 - [ ] Explicit track indicators

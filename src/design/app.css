@@ -70,6 +70,13 @@ h1, h2, h3, p { margin-top: 0; }
 .dock-line { width: min(10vw, 80px); height: 1px; background: var(--outline); }
 .dock-source { display: flex; align-items: center; gap: 8px; padding: 8px 11px; border: 1px solid var(--outline-soft); border-radius: 11px; background: transparent; color: var(--text-muted); font-size: 9px; text-transform: capitalize; cursor: pointer; }
 .dock-source:hover { background: var(--surface-raised); color: var(--text); }
+.dock-empty-art { padding: 0; cursor: pointer; }
+.dock-play { width: 31px; height: 31px; border: 1px solid var(--outline); border-radius: 50%; background: var(--surface-raised); color: var(--text); cursor: pointer; }
+.dock-skip { border: 0; background: transparent; color: var(--text-muted); font-size: 12px; cursor: pointer; }
+.dock-progress { width: min(24vw, 240px); accent-color: var(--accent); cursor: pointer; }
+.dock-progress:disabled { opacity: .35; cursor: default; }
+.dock-spectrum { display: flex; width: 108px; height: 26px; align-items: end; gap: 1px; overflow: hidden; opacity: .8; }
+.dock-spectrum i { flex: 1; min-height: 2px; border-radius: 2px 2px 0 0; background: var(--accent); transition: height 90ms linear; }
 .dialog-backdrop { position: fixed; z-index: 5; inset: 0; display: grid; place-items: center; padding: 24px; background: rgb(8 7 12 / 62%); backdrop-filter: blur(8px); }
 .settings-dialog { width: min(100%, 480px); padding: 29px; border: 1px solid var(--outline); border-radius: 25px; background: var(--surface); box-shadow: 0 30px 100px rgb(0 0 0 / 38%); }
 .dialog-heading { display: flex; align-items: start; justify-content: space-between; margin-bottom: 17px; }

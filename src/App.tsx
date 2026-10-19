@@ -23,6 +23,14 @@ function App() {
   const showError = useAppStore((state) => state.showError);
   const error = useAppStore((state) => state.error);
   const clearError = useAppStore((state) => state.clearError);
+  const trackPath = useAppStore((state) => state.trackPath);
+  const playback = useAppStore((state) => state.playback);
+  const setTrackPath = useAppStore((state) => state.setTrackPath);
+  const setPlayback = useAppStore((state) => state.setPlayback);
+  const spectrum = useAppStore((state) => state.spectrum);
+  const setSpectrum = useAppStore((state) => state.setSpectrum);
+
+  useEffect(() => { if (isTauri()) void commands.spectrumEnable(); }, []);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
 
   useEffect(() => {
@@ -36,8 +44,9 @@ function App() {
 
     const applyAction = (action: { type: string; route?: string }) => {
       if (action.type === 'navigate' && action.route && ['home', 'search', 'playlists', 'songs'].includes(action.route)) navigate(action.route as 'home' | 'search' | 'playlists' | 'songs');
-      if (action.type === 'toggle-immersive' || action.type === 'close-immersive') showError('Immersive playback will be available when the audio engine is connected.');
-      if (action.type === 'play-pause' || action.type === 'next' || action.type === 'previous') showError('Playback controls will be available when a music source is connected.');
+      if (action.type === 'toggle-immersive' || action.type === 'close-immersive') showError('Immersive player is scheduled for Phase 8.');
+      if (action.type === 'play-pause') { if (playback.playing) void commands.playbackPause(); else void commands.playbackResume(); }
+      if (action.type === 'next') void commands.playbackNext();
     };
     void readPreferences().then((preferences) => { setTheme(preferences.theme); setSource(preferences.source); }).catch((reason: unknown) => showError(String(reason)));
     if (isTauri()) {
@@ -45,10 +54,33 @@ function App() {
       void listen<LaunchAction>('launch-action', (event) => applyAction(event.payload)).then((unlisten) => { unlistenAction = unlisten; });
       void listen<string>('app-error', (event) => showError(event.payload)).then((unlisten) => { unlistenError = unlisten; });
       void listen('open-settings', () => setSettingsOpen(true)).then((unlisten) => { unlistenSettings = unlisten; });
+      void listen<{ paths: string[] }>('tauri://drag-drop', (event) => {
+        const path = event.payload.paths[0];
+        if (path) {
+          const crossfade = trackPath && playback.duration_ms && playback.position_ms >= playback.duration_ms - 5_000;
+          setTrackPath(path);
+          void (crossfade ? commands.crossfadeLocalFile(path, 5000) : commands.playLocalFile(path)).catch((reason: unknown) => showError(String(reason)));
+        }
+      });
     }
 
     return () => { unlistenAction?.(); unlistenError?.(); unlistenSettings?.(); };
-  }, [navigate, setSource, setTheme, showError]);
+  }, [navigate, setSource, setTheme, showError, playback.playing]);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let active = true;
+    const poll = async () => { try { const snapshot = await commands.playbackSnapshot(); if (active) setPlayback(snapshot); const levels = await commands.spectrumLevels(); if (active) setSpectrum(levels); } catch (reason) { if (active) showError(String(reason)); } };
+    void poll();
+    const timer = window.setInterval(() => { void poll(); }, 250);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [setPlayback, setSpectrum, showError]);
+
+  const chooseLocalFile = async () => {
+    try { const path = await commands.pickLocalFile(); if (!path) return; setTrackPath(path); if (isTauri()) await commands.playLocalFile(path); }
+    catch (reason) { showError(String(reason)); }
+  };
+  const trackName = trackPath?.split(/[\\/]/).at(-1) ?? 'Nothing playing yet';
 
   const startDragging = () => { if (isTauri()) void getCurrentWindow().startDragging(); };
   const showPage = () => {
@@ -66,7 +98,7 @@ function App() {
         <div className="titlebar-actions" onMouseDown={(event) => event.stopPropagation()}><button className="icon-button settings-trigger" aria-label="Open settings" onClick={() => setSettingsOpen(true)}>⚙</button><WindowControls /></div>
       </header>
       <div className="page-scroll"><div className="page-heading"><div><p className="eyebrow">{route === 'home' ? 'YOUR SPACE' : 'EXPLORE YOUR LIBRARY'}</p><h1>{titles[route]}</h1></div><span className="date-stamp">RESONANCE | 0.2.6</span></div><motion.div key={route} className="page-content" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: 'easeOut' }}>{showPage()}</motion.div></div>
-      <footer className="player-dock"><div className="dock-empty-art">{("\u266b")}</div><div className="dock-track"><strong>Nothing playing yet</strong><span>Choose a source to begin</span></div><div className="dock-center"><span className="dock-line"/><span className="dock-note">Your listening space is ready</span><span className="dock-line"/></div><button className="dock-source" onClick={() => setSettingsOpen(true)}><span className="connection-dot"/> {source}</button></footer>
+      <footer className="player-dock"><button className="dock-empty-art" aria-label="Choose local audio file" onClick={() => void chooseLocalFile()}>{("\u266b")}</button><div className="dock-track"><strong title={trackName}>{trackName}</strong><span>{trackPath ? (playback.playing ? 'Playing from this device' : 'Local audio') : 'Choose a source to begin'}</span></div><div className="dock-center"><button className="dock-play" aria-label={playback.playing ? 'Pause' : 'Play'} onClick={() => void (playback.playing ? commands.playbackPause() : commands.playbackResume())}>{playback.playing ? 'Ⅱ' : '▶'}</button><button className="dock-skip" aria-label="Next track" onClick={() => void commands.playbackNext()}>▶|</button><input aria-label="Playback position" className="dock-progress" type="range" min={0} max={playback.duration_ms ?? 100} value={playback.duration_ms ? Math.min(playback.position_ms, playback.duration_ms) : 0} onChange={(event) => void commands.playbackSeek(Number(event.target.value))} disabled={!trackPath || !playback.duration_ms} /><span className="dock-note">{playback.duration_ms ? `${Math.floor(playback.position_ms / 60000)}:${String(Math.floor(playback.position_ms / 1000) % 60).padStart(2, '0')}` : 'Local playback'}</span></div><div className="dock-spectrum" aria-label="Audio spectrum">{spectrum.map((level, index) => <i key={index} style={{ height: `${Math.max(2, level * 24)}px` }} />)}</div><button className="dock-source" onClick={() => void chooseLocalFile()}><span className="connection-dot"/> Open file · {source}</button></footer>
     </main>
     {error && <div className="error-toast" role="alert"><span>{error}</span><button aria-label="Dismiss error" onClick={clearError}>{("\u00d7")}</button></div>}
     <SettingsDialog open={settingsOpen} onClose={closeSettings} />

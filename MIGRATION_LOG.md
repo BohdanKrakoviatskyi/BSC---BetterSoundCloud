@@ -40,8 +40,8 @@ Migration workspace is this sibling directory and has its own git repository on 
 - Windows host cannot independently verify macOS/Linux builds.
 
 ## Next
-1. Finish Phase 0: read relevant old implementations in full and refine behavioral checklist/mapping.
-2. Phase 1: implement Tauri skeleton and validate local toolchain.
+1. Phase 0 and Phase 1 were completed below before starting audio work.
+2. Continue reading each legacy subsystem before implementing its corresponding migration phase.
 3. Record evidence and commit at each green phase; continue in dependency order.
 
 ## Phase 1 checkpoint — 2026-10-19
@@ -61,6 +61,24 @@ Migration workspace is this sibling directory and has its own git repository on 
 ## Next
 1. Continue Phase 0 source review as each subsystem is prepared for porting; read each original module in full before implementing its replacement.
 2. Phase 2: port local audio decode/output, playback, shaping and spectrum into `crates/audio-core` with tests derived from `spotify-core/src` and legacy playback tests.
+
+## Phase 0 source-of-truth correction
+- Read `spotify-core/src/dsp.rs`, `spotify-core/src/file_playback.rs`, `src/audio/AudioShaping.*` and playback/output sections of `spotify-core/src/lib.rs` and `output.rs` in full before implementing the corresponding Phase 2 modules.
+- The migration prompt says 10-band EQ, but the old DSP and UI use six bands: 60, 150, 400, 1000, 2400 and 15000 Hz, Q=0.9 and ±12 dB. Implementing the actual six-band behavior is required for parity.
+- The old file source decodes in 4096-sample blocks, converts mono to stereo, takes the front stereo channels on multichannel files, counts decoded source frames for position, and resets DSP state after seek.
+
+## Phase 2 checkpoint — 2026-10-19 (local Windows validation)
+- Added `crates/audio-core`: six-band RBJ EQ, tempo/pitch processing via WSOLA and linear resampling, decoder-backed local playback for MP3/FLAC/Vorbis/WAV/AAC/ALAC/AIFF, stereo output, seek/reset, device-backed Rodio player, volume/pause/resume/stop/seek state and a 48-band dual-window FFT spectrum analyzer. Added a two-sink gain-ramped local-track crossfade and source-frame position reporting.
+- Wired player commands into Tauri and React state/dock. The desktop shell accepts a local path and drag-and-drop audio files; native file picker has not yet been integrated. Crossfade is available for explicit crossfade transitions; playlist queue/preload scheduling and live EQ-retuning remain.
+- `cargo test --offline --workspace`: passed (16 audio-core tests and 1 CLI test).
+- `cargo clippy --offline --workspace --all-targets -- -D warnings`: passed after the latest Rust changes.
+- `cargo fmt --all -- --check`: passed after the latest Rust changes.
+- `npm.cmd run lint`, `npm.cmd run build`, and `npm.cmd test`: passed (2 frontend unit tests).
+- `npm.cmd run test:e2e`: passed (1 shell and preferences persistence scenario).
+- Build artifacts are directed to `%TEMP%\resonance-target` because sandbox denies writes to the sibling `target` folder. Cargo/rustfmt permission prompts were accepted by the automatic reviewer for operations scoped to the migration repo.
+- `SpectrumAnalyzer` follows the source dual FFT sizes, stereo complex packing, windowing, reference gain, compression, smoothing and logarithmic band-bin mapping, with an additional test for bass/main boundary bins.
+- Deviation: no `@tauri-apps/plugin-dialog` package was cached and network access failed; the shell currently uses path entry + drag-and-drop. Replace with a native file picker when package access is available.
+- Phase 2 remains in progress: automatic next-track preload/crossfade scheduling, output-device rate conversion parity, broader spectrum behavior comparison against legacy tests, full playback command tests, and completion validation remain. Explicit crossfade-to-file is implemented; next currently skips its source because a queue is not yet implemented. The shared analyzer queue is lock-free at enqueue time and drops when full; UI reads it at 4 Hz.
 
 ## Remote branches
 - codex/resonance-tauri-migration: correct migration repository branch, pushed at cec46e7.

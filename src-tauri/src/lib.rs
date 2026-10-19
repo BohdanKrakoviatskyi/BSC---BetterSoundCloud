@@ -1,3 +1,4 @@
+use audio_core::{AudioPlayer, DspSettings, PlaybackSnapshot};
 use serde::Serialize;
 use tauri::{Emitter, Manager, Runtime, WebviewWindow};
 
@@ -67,6 +68,110 @@ fn close_window(window: WebviewWindow) -> Result<(), String> {
     window.close().map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+async fn play_local_file(
+    path: String,
+    player: tauri::State<'_, AudioPlayer>,
+) -> Result<(), String> {
+    let player = player.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        player
+            .play_file(path, DspSettings::default())
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn spectrum_set_enabled(enabled: bool, player: tauri::State<'_, AudioPlayer>) {
+    player.set_spectrum_enabled(enabled);
+}
+
+#[tauri::command]
+fn spectrum_enable(player: tauri::State<'_, AudioPlayer>) {
+    player.set_spectrum_enabled(true);
+}
+
+#[tauri::command]
+fn spectrum_levels(player: tauri::State<'_, AudioPlayer>) -> Vec<f32> {
+    player.spectrum().levels()
+}
+
+#[tauri::command]
+async fn crossfade_local_file(
+    path: String,
+    crossfade_ms: u64,
+    player: tauri::State<'_, AudioPlayer>,
+) -> Result<(), String> {
+    let player = player.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        player
+            .crossfade_to(
+                path,
+                DspSettings::default(),
+                std::time::Duration::from_millis(crossfade_ms),
+            )
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn playback_snapshot(player: tauri::State<'_, AudioPlayer>) -> PlaybackSnapshot {
+    player.snapshot()
+}
+
+#[tauri::command]
+fn playback_pause(player: tauri::State<'_, AudioPlayer>) {
+    player.pause();
+}
+
+#[tauri::command]
+fn playback_resume(player: tauri::State<'_, AudioPlayer>) {
+    player.resume();
+}
+
+#[tauri::command]
+fn playback_next(player: tauri::State<'_, AudioPlayer>) {
+    player.next_track();
+}
+
+#[tauri::command]
+fn playback_stop(player: tauri::State<'_, AudioPlayer>) {
+    player.stop();
+}
+
+#[tauri::command]
+fn playback_seek(position_ms: u64, player: tauri::State<'_, AudioPlayer>) -> Result<(), String> {
+    player.seek(position_ms)
+}
+
+#[tauri::command]
+fn playback_set_volume(volume: f32, player: tauri::State<'_, AudioPlayer>) -> Result<(), String> {
+    player.set_volume(volume)
+}
+
+#[tauri::command]
+fn playback_set_speed(tempo: f32, player: tauri::State<'_, AudioPlayer>) -> Result<(), String> {
+    player.set_dsp_settings(DspSettings {
+        tempo,
+        ..DspSettings::default()
+    })
+}
+
+#[tauri::command]
+fn playback_set_equalizer(
+    gains: [f32; audio_core::EQ_BAND_COUNT],
+    player: tauri::State<'_, AudioPlayer>,
+) -> Result<(), String> {
+    player.set_equalizer(DspSettings {
+        gains_db: gains,
+        ..DspSettings::default()
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let initial = parse_launch_action(std::env::args().skip(1));
@@ -82,12 +187,27 @@ pub fn run() {
             let _ = app.emit("launch-action", action);
         }))
         .manage(initial)
+        .manage(AudioPlayer::new())
         .invoke_handler(tauri::generate_handler![
             initial_action,
             report_error,
             minimize_window,
             toggle_maximize_window,
-            close_window
+            close_window,
+            play_local_file,
+            crossfade_local_file,
+            playback_snapshot,
+            playback_pause,
+            playback_resume,
+            playback_next,
+            playback_stop,
+            playback_seek,
+            playback_set_volume,
+            playback_set_speed,
+            playback_set_equalizer,
+            spectrum_set_enabled,
+            spectrum_enable,
+            spectrum_levels
         ])
         .setup(|app| {
             let config = app.path().app_config_dir()?;

@@ -1,0 +1,12 @@
+﻿[package]
+name = "audio-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+rodio = { version = "=0.21.1", default-features = false, features = ["playback", "flac", "wav", "mp3", "vorbis", "mp4", "symphonia-alac", "symphonia-aiff"] }
+rustfft = "=6.4.1"
+crossbeam-channel = "=0.5.17"
