@@ -15,6 +15,7 @@ type AppStore = {
   spectrum: number[];
   localSongs: LocalSong[];
   localSources: string[];
+  localLibraryReady: boolean;
   navigate: (route: Route) => void;
   setTheme: (theme: ThemeMode) => void;
   setSource: (source: MusicSource) => void;
@@ -36,6 +37,7 @@ export const useAppStore = create<AppStore>((set) => ({
   spectrum: Array.from({ length: 48 }, () => 0),
   localSongs: [],
   localSources: [],
+  localLibraryReady: false,
   navigate: (route) => set({ route }),
   setTheme: (theme) => set({ theme }),
   setSource: (source) => set({ source }),
@@ -44,5 +46,5 @@ export const useAppStore = create<AppStore>((set) => ({
   setTrackPath: (trackPath) => set({ trackPath }),
   setPlayback: (playback) => set({ playback }),
   setSpectrum: (spectrum) => set({ spectrum }),
-  setLocalLibrary: (localSongs, localSources) => set((state) => ({ localSongs, localSources: localSources ?? state.localSources })),
+  setLocalLibrary: (localSongs, localSources) => set((state) => ({ localSongs, localSources: localSources ?? state.localSources, localLibraryReady: true })),
 }));

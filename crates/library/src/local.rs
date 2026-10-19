@@ -198,9 +198,7 @@ impl LocalLibrary {
     }
 
     pub fn remove_source(&mut self, path: impl AsRef<Path>) -> bool {
-        let Ok(path) = fs::canonicalize(path) else {
-            return false;
-        };
+        let path = fs::canonicalize(path.as_ref()).unwrap_or_else(|_| path.as_ref().to_path_buf());
         let old_len = self.sources.len();
         self.sources.retain(|source| source.path() != path);
         let removed = self.sources.len() != old_len;
@@ -208,6 +206,21 @@ impl LocalLibrary {
             self.songs.retain(|song| !is_within(&song.path, &path));
         }
         removed
+    }
+
+    pub fn remove_source_persisted(
+        &mut self,
+        path: impl AsRef<Path>,
+    ) -> Result<bool, LocalLibraryError> {
+        let removed = self.remove_source(path);
+        if removed {
+            self.persist_sources()?;
+        }
+        Ok(removed)
+    }
+
+    pub fn rescan_persisted(&mut self) -> Result<&[Song], LocalLibraryError> {
+        self.rescan_with_lofty()
     }
 
     /// Scan the current sources. `read_tags` is called only for changed files;

@@ -18,11 +18,11 @@ Working directory: `C:\Users\krako\Desktop\resonance-tauri`
   - Separate 44.1 kHz to 48 kHz linear-rate-converter utility with irregular-block continuity and reset tests. Rodio's output mixer performs the actual device-rate conversion at runtime.
   - Pause handling uses Rodio's sink pause, so the decoder source remains alive for resume.
 - Phase 2 checkpoint `7ddca52` is committed and pushed. It fixed seek accounting/read-ahead and added volume-compensated spectrum analysis with dropped-worker-chunk timing.
-- Current Phase 3.1 work adds the `library` crate (Lofty tags, persistent cache/source list, recursive scanner and Local Songs UI). Workspace currently passes 34 Rust tests (13 audio-core unit, 8 DSP, 5 local playback, 7 library, 1 CLI), strict Clippy/fmt, frontend lint/build/Vitest (2), Playwright (1) and Windows Tauri desktop build.
+- Phase 3.1 scanner and Phase 3.2 source management are implemented in the current working tree: Lofty tag scanning, persisted source/cache, Saved Songs UI, add/remove/rescan, settings migration and async scan status. Current verification: workspace check/tests (34), strict Clippy/fmt, ESLint/build/Vitest (2) and Playwright (1).
 
 ## Exact stopping point
 
-The working tree contains an uncommitted Phase 3.1 scanner/tag reader and Local Songs UI. Cache reuse follows file size + modification time; sources and cache are atomically persisted; source hierarchy, hidden files, natural sorting, tag fallbacks and stable song identity have tests. Tauri startup restores sources and scans off the UI thread. The desktop UI can list and play scanned local songs.
+The working tree contains uncommitted Phase 3.1/3.2 local scanning and source management. Cache reuse follows file size + modification time; Rust persists its cache and source list; the legacy settings key is synchronized; source hierarchy, hidden files, natural sorting, tag fallbacks and stable song identity have tests. Tauri startup restores sources and scans off the UI thread. The desktop UI can list/play tracks and manage sources.
 
 The native file picker is not integrated. The current shell has drag-and-drop plus a temporary full-path prompt because the Tauri dialog plugin was absent from local caches and package-registry network access failed. The original repository contains no audio fixtures, so only generated WAV decoding and seeking are directly fixture-verified; verify the remaining decoder formats when fixtures or an encoder are available.
 

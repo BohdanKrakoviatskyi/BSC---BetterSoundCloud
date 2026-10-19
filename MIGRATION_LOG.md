@@ -114,3 +114,10 @@ Migration workspace is this sibling directory and has its own git repository on 
 - Tests: 7 library tests cover source hierarchy, hidden/unsupported files, natural sorting, scan cache reuse and invalidation, failed tag memoization, corrupt cache recovery, source persistence, stable identity, untagged file visibility and legacy display fallbacks.
 - Verification on Windows: `cargo fmt --all -- --check`, `cargo test --offline --workspace` (34: 13 audio-core unit + 8 DSP + 5 local playback + 7 library + 1 CLI), strict workspace Clippy, `npm run lint`, `npm run build`, Vitest (2), Playwright (1) and `npm run desktop:build -- --no-bundle` all pass; Tauri executable is in `%TEMP%\resonance-target\release\resonance.exe`.
 - Phase 3 remains in progress. Source selection/removal/rescan controls, UI scan progress, complete embedded/folder artwork extraction and tag writing, playlist storage/copy semantics and playlist UI are not implemented. The current file-open prompt is separate from managing library folders.
+
+## Phase 3.2 checkpoint candidate - 2026-10-19 (source management)
+- Added source add/remove/rescan actions in Saved Songs and synchronized source paths with the legacy Tauri Store setting `localMusicSources`; startup migrates sources between Store and the Rust persisted source list without allowing initial empty UI state to erase existing settings.
+- Added typed status and an atomic scan flag, asynchronous blocking-thread rescans for source changes, and scan-complete events. Frontend song fields now match the camelCase Rust serialization.
+- Updated the shell e2e assertion for the two identical Add file or folder actions.
+- Verification: workspace check and tests pass (34 tests); strict Clippy and rustfmt check pass; ESLint/build and Vitest pass (2 tests); Playwright passes (1 scenario).
+- Phase 3 remains open: cancel/stale-scan handling, native picker, robust metadata/artwork editing and playlist storage/copy semantics still need implementation. The full-path prompt is a temporary path-entry interaction.

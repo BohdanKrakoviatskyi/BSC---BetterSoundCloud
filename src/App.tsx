@@ -3,7 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isTauri } from '@tauri-apps/api/core';
 import { motion } from 'framer-motion';
-import { readPreferences } from './app/preferences';
+import { readLocalMusicSources, readPreferences, saveLocalMusicSources } from './app/preferences';
 import { commands, type LaunchAction } from './app/commands';
 import { useAppStore } from './app/useAppStore';
 import { SettingsDialog } from './shell/SettingsDialog';
@@ -31,6 +31,9 @@ function App() {
   const setSpectrum = useAppStore((state) => state.setSpectrum);
   const localSongs = useAppStore((state) => state.localSongs);
   const setLocalLibrary = useAppStore((state) => state.setLocalLibrary);
+  const localSources = useAppStore((state) => state.localSources);
+  const localLibraryReady = useAppStore((state) => state.localLibraryReady);
+  const [libraryScanning, setLibraryScanning] = useState(false);
 
   useEffect(() => { if (isTauri()) void commands.spectrumEnable(); }, []);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
@@ -51,7 +54,18 @@ function App() {
       if (action.type === 'play-pause') { if (playback.playing) void commands.playbackPause(); else void commands.playbackResume(); }
       if (action.type === 'next') void commands.playbackNext();
     };
-    void readPreferences().then((preferences) => { setTheme(preferences.theme); setSource(preferences.source); }).catch((reason: unknown) => showError(String(reason)));
+    void readPreferences().then(async (preferences) => {
+      setTheme(preferences.theme); setSource(preferences.source);
+      if (isTauri()) {
+        const savedSources = await readLocalMusicSources();
+        const rustSources = await commands.localLibrarySources();
+        if (savedSources.length && !rustSources.length) {
+          await commands.localLibrarySetSources(savedSources);
+          await commands.localLibraryRescan();
+        }
+        else if (rustSources.length && !savedSources.length) await saveLocalMusicSources(rustSources);
+      }
+    }).catch((reason: unknown) => showError(String(reason)));
     if (isTauri()) {
       void commands.initialAction().then((action) => { if (action) applyAction(action); }).catch((reason: unknown) => showError(String(reason)));
       void listen<LaunchAction>('launch-action', (event) => applyAction(event.payload)).then((unlisten) => { unlistenAction = unlisten; });
@@ -59,8 +73,10 @@ function App() {
       void listen('open-settings', () => setSettingsOpen(true)).then((unlisten) => { unlistenSettings = unlisten; });
       const refreshLibrary = async () => {
         try {
-          const [songs, sources] = await Promise.all([commands.localLibrarySongs(), commands.localLibrarySources()]);
-          setLocalLibrary(songs, sources);
+          const status = await commands.localLibraryStatus();
+          const songs = await commands.localLibrarySongs();
+          setLocalLibrary(songs, status.sources);
+          setLibraryScanning(status.scanning);
         } catch (reason) { showError(String(reason)); }
       };
       void refreshLibrary();
@@ -81,6 +97,10 @@ function App() {
   }, [navigate, setLocalLibrary, setSource, setTheme, showError, playback.playing]);
 
   useEffect(() => {
+    if (isTauri() && localLibraryReady) void saveLocalMusicSources(localSources).catch((reason: unknown) => showError(String(reason)));
+  }, [localSources, localLibraryReady, showError]);
+
+  useEffect(() => {
     if (!isTauri()) return;
     let active = true;
     const poll = async () => { try { const snapshot = await commands.playbackSnapshot(); if (active) setPlayback(snapshot); const levels = await commands.spectrumLevels(); if (active) setSpectrum(levels); } catch (reason) { if (active) showError(String(reason)); } };
@@ -96,11 +116,41 @@ function App() {
   const trackName = trackPath?.split(/[\\/]/).at(-1) ?? 'Nothing playing yet';
 
   const startDragging = () => { if (isTauri()) void getCurrentWindow().startDragging(); };
+  const addLibrarySource = async () => {
+    try {
+      const path = await commands.pathFromFileDrop();
+      if (!path) return;
+      setLibraryScanning(true);
+      await commands.localLibraryAddSources([path]);
+      const [songs, sources] = await Promise.all([commands.localLibrarySongs(), commands.localLibrarySources()]);
+      setLocalLibrary(songs, sources);
+      await saveLocalMusicSources(sources);
+    } catch (reason) { showError(String(reason)); }
+    finally { setLibraryScanning(false); }
+  };
+  const removeLibrarySource = async (path: string) => {
+    try {
+      setLibraryScanning(true);
+      await commands.localLibraryRemoveSource(path);
+      const [songs, sources] = await Promise.all([commands.localLibrarySongs(), commands.localLibrarySources()]);
+      setLocalLibrary(songs, sources);
+      await saveLocalMusicSources(sources);
+    } catch (reason) { showError(String(reason)); }
+    finally { setLibraryScanning(false); }
+  };
+  const rescanLibrary = async () => {
+    try {
+      setLibraryScanning(true);
+      await commands.localLibraryRescan();
+      setLocalLibrary(await commands.localLibrarySongs(), localSources);
+    } catch (reason) { showError(String(reason)); }
+    finally { setLibraryScanning(false); }
+  };
   const showPage = () => {
     if (route === 'home') return <><section className="welcome-card"><div className="welcome-copy"><p className="eyebrow">A LITTLE SPACE FOR SOUND</p><h2>Your music,<br /><em>your atmosphere.</em></h2><p>Bring your favorite music together in one calm, expressive player.</p><button className="primary-button" onClick={() => setSettingsOpen(true)}>Choose a music source <span aria-hidden="true">&#8599;</span></button></div><div className="art-orbit" aria-hidden="true"><div className="orbit orbit-one"/><div className="orbit orbit-two"/><div className="orbit-core">{("\u266b")}</div><div className="orbit-star">{("\u2733")}</div></div></section><section className="getting-started"><div><p className="eyebrow">GETTING STARTED</p><h3>Make it yours</h3><p>Connect a source in settings to start building your listening space.</p></div><button className="text-button" onClick={() => setSettingsOpen(true)}>Open settings <span aria-hidden="true">&#8594;</span></button></section></>;
     if (route === 'search') return <section className="empty-view"><span className="empty-symbol">{("\u2315")}</span><h2>Find your next favorite</h2><p>Search across your connected music sources.</p><button className="primary-button" onClick={() => setSettingsOpen(true)}>Connect a source</button></section>;
     if (route === 'playlists') return <section className="empty-view"><span className="empty-symbol">{("\u25a4")}</span><h2>Your playlists will live here</h2><p>Connect a music source to browse and organize playlists.</p><button className="primary-button" onClick={() => setSettingsOpen(true)}>Connect a source</button></section>;
-    return <section className="local-library-view"><div className="local-library-heading"><div><p className="eyebrow">LOCAL FILES</p><h2>{localSongs.length ? `${localSongs.length} songs` : 'Your music collection'}</h2><p>Scanned folders and audio files on this device.</p></div><button className="primary-button" onClick={() => void chooseLocalFile()}>Add audio</button></div>{localSongs.length ? <ul className="local-song-list">{localSongs.map((song) => <li key={song.instance_id}><button className="local-song-row" onClick={() => { setTrackPath(song.path); void commands.playLocalFile(song.path).catch((reason: unknown) => showError(String(reason))); }}><span className="song-art">{song.artwork_path ? <img src={`asset://localhost/${song.artwork_path}`} alt="" /> : '♫'}</span><span className="song-meta"><strong>{song.name}</strong><small>{song.artists} · {song.album_name}</small></span><span className="song-duration">{song.duration_ms ? `${Math.floor(song.duration_ms / 60000)}:${String(Math.floor(song.duration_ms / 1000) % 60).padStart(2, '0')}` : '—'}</span></button></li>)}</ul> : <div className="empty-view"><span className="empty-symbol">{("\u266b")}</span><h2>A home for the songs you love</h2><p>Add an audio file from your device to start your local library.</p><button className="primary-button" onClick={() => void chooseLocalFile()}>Open audio file</button></div>}</section>;
+    return <section className="local-library-view"><div className="local-library-heading"><div><p className="eyebrow">LOCAL FILES</p><h2>{localSongs.length ? `${localSongs.length} songs` : 'Your music collection'}</h2><p>Scanned folders and audio files on this device.</p></div><div className="library-actions"><button className="text-button" onClick={() => void rescanLibrary()} disabled={libraryScanning}>{libraryScanning ? 'Scanning…' : 'Rescan'}</button><button className="primary-button" onClick={() => void addLibrarySource()} disabled={libraryScanning}>Add file or folder</button></div></div>{localSources.length > 0 && <ul className="library-source-list" aria-label="Library sources">{localSources.map((path) => <li key={path}><span title={path}>{path}</span><button className="text-button" aria-label={`Remove ${path}`} onClick={() => void removeLibrarySource(path)} disabled={libraryScanning}>Remove</button></li>)}</ul>}{localSongs.length ? <ul className="local-song-list">{localSongs.map((song) => <li key={song.instanceId}><button className="local-song-row" onClick={() => { setTrackPath(song.path); void commands.playLocalFile(song.path).catch((reason: unknown) => showError(String(reason))); }}><span className="song-art">{song.artworkPath ? <img src={`asset://localhost/${song.artworkPath}`} alt="" /> : '♫'}</span><span className="song-meta"><strong>{song.name}</strong><small>{song.artists} · {song.albumName}</small></span><span className="song-duration">{song.durationMs ? `${Math.floor(song.durationMs / 60000)}:${String(Math.floor(song.durationMs / 1000) % 60).padStart(2, '0')}` : '—'}</span></button></li>)}</ul> : <div className="empty-view"><span className="empty-symbol">{("\u266b")}</span><h2>A home for the songs you love</h2><p>Add an audio file from your device to start your local library.</p><button className="primary-button" onClick={() => void addLibrarySource()}>Add file or folder</button></div>}</section>;
   };
 
   return <div className="app-frame">

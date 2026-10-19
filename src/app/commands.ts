@@ -10,7 +10,8 @@ export type LaunchAction =
   | { type: 'focus-window' };
 
 export type PlaybackSnapshot = { playing: boolean; position_ms: number; duration_ms: number | null; volume: number };
-export type LocalSong = { instance_id: number; uri: string; path: string; name: string; artists: string; album_name: string; duration_ms: number; artwork_path: string | null };
+export type LocalSong = { instanceId: number; uri: string; path: string; name: string; artists: string; albumName: string; durationMs: number; artworkPath: string | null };
+export type LocalLibraryStatus = { sources: string[]; songCount: number; scanning: boolean };
 
 export const commands = {
   initialAction: () => invoke<LaunchAction | null>('initial_action'),
@@ -38,5 +39,10 @@ export const commands = {
   localLibrarySources: () => invoke<string[]>('local_library_sources'),
   localLibrarySongs: () => invoke<LocalSong[]>('local_library_songs'),
   localLibraryAddSources: (paths: string[]) => invoke<number>('local_library_add_sources', { paths }),
+  localLibrarySetSources: (sources: string[]) => invoke<void>('local_library_set_sources', { sources }),
+  localLibraryStatus: () => invoke<LocalLibraryStatus>('local_library_status'),
+  localLibraryRemoveSource: (path: string) => invoke<boolean>('local_library_remove_source', { path }),
+  localLibraryRescan: () => invoke<number>('local_library_rescan'),
+  pathFromFileDrop: () => window.prompt('Enter the full path to an audio file or folder') || null,
   pickLocalFile: async () => window.prompt('Enter the full path to an audio file') || null,
 };
