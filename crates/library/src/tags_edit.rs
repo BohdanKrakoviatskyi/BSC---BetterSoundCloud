@@ -180,7 +180,7 @@ fn replace_file(temp: &Path, path: &Path) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::read_local_tags;
+    use crate::{read_local_tags, read_local_tags_with_artwork};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_dir() -> PathBuf {
@@ -230,6 +230,14 @@ mod tests {
         assert_eq!(tags.track_number, Some(3));
         let tagged = Probe::open(&path).unwrap().read().unwrap();
         assert!(tagged.tags().iter().any(|tag| tag.picture_count() > 0));
+        let extracted = read_local_tags_with_artwork(&path, &dir.join("artwork")).unwrap();
+        let cover_path = extracted
+            .artwork_path
+            .expect("embedded artwork is extracted");
+        assert_eq!(
+            fs::read(cover_path).unwrap(),
+            [0xff, 0xd8, 0xff, 0xe0, 1, 2]
+        );
         write_local_tags(
             &path,
             &TagEdits {
@@ -246,6 +254,12 @@ mod tests {
         assert!(tags.artwork_path.is_none());
         let tagged = Probe::open(&path).unwrap().read().unwrap();
         assert!(tagged.tags().iter().all(|tag| tag.picture_count() == 0));
+        fs::write(dir.join("Cover.jpg"), b"folder cover").unwrap();
+        let folder_tags = read_local_tags_with_artwork(&path, &dir.join("artwork")).unwrap();
+        assert_eq!(
+            fs::read(folder_tags.artwork_path.unwrap()).unwrap(),
+            b"folder cover"
+        );
         fs::remove_dir_all(dir).unwrap();
     }
 }

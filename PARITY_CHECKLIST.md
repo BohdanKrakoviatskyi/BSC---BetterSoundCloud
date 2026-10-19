@@ -34,7 +34,7 @@ Inventory of the legacy version 0.2.6. An item is checked only after implementat
 - [ ] Synced lyrics
 - [ ] Karaoke lyric highlight and ambient glow
 - [ ] Explicit track indicators
-- [ ] Album artwork extraction
+- [x] Album artwork extraction (Lofty embedded front cover and adjacent legacy folder cover names; cached and supplied to frontend through indexed-song IPC)
 - [ ] Dynamic artwork palette extraction
 - [ ] Material 3 color scheme generation
 - [ ] Playlist cover generation

@@ -10,7 +10,16 @@ use tauri::{Emitter, Manager, Runtime, WebviewWindow};
 struct LibraryState {
     library: Arc<std::sync::Mutex<LocalLibrary>>,
     playlists: Arc<std::sync::Mutex<LocalPlaylistStore>>,
+    artwork_dir: std::path::PathBuf,
     scanning: Arc<AtomicBool>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LocalSongView {
+    #[serde(flatten)]
+    song: Song,
+    artwork_url: Option<String>,
 }
 
 #[tauri::command]
@@ -121,13 +130,68 @@ fn local_library_sources(state: tauri::State<'_, LibraryState>) -> Result<Vec<St
 }
 
 #[tauri::command]
-fn local_library_songs(state: tauri::State<'_, LibraryState>) -> Result<Vec<Song>, String> {
-    let state = state
-        .inner()
+fn local_library_songs(
+    state: tauri::State<'_, LibraryState>,
+) -> Result<Vec<LocalSongView>, String> {
+    let app_state = state.inner();
+    let library = app_state
         .library
         .lock()
         .map_err(|_| "local library lock poisoned")?;
-    Ok(state.songs().to_vec())
+    let artwork_dir = &app_state.artwork_dir;
+    Ok(library
+        .songs()
+        .iter()
+        .cloned()
+        .map(|song| {
+            let artwork_url = song.artwork_path.as_ref().and_then(|artwork_path| {
+                let is_cached = artwork_path.starts_with(artwork_dir);
+                let is_adjacent = artwork_path.parent() == song.path.parent();
+                if !is_cached && !is_adjacent {
+                    return None;
+                }
+                let bytes = std::fs::read(artwork_path).ok()?;
+                let mime = match artwork_path
+                    .extension()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or_default()
+                    .to_ascii_lowercase()
+                    .as_str()
+                {
+                    "png" => "image/png",
+                    "webp" => "image/webp",
+                    "gif" => "image/gif",
+                    "bmp" => "image/bmp",
+                    _ => "image/jpeg",
+                };
+                Some(format!("data:{mime};base64,{}", base64_encode(&bytes)))
+            });
+            LocalSongView { song, artwork_url }
+        })
+        .collect())
+}
+
+fn base64_encode(bytes: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut output = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let first = chunk[0];
+        let second = *chunk.get(1).unwrap_or(&0);
+        let third = *chunk.get(2).unwrap_or(&0);
+        output.push(TABLE[(first >> 2) as usize] as char);
+        output.push(TABLE[(((first & 0x03) << 4) | (second >> 4)) as usize] as char);
+        output.push(if chunk.len() > 1 {
+            TABLE[(((second & 0x0f) << 2) | (third >> 6)) as usize] as char
+        } else {
+            '='
+        });
+        output.push(if chunk.len() > 2 {
+            TABLE[(third & 0x3f) as usize] as char
+        } else {
+            '='
+        });
+    }
+    output
 }
 
 #[tauri::command]
@@ -553,6 +617,7 @@ pub fn run() {
         .manage(LibraryState {
             library: Arc::new(std::sync::Mutex::new(local_library)),
             playlists: Arc::new(std::sync::Mutex::new(playlist_store)),
+            artwork_dir: library_dir.join("local-artwork"),
             scanning: Arc::new(AtomicBool::new(true)),
         })
         .invoke_handler(tauri::generate_handler![

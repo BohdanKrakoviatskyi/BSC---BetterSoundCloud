@@ -8,12 +8,12 @@ Read-only source: `C:\Users\krako\Desktop\BSC-main`
 ## Resume here first
 
 1. Open PowerShell in `C:\Users\krako\Desktop\resonance-tauri` and run `git status --short` and `git branch --show-current`. Stay on `codex/resonance-tauri-migration`; do not change contributor settings or repository access.
-2. Current uncommitted work adds Lofty tag writing and a local-song tag form on top of the pushed playlist feature: `crates/library/src/tags_edit.rs`, `crates/library/src/lib.rs`, `src-tauri/src/lib.rs`, `src/app/commands.ts`, `src/App.tsx`, `src/design/app.css`, `crates/library/Cargo.toml`, and `Cargo.lock`.
+2. Current uncommitted artwork follow-up touches `crates/library/src/lib.rs`, `crates/library/src/local.rs`, `crates/library/src/tags_edit.rs`, `src-tauri/src/lib.rs`, `src/App.tsx`, and `src/app/commands.ts`. Previous pushed checkpoint `00a220a` includes tag writing/edit form.
 3. Set Cargo output outside the repo: `$env:CARGO_TARGET_DIR="$env:TEMP\resonance-target"`.
 4. The initial copy cleanup failure is fixed; the targeted playlist copy/reopen/delete test passes. Re-run it after any storage edits.
-5. Tag editing is now implemented for indexed local songs and verified on a generated WAV: supplied fields update, empty values clear, unspecified fields remain, artwork can be embedded or removed. Next implement artwork extraction into the cache/UI, cover replacement UI, and source-copy deduplication/migration semantics for playlists.
+5. Artwork extraction is implemented: embedded pictures are hashed into `local-artwork`; album-folder cover names are fallback; Tauri sends validated artwork bytes for indexed songs as data URLs. Do not enable Tauri asset protocol without a narrowly scoped reviewed design. Next expose cover replacement UI and finish playlist deduplication/migration.
 6. Rerun `cargo fmt --all`, `cargo test --offline --workspace`, `cargo clippy --offline --workspace --all-targets -- -D warnings`, `cargo fmt --all --check`, `npm.cmd run lint`, `npm.cmd run build`, `npm.cmd test`, and `npm.cmd run test:e2e`. Use scoped sandbox escalation only when writes to this sibling repo are denied.
-7. Tauri/React create/list/add/remove/reorder/delete integrations exist. The current tag-edit changes passed all listed checks and Windows Tauri desktop build. Commit and push this checkpoint, then continue with artwork extraction and playlist source-copy reuse/migration.
+7. Tauri/React create/list/add/remove/reorder/delete integrations exist. Current artwork changes passed workspace tests (36), Clippy/fmt, frontend checks and Windows Tauri desktop build. Update docs, commit and push this checkpoint, then continue with playlist deduplication/migration and artwork replacement UI.
 
 ## Completed and pushed
 
@@ -21,12 +21,12 @@ Read-only source: `C:\Users\krako\Desktop\BSC-main`
 - Phase 1 Tauri 2 / React 19 / TypeScript / Vite shell and Windows desktop build setup.
 - Phase 2 substantial audio core: local decoding, output, seek, queue/preload, crossfade/advance, DSP, spectrum. Checkpoints pushed through `7ddca52`.
 - Phase 3.1 scanner and Saved Songs view; Phase 3.2 source add/remove/rescan and settings migration. Commit `589dd51 feat: manage local library sources` is pushed to `origin/codex/resonance-tauri-migration`.
-- Phase 3.3 candidate checks: 36 Rust tests, strict Clippy and fmt, ESLint, frontend build, Vitest (2), Playwright (1) pass on Windows. The Windows desktop Tauri build also passed and produced `%TEMP%\\resonance-target\\release\\resonance.exe`.
+- Phase 3.3/3.4 candidate checks: 36 Rust tests, strict Clippy/fmt, ESLint, frontend build, Vitest (2), Playwright (1) and Windows desktop Tauri build pass. Executable: `%TEMP%\\resonance-target\\release\\resonance.exe`.
 
 ## In progress
 
 - Phase 3.3 local playlist data layer has been started but is verified at crate/workspace/frontend/desktop-build level, but not yet full legacy parity; not committed. `playlists.rs` currently copies selected files and companion files, stores ordered song records atomically, and implements CRUD/reorder operations. The copy cleanup test passes after canonical-path comparison fix.
-- Current parity gaps: legacy playlists reuse an unchanged source copy per playlist, migrate old outside-path playlist records and support cover editing. Embedded artwork is written/removed in tags, but extraction and replacement UI are not complete.
+- Current parity gaps: legacy playlists reuse an unchanged source copy per playlist, migrate old outside-path playlist records and support cover editing. Embedded/folder artwork is extracted for display; cover replacement UI and editing playlist-owned copies remain.
 
 ## Remaining work by phase
 

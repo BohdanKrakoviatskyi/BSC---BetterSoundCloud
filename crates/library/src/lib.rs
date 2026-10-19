@@ -7,6 +7,7 @@ mod tags_edit;
 
 pub use local::{
     LocalLibrary, LocalLibraryError, LocalScan, LocalSource, is_music_file, read_local_tags,
+    read_local_tags_with_artwork,
 };
 pub use model::{LocalTags, Song};
 pub use playlists::{LocalPlaylist, LocalPlaylistStore, PlaylistError};

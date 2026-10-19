@@ -10,7 +10,7 @@ export type LaunchAction =
   | { type: 'focus-window' };
 
 export type PlaybackSnapshot = { playing: boolean; position_ms: number; duration_ms: number | null; volume: number };
-export type LocalSong = { instanceId: number; uri: string; path: string; name: string; artists: string; albumName: string; durationMs: number; artworkPath: string | null; tags: { title: string | null; artist: string | null; album: string | null; albumArtist: string | null; trackNumber: number | null; discNumber: number | null; date: string | null; genre: string | null; durationMs: number; artworkPath: string | null } };
+export type LocalSong = { instanceId: number; uri: string; path: string; name: string; artists: string; albumName: string; durationMs: number; artworkPath: string | null; artworkUrl: string | null; tags: { title: string | null; artist: string | null; album: string | null; albumArtist: string | null; trackNumber: number | null; discNumber: number | null; date: string | null; genre: string | null; durationMs: number; artworkPath: string | null } };
 export type LocalLibraryStatus = { sources: string[]; songCount: number; scanning: boolean };
 export type LocalPlaylist = { id: string; name: string; description: string; artworkPath: string | null; songs: LocalSong[] };
 export type LocalTagEdits = { title?: string; artist?: string; album?: string; albumArtist?: string; genre?: string; date?: string; trackNumber?: string; discNumber?: string; removeArtwork?: boolean };

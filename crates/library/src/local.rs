@@ -286,7 +286,8 @@ impl LocalLibrary {
     }
 
     pub fn rescan_with_lofty(&mut self) -> Result<&[Song], LocalLibraryError> {
-        self.rescan(read_local_tags)
+        let artwork_dir = self.cache_path.with_file_name("local-artwork");
+        self.rescan(|path| read_local_tags_with_artwork(path, &artwork_dir))
     }
 
     fn write_cache(
@@ -326,6 +327,74 @@ pub fn read_local_tags(path: &Path) -> Result<LocalTags, String> {
         .unwrap_or_default();
     tags.duration_ms = duration_ms;
     Ok(tags)
+}
+
+pub fn read_local_tags_with_artwork(path: &Path, artwork_dir: &Path) -> Result<LocalTags, String> {
+    let mut tags = read_local_tags(path)?;
+    let tagged = Probe::open(path)
+        .and_then(|probe| probe.read())
+        .map_err(|error| format!("could not read artwork for {}: {error}", path.display()))?;
+    if let Some(picture) = tagged.tags().iter().find_map(|tag| {
+        tag.get_picture_type(lofty::picture::PictureType::CoverFront)
+            .or_else(|| tag.pictures().first())
+    }) {
+        let extension = picture
+            .mime_type()
+            .map(|mime| match mime.as_str() {
+                "image/png" => "png",
+                "image/webp" => "webp",
+                "image/gif" => "gif",
+                "image/bmp" => "bmp",
+                _ => "jpg",
+            })
+            .unwrap_or("jpg");
+        let mut hasher = DefaultHasher::new();
+        picture.data().hash(&mut hasher);
+        let output = artwork_dir.join(format!("{:016x}.{extension}", hasher.finish()));
+        if !output.exists() {
+            fs::create_dir_all(artwork_dir).map_err(|error| error.to_string())?;
+            let temporary = output.with_extension(format!("{}.partial", std::process::id()));
+            fs::write(&temporary, picture.data()).map_err(|error| error.to_string())?;
+            if let Err(error) = fs::rename(&temporary, &output)
+                && !output.exists()
+            {
+                let _ = fs::remove_file(temporary);
+                return Err(error.to_string());
+            }
+        }
+        tags.artwork_path = Some(output);
+    } else if let Some(cover) = folder_cover(path) {
+        tags.artwork_path = Some(cover);
+    }
+    Ok(tags)
+}
+
+fn folder_cover(path: &Path) -> Option<PathBuf> {
+    const NAMES: &[&str] = &["cover", "folder", "front", "album", "albumart", "artwork"];
+    const EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "webp"];
+    let mut entries: Vec<_> = fs::read_dir(path.parent()?)
+        .ok()?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .collect();
+    entries.sort();
+    for name in NAMES {
+        if let Some(path) = entries.iter().find(|candidate| {
+            candidate
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .is_some_and(|stem| stem.eq_ignore_ascii_case(name))
+                && candidate
+                    .extension()
+                    .and_then(|extension| extension.to_str())
+                    .is_some_and(|extension| {
+                        EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
+                    })
+        }) {
+            return Some(path.clone());
+        }
+    }
+    None
 }
 
 fn stable_instance_id(uri: &str) -> u64 {

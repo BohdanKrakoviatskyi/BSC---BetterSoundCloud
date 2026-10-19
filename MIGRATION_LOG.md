@@ -135,3 +135,9 @@ Migration workspace is this sibling directory and has its own git repository on 
 - Added generated WAV regression test. It verifies written fields, empty clearing, preserving omitted fields and embedded artwork add/remove.
 - Verification on Windows: workspace test suite (36 tests), strict Clippy, rustfmt check, ESLint, Vite build, Vitest (2), Playwright (1), and Tauri no-bundle desktop release build pass. Executable: `%TEMP%\resonance-target\release\resonance.exe`.
 - Phase 3 remains open: playlist copy deduplication/migration and artwork, tag artwork extraction/replacement UI, tag editing in playlist-owned copies, and broader parity tests need follow-up.
+
+## Phase 3 artwork follow-up - 2026-10-19
+- Local tag reads now extract embedded front-cover pictures into a content-hash-named `local-artwork` cache; if no embedded image exists, the legacy cover/folder/front/album/albumart/artwork names and jpg/jpeg/png/webp extensions are searched beside the track. Added regression assertions for embedded and folder artwork bytes.
+- Tauri local-song responses include a data URL only for the indexed track's artwork path, after checking that the path is either under the app artwork cache or adjacent to that indexed track. The frontend no longer needs a local-file URL protocol to display covers.
+- Tauri asset protocol enablement with empty scope was rejected by automatic approval review because it could broaden webview access to local files. That config was not applied; the narrower indexed-artwork IPC path is used instead.
+- Verification: workspace tests (36), strict Clippy/fmt, ESLint, Vite build, Vitest (2), Playwright (1), and Windows Tauri no-bundle release build pass.
