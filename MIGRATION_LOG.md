@@ -155,8 +155,15 @@ Migration workspace is this sibling directory and has its own git repository on 
 - Phase 3 remains open: legacy playlist JSON migration, playlist metadata/artwork editing, editing tags in playlist-owned copies and broader parity/integration tests.
 
 ## Phase 3 playlist metadata and cover editing - 2026-10-19
-- Added playlist name/description editing and owned JPEG/PNG cover storage. Cover updates validate image signatures and a 20 MiB limit, persist via an atomic file write, keep the previous cover if JSON persistence fails, remove replaced covers after success and collect cover files when their playlist is deleted.
+- Added playlist name/description editing and owned JPEG/PNG cover storage. Cover updates validate image signatures and a 20 MiB limit, stage the new image before updating JSON, keep the previous cover if JSON persistence fails, remove replaced covers after success and collect cover files when their playlist is deleted.
 - `local_playlists` returns an artwork data URL only after canonical path validation under the application-owned playlist cover directory. The React playlist view now displays and edits playlist name, description and cover via the typed Tauri command.
 - Added Rust tests for metadata and cover persistence across reopen, replacing/deleting old covers, preserving covers during text-only updates, and rejecting invalid images without mutating metadata.
 - Verification: workspace Rust tests (38), strict Clippy, rustfmt, ESLint, TypeScript/Vite build, Vitest (3), Playwright (1), Windows Tauri release no-bundle build and `git diff --check` all pass.
 - Phase 3 remains open: migrate legacy playlist JSON; allow tag edits on playlist-owned copies; broaden local playlist/tag command and UI parity tests.
+
+## Phase 3 legacy playlist JSON migration - 2026-10-19
+- `LocalPlaylistStore::open` now distinguishes legacy version-1 envelopes (string song URIs, `copies` table and filename-only cover) from current serialized `Song` records. It keeps supported local playlist IDs/names/descriptions and order, copies reachable files and LRC/folder companions into the managed store, reuses unchanged sources per playlist while assigning unique occurrence IDs, imports valid JPEG/PNG covers, and retains unresolved local-file URIs when source files are missing. Invalid URI entries are skipped.
+- After successful conversion, the new playlist envelope is persisted; normal garbage collection removes unheld legacy copy/cover files. Legacy IDs are reduced to safe filesystem components before creating copy directories. Replacing an existing JSON file now stages a backup and restores it if the new rename fails.
+- Added a regression fixture covering repeated track occurrences, a missing source, copied LRC, imported cover, persisted current JSON and reopen.
+- Verification: Rust workspace tests (39), strict Clippy, rustfmt, ESLint, TypeScript/Vite build, Vitest (3), Playwright (1), Windows Tauri release no-bundle build and `git diff --check` pass.
+- Phase 3 remains open: editing tags in playlist-owned copies and broader local playlist/tag command and UI parity scenarios.

@@ -1,4 +1,4 @@
-use crate::Song;
+use crate::{Song, read_local_tags_with_artwork};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -52,6 +52,25 @@ struct Envelope {
     playlists: Vec<LocalPlaylist>,
 }
 
+#[derive(Deserialize)]
+struct LegacyEnvelope {
+    version: u32,
+    #[serde(default)]
+    playlists: Vec<LegacyPlaylist>,
+}
+
+#[derive(Deserialize)]
+struct LegacyPlaylist {
+    id: String,
+    name: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    cover: String,
+    #[serde(default)]
+    songs: Vec<String>,
+}
+
 pub struct LocalPlaylistStore {
     data_path: PathBuf,
     tracks_dir: PathBuf,
@@ -64,21 +83,38 @@ impl LocalPlaylistStore {
         let data_path = data_path.into();
         let tracks_dir = data_path.with_file_name("local-playlist-tracks");
         let artwork_dir = data_path.with_file_name("local-playlist-covers");
-        let playlists = match fs::read(&data_path) {
-            Ok(bytes) => serde_json::from_slice::<Envelope>(&bytes)
-                .ok()
-                .filter(|envelope| envelope.version == VERSION)
-                .map(|envelope| envelope.playlists)
-                .unwrap_or_default(),
-            Err(error) if error.kind() == io::ErrorKind::NotFound => Vec::new(),
-            Err(error) => return Err(error.into()),
-        };
-        Ok(Self {
+        let mut store = Self {
             data_path,
             tracks_dir,
             artwork_dir,
-            playlists,
-        })
+            playlists: Vec::new(),
+        };
+        match fs::read(&store.data_path) {
+            Ok(bytes) if is_legacy_envelope(&bytes) => {
+                if let Ok(envelope) = serde_json::from_slice::<LegacyEnvelope>(&bytes)
+                    && envelope.version == VERSION
+                {
+                    store.playlists = migrate_legacy_playlists(
+                        envelope.playlists,
+                        &store.tracks_dir,
+                        &store.artwork_dir,
+                        &store.data_path.with_file_name("local-artwork"),
+                    )?;
+                    store.persist()?;
+                    store.collect_unheld()?;
+                }
+            }
+            Ok(bytes) => {
+                store.playlists = serde_json::from_slice::<Envelope>(&bytes)
+                    .ok()
+                    .filter(|envelope| envelope.version == VERSION)
+                    .map(|envelope| envelope.playlists)
+                    .unwrap_or_default();
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+        Ok(store)
     }
 
     pub fn playlists(&self) -> &[LocalPlaylist] {
@@ -303,6 +339,86 @@ impl LocalPlaylistStore {
     }
 }
 
+fn is_legacy_envelope(bytes: &[u8]) -> bool {
+    let Ok(value) = serde_json::from_slice::<serde_json::Value>(bytes) else {
+        return false;
+    };
+    value.get("copies").is_some()
+        || value
+            .get("playlists")
+            .and_then(serde_json::Value::as_array)
+            .is_some_and(|playlists| {
+                playlists
+                    .iter()
+                    .any(|playlist| playlist.get("cover").is_some())
+            })
+}
+
+fn migrate_legacy_playlists(
+    legacy_playlists: Vec<LegacyPlaylist>,
+    tracks_dir: &Path,
+    artwork_dir: &Path,
+    track_artwork_dir: &Path,
+) -> Result<Vec<LocalPlaylist>, PlaylistError> {
+    let mut migrated = Vec::new();
+    let mut ids = HashSet::new();
+    for legacy in legacy_playlists {
+        if !legacy.id.starts_with("local:")
+            || legacy.name.trim().is_empty()
+            || !ids.insert(legacy.id.clone())
+        {
+            continue;
+        }
+        let mut playlist = LocalPlaylist {
+            id: legacy.id,
+            name: legacy.name.trim().to_owned(),
+            description: legacy.description.trim().to_owned(),
+            artwork_path: None,
+            songs: Vec::new(),
+            origins: HashMap::new(),
+        };
+        for uri in legacy.songs {
+            let Some(path) = local_path_from_uri(&uri) else {
+                continue;
+            };
+            let mut song = Song::from_tags(
+                &path,
+                read_local_tags_with_artwork(&path, track_artwork_dir).unwrap_or_default(),
+            );
+            if path.is_file() {
+                append_song(tracks_dir, &mut playlist, &song)?;
+            } else {
+                song.uri = uri;
+                song.instance_id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+                playlist.songs.push(song);
+            }
+        }
+        if let Some(cover_name) = Path::new(&legacy.cover).file_name()
+            && cover_name.to_string_lossy() == legacy.cover
+        {
+            let old_cover = artwork_dir.join(cover_name);
+            if let Ok(bytes) = fs::read(old_cover)
+                && let Ok(cover) = write_artwork(artwork_dir, &bytes)
+            {
+                playlist.artwork_path = Some(cover);
+            }
+        }
+        migrated.push(playlist);
+    }
+    Ok(migrated)
+}
+
+fn local_path_from_uri(uri: &str) -> Option<PathBuf> {
+    let path = PathBuf::from(uri);
+    if path.is_absolute() {
+        return Some(path);
+    }
+    let url = url::Url::parse(uri).ok()?;
+    (url.scheme() == "file")
+        .then(|| url.to_file_path().ok())
+        .flatten()
+}
+
 fn write_artwork(directory: &Path, bytes: &[u8]) -> Result<PathBuf, PlaylistError> {
     if bytes.len() > 20 * 1024 * 1024 {
         return Err(PlaylistError::InvalidArtwork);
@@ -374,7 +490,17 @@ fn copy_song(
     song: &Song,
     source: &Path,
 ) -> Result<Song, PlaylistError> {
-    let safe_id = id.replace(':', "_");
+    let safe_id: String = id
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || character == '-' || character == '_' {
+                character
+            } else {
+                '_'
+            }
+        })
+        .take(80)
+        .collect();
     let folder = tracks_dir
         .join(safe_id)
         .join(format!("{:x}", NEXT_ID.fetch_add(1, Ordering::Relaxed)));
@@ -424,11 +550,25 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> io::Result<()> {
     }
     let sequence = NEXT_ID.fetch_add(1, Ordering::Relaxed);
     let temporary = path.with_extension(format!("{}.{}.tmp", std::process::id(), sequence));
-    fs::write(&temporary, bytes)?;
-    if path.exists() {
-        fs::remove_file(path)?;
+    if let Err(error) = fs::write(&temporary, bytes) {
+        let _ = fs::remove_file(&temporary);
+        return Err(error);
     }
-    fs::rename(temporary, path)
+    if !path.exists() {
+        return fs::rename(temporary, path);
+    }
+    let backup = path.with_extension(format!("{}.{}.bak", std::process::id(), sequence));
+    if let Err(error) = fs::rename(path, &backup) {
+        let _ = fs::remove_file(&temporary);
+        return Err(error);
+    }
+    if let Err(error) = fs::rename(&temporary, path) {
+        let _ = fs::rename(&backup, path);
+        let _ = fs::remove_file(&temporary);
+        return Err(error);
+    }
+    let _ = fs::remove_file(backup);
+    Ok(())
 }
 
 fn new_id() -> String {
@@ -594,5 +734,58 @@ mod tests {
         assert_eq!(store.playlists()[0].name, "Old");
         assert_eq!(store.playlists()[0].description, "description");
         assert_eq!(store.playlists()[0].artwork_path, None);
+    }
+
+    #[test]
+    fn opening_legacy_playlist_store_migrates_tracks_and_cover_in_order() {
+        let dir = TempDir::new();
+        let data = dir.0.join("local-playlists.json");
+        let old_tracks = dir.0.join("legacy-source");
+        fs::create_dir_all(&old_tracks).unwrap();
+        let track = old_tracks.join("One.wav");
+        fs::write(&track, b"legacy audio bytes").unwrap();
+        fs::write(old_tracks.join("One.lrc"), "[00:01.00]legacy lyric").unwrap();
+        let uri = url::Url::from_file_path(&track).unwrap().to_string();
+        let missing = dir.0.join("missing.wav");
+        let missing_uri = url::Url::from_file_path(missing).unwrap().to_string();
+        let legacy_cover_dir = dir.0.join("local-playlist-covers");
+        fs::create_dir_all(&legacy_cover_dir).unwrap();
+        fs::write(
+            legacy_cover_dir.join("old-cover.jpg"),
+            b"\xff\xd8\xfflegacy cover",
+        )
+        .unwrap();
+        let old_json = serde_json::json!({
+            "version": 1,
+            "playlists": [{
+                "id": "local:legacy-one",
+                "name": "Old mix",
+                "description": "kept from the old app",
+                "cover": "old-cover.jpg",
+                "songs": [uri, uri, missing_uri]
+            }],
+            "copies": []
+        });
+        fs::write(&data, serde_json::to_vec(&old_json).unwrap()).unwrap();
+
+        let store = LocalPlaylistStore::open(&data).unwrap();
+        let playlist = &store.playlists()[0];
+        assert_eq!(playlist.id, "local:legacy-one");
+        assert_eq!(playlist.name, "Old mix");
+        assert_eq!(playlist.description, "kept from the old app");
+        assert_eq!(playlist.songs.len(), 3);
+        assert_eq!(playlist.songs[0].path, playlist.songs[1].path);
+        assert_ne!(playlist.songs[0].instance_id, playlist.songs[1].instance_id);
+        assert!(playlist.songs[0].path.is_file());
+        assert!(playlist.songs[0].path.with_extension("lrc").is_file());
+        assert_eq!(playlist.songs[2].uri, missing_uri);
+        let cover = playlist.artwork_path.as_ref().unwrap();
+        assert_eq!(fs::read(cover).unwrap(), b"\xff\xd8\xfflegacy cover");
+
+        let reopened = LocalPlaylistStore::open(&data).unwrap();
+        assert_eq!(reopened.playlists(), store.playlists());
+        let migrated_json: serde_json::Value =
+            serde_json::from_slice(&fs::read(&data).unwrap()).unwrap();
+        assert!(migrated_json["playlists"][0]["songs"][0].is_object());
     }
 }
