@@ -123,6 +123,14 @@ h1, h2, h3, p { margin-top: 0; }
 .setting-row small { color: var(--text-faint); font-size: 9px; }
 .setting-row select { min-width: 125px; padding: 8px 10px; border: 1px solid var(--outline); border-radius: 10px; background: var(--surface-raised); color: var(--text); font-size: 10px; }
 .settings-note { margin: 13px 0 0; padding: 12px 13px; border-radius: 12px; background: var(--surface-raised); color: var(--text-muted); font-size: 9px; line-height: 1.6; }
+.provider-settings { display: grid; gap: 11px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--outline-soft); }
+.provider-settings h3 { margin: 0; font-size: 16px; font-weight: 620; }
+.provider-settings .eyebrow { margin-bottom: 5px; font-size: 8px; letter-spacing: 1px; }
+.provider-client-id { display: grid; gap: 6px; color: var(--text-muted); font-size: 9px; }
+.provider-client-id input { width: 100%; padding: 9px 11px; border: 1px solid var(--outline); border-radius: 10px; background: var(--surface-raised); color: var(--text); font: inherit; }
+.provider-actions { display: flex; align-items: center; gap: 14px; }
+.provider-actions button:disabled { opacity: .5; cursor: default; transform: none; }
+.provider-status { margin: 0; color: var(--text-muted); font-size: 9px; line-height: 1.5; }
 .error-toast { position: fixed; z-index: 7; right: 25px; bottom: 95px; display: flex; align-items: center; gap: 18px; max-width: 440px; padding: 13px 14px 13px 17px; border: 1px solid color-mix(in srgb, var(--error) 35%, var(--outline)); border-radius: 14px; background: var(--surface-raised); box-shadow: var(--shadow-card); color: var(--text); font-size: 10px; }
 .error-toast button { border: 0; background: none; color: var(--text-muted); font-size: 17px; cursor: pointer; }
 @media (max-width: 900px) { .app-frame { grid-template-columns: 205px minmax(0,1fr); } .welcome-card { padding: 35px; } .art-orbit { right: -22%; opacity: .55; } }

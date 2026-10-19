@@ -10,8 +10,10 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 audio-core = { path = "../crates/audio-core" }
 library = { path = "../crates/library" }
+providers = { path = "../crates/providers" }
 serde = { version = "1", features = ["derive"] }
 tauri = { version = "2", features = [] }
 tauri-plugin-single-instance = "2"
 tauri-plugin-store = "2"
+tauri-plugin-opener = "2"
 dirs = "6"

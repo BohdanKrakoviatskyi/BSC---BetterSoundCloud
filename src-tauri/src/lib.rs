@@ -3,11 +3,18 @@ use library::{
     LocalLibrary, LocalPlaylist, LocalPlaylistStore, Song, TagEdits, read_local_tags_with_artwork,
     write_local_tags,
 };
+use providers::credentials::{
+    CredentialAccount, CredentialStore, KeyringCredentialStore, StoredCredentials,
+};
+use providers::spotify::{
+    PendingSpotifyAuthorization, SpotifyOAuth, bind_callback_listener, wait_for_callback,
+};
 use serde::Serialize;
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
 };
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{Emitter, Manager, Runtime, WebviewWindow};
 
 struct LibraryState {
@@ -16,6 +23,122 @@ struct LibraryState {
     artwork_dir: std::path::PathBuf,
     playlist_artwork_dir: std::path::PathBuf,
     scanning: Arc<AtomicUsize>,
+}
+
+struct ProviderState {
+    credentials: Arc<KeyringCredentialStore>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProviderAuthEvent {
+    provider: &'static str,
+    connected: bool,
+    message: String,
+}
+
+const SPOTIFY_LIBRARY_SCOPES: &[&str] = &[
+    "playlist-read-private",
+    "playlist-read-collaborative",
+    "playlist-modify-public",
+    "playlist-modify-private",
+    "user-read-private",
+    "user-read-recently-played",
+    "user-library-read",
+    "user-library-modify",
+    "ugc-image-upload",
+];
+
+#[tauri::command]
+async fn spotify_session_status(state: tauri::State<'_, ProviderState>) -> Result<bool, String> {
+    let credentials = Arc::clone(&state.credentials);
+    tauri::async_runtime::spawn_blocking(move || {
+        credentials
+            .load(CredentialAccount::SpotifyLibrary)
+            .map(|saved| saved.is_some())
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn spotify_begin_library_login(
+    client_id: String,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, ProviderState>,
+) -> Result<(), String> {
+    let client_id = client_id.trim().to_owned();
+    let pending = PendingSpotifyAuthorization::new(&client_id, SPOTIFY_LIBRARY_SCOPES)
+        .map_err(|error| error.to_string())?;
+    let listener = bind_callback_listener(8898)
+        .await
+        .map_err(|error| error.to_string())?;
+    let authorization_url = pending
+        .authorization_url()
+        .map_err(|error| error.to_string())?;
+    tauri_plugin_opener::open_url(authorization_url.as_str(), None::<&str>)
+        .map_err(|error| format!("Could not open Spotify sign-in page: {error}"))?;
+
+    let credentials_store = Arc::clone(&state.credentials);
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let result = async {
+            let code = wait_for_callback(listener, pending)
+                .await
+                .map_err(|error| error.to_string())?;
+            let token = SpotifyOAuth::new()
+                .map_err(|error| error.to_string())?
+                .exchange_code(&client_id, &code)
+                .await
+                .map_err(|error| error.to_string())?;
+            let refresh_token = token.refresh_token.ok_or_else(|| {
+                "Spotify did not return a refresh token. Please try signing in again.".to_owned()
+            })?;
+            let expiration = SystemTime::now()
+                .checked_add(Duration::from_secs(token.expires_in_seconds))
+                .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+                .map(|duration| duration.as_secs())
+                .ok_or_else(|| "Spotify returned an invalid token expiry.".to_owned())?;
+            let saved = StoredCredentials {
+                client_id,
+                refresh_token,
+                playback_login: String::new(),
+                access_token: token.access_token,
+                access_token_expires_at_unix: Some(expiration),
+                authorization_version: 2,
+            };
+            tauri::async_runtime::spawn_blocking(move || {
+                credentials_store.save(CredentialAccount::SpotifyLibrary, &saved)
+            })
+            .await
+            .map_err(|error| error.to_string())?
+            .map_err(|error| error.to_string())
+        }
+        .await;
+
+        let event = ProviderAuthEvent {
+            provider: "spotify",
+            connected: result.is_ok(),
+            message: result
+                .map(|()| "Spotify library connected.".to_owned())
+                .unwrap_or_else(|error| error),
+        };
+        let _ = handle.emit("provider-auth-status", event);
+    });
+    Ok(())
+}
+
+#[tauri::command]
+async fn spotify_logout(state: tauri::State<'_, ProviderState>) -> Result<(), String> {
+    let credentials = Arc::clone(&state.credentials);
+    tauri::async_runtime::spawn_blocking(move || {
+        credentials
+            .remove(CredentialAccount::SpotifyLibrary)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 fn run_library_scan<T>(
@@ -705,6 +828,9 @@ pub fn run() {
         }))
         .manage(initial)
         .manage(playback)
+        .manage(ProviderState {
+            credentials: Arc::new(KeyringCredentialStore),
+        })
         .manage(LibraryState {
             library: Arc::new(std::sync::Mutex::new(local_library)),
             playlists: Arc::new(std::sync::Mutex::new(playlist_store)),
@@ -735,6 +861,9 @@ pub fn run() {
             spectrum_set_enabled,
             spectrum_enable,
             spectrum_levels,
+            spotify_session_status,
+            spotify_begin_library_login,
+            spotify_logout,
             local_library_sources,
             local_library_songs,
             local_library_add_sources,

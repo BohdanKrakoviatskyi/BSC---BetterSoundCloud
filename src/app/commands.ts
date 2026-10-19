@@ -14,6 +14,7 @@ export type LocalSong = { instanceId: number; uri: string; path: string; name: s
 export type LocalLibraryStatus = { sources: string[]; songCount: number; scanning: boolean };
 export type LocalPlaylist = { id: string; name: string; description: string; artworkPath: string | null; artworkUrl: string | null; songs: LocalSong[] };
 export type LocalTagEdits = { title?: string; artist?: string; album?: string; albumArtist?: string; genre?: string; date?: string; trackNumber?: string; discNumber?: string; removeArtwork?: boolean };
+export type ProviderAuthEvent = { provider: 'spotify' | 'soundcloud'; connected: boolean; message: string };
 
 export const commands = {
   initialAction: () => invoke<LaunchAction | null>('initial_action'),
@@ -38,6 +39,9 @@ export const commands = {
   spectrumSetEnabled: (enabled: boolean) => invoke<void>('spectrum_set_enabled', { enabled }),
   spectrumEnable: () => invoke<void>('spectrum_enable'),
   spectrumLevels: () => invoke<number[]>('spectrum_levels'),
+  spotifySessionStatus: () => isTauri() ? invoke<boolean>('spotify_session_status') : Promise.resolve(false),
+  spotifyBeginLibraryLogin: (clientId: string) => invoke<void>('spotify_begin_library_login', { clientId }),
+  spotifyLogout: () => invoke<void>('spotify_logout'),
   localLibrarySources: () => invoke<string[]>('local_library_sources'),
   localLibrarySongs: () => invoke<LocalSong[]>('local_library_songs'),
   localLibraryAddSources: (paths: string[]) => invoke<number>('local_library_add_sources', { paths }),

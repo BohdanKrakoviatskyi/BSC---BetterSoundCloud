@@ -32,6 +32,22 @@ export async function savePreference(key: 'theme' | 'source', value: ThemeMode |
   await settings.save();
 }
 
+export async function readSpotifyClientId(): Promise<string> {
+  if (!store) return localStorage.getItem('spotifyClientId') ?? '';
+  const settings = await store;
+  return (await settings.get<string>('spotifyClientId')) ?? '';
+}
+
+export async function saveSpotifyClientId(value: string): Promise<void> {
+  if (!store) {
+    localStorage.setItem('spotifyClientId', value);
+    return;
+  }
+  const settings = await store;
+  await settings.set('spotifyClientId', value);
+  await settings.save();
+}
+
 export async function readLocalMusicSources(): Promise<string[]> {
   if (!store) return [];
   const settings = await store;
