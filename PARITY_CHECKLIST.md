@@ -15,7 +15,7 @@ Inventory of the legacy version 0.2.6. An item is checked only after implementat
 - [ ] Spotify playlists
 - [ ] Spotify search
 - [ ] Unified provider selection
-- [ ] Local library scanning and indexing (Phase 3.1 scanner/cache and Saved Songs list implemented; source management UI, full metadata/artwork and parity scenarios remain)
+- [ ] Local library scanning and indexing (scanner/cache, source management and Saved Songs implemented; artwork extraction and full legacy parity scenarios remain)
 - [ ] Local playback: MP3 (decoder configured; fixture verification pending)
 - [ ] Local playback: FLAC (decoder configured; fixture verification pending)
 - [ ] Local playback: OGG/Vorbis (decoder configured; fixture verification pending)
@@ -38,8 +38,8 @@ Inventory of the legacy version 0.2.6. An item is checked only after implementat
 - [ ] Dynamic artwork palette extraction
 - [ ] Material 3 color scheme generation
 - [ ] Playlist cover generation
-- [ ] Playlist editing
-- [ ] Local metadata editing
+- [ ] Playlist editing (local create/add/remove/reorder/delete and track playback exist; update, repeated-source copy reuse, migration and cover editing remain)
+- [x] Local metadata editing (indexed local song fields write to file, empty clears, unspecified fields persist; generated WAV write/read regression test)
 - [ ] Local cover editing
 - [ ] Image wallpaper
 - [ ] Animated GIF wallpaper

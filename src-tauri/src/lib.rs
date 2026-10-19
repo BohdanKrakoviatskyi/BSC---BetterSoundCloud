@@ -1,5 +1,5 @@
 use audio_core::{AudioPlayer, DspSettings, PlaybackSnapshot};
-use library::{LocalLibrary, LocalPlaylist, LocalPlaylistStore, Song};
+use library::{LocalLibrary, LocalPlaylist, LocalPlaylistStore, Song, TagEdits, write_local_tags};
 use serde::Serialize;
 use std::sync::{
     Arc,
@@ -261,6 +261,44 @@ async fn local_library_rescan(
             .len();
         let _ = app.emit("local-library-scanned", count);
         Ok::<_, String>(count)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn local_song_edit_tags(
+    app: tauri::AppHandle,
+    uri: String,
+    edits: TagEdits,
+    artwork: Option<Vec<u8>>,
+    state: tauri::State<'_, LibraryState>,
+) -> Result<(), String> {
+    let path = {
+        let library = state
+            .inner()
+            .library
+            .lock()
+            .map_err(|_| "local library lock poisoned")?;
+        library
+            .songs()
+            .iter()
+            .find(|song| song.uri == uri)
+            .map(|song| song.path.clone())
+            .ok_or_else(|| {
+                "Only music files in the indexed local library can be edited.".to_owned()
+            })?
+    };
+    let library = Arc::clone(&state.inner().library);
+    tauri::async_runtime::spawn_blocking(move || {
+        write_local_tags(&path, &edits, artwork.as_deref())?;
+        let mut library = library.lock().map_err(|_| "local library lock poisoned")?;
+        let count = library
+            .rescan_with_lofty()
+            .map_err(|error| error.to_string())?
+            .len();
+        let _ = app.emit("local-library-scanned", count);
+        Ok::<_, String>(())
     })
     .await
     .map_err(|error| error.to_string())?
@@ -547,6 +585,7 @@ pub fn run() {
             local_library_status,
             local_library_remove_source,
             local_library_rescan,
+            local_song_edit_tags,
             local_playlists,
             local_playlist_create,
             local_playlist_add_songs,

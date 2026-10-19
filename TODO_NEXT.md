@@ -8,12 +8,12 @@ Read-only source: `C:\Users\krako\Desktop\BSC-main`
 ## Resume here first
 
 1. Open PowerShell in `C:\Users\krako\Desktop\resonance-tauri` and run `git status --short` and `git branch --show-current`. Stay on `codex/resonance-tauri-migration`; do not change contributor settings or repository access.
-2. Current uncommitted work includes `crates/library/src/playlists.rs`, exports, Tauri playlist commands, React playlist browsing/create/add/remove/reorder/delete, and the e2e empty-state expectation.
+2. Current uncommitted work adds Lofty tag writing and a local-song tag form on top of the pushed playlist feature: `crates/library/src/tags_edit.rs`, `crates/library/src/lib.rs`, `src-tauri/src/lib.rs`, `src/app/commands.ts`, `src/App.tsx`, `src/design/app.css`, `crates/library/Cargo.toml`, and `Cargo.lock`.
 3. Set Cargo output outside the repo: `$env:CARGO_TARGET_DIR="$env:TEMP\resonance-target"`.
 4. The initial copy cleanup failure is fixed; the targeted playlist copy/reopen/delete test passes. Re-run it after any storage edits.
-5. Next fix exact legacy parity: deduplicate unchanged source files into one copy per playlist while retaining distinct occurrence IDs, implement update and playlist selection persistence, migrate old outside-path playlist JSON, and complete playlist cover/artwork behavior. Then integrate tag editing and test the full playlist flow.
+5. Tag editing is now implemented for indexed local songs and verified on a generated WAV: supplied fields update, empty values clear, unspecified fields remain, artwork can be embedded or removed. Next implement artwork extraction into the cache/UI, cover replacement UI, and source-copy deduplication/migration semantics for playlists.
 6. Rerun `cargo fmt --all`, `cargo test --offline --workspace`, `cargo clippy --offline --workspace --all-targets -- -D warnings`, `cargo fmt --all --check`, `npm.cmd run lint`, `npm.cmd run build`, `npm.cmd test`, and `npm.cmd run test:e2e`. Use scoped sandbox escalation only when writes to this sibling repo are denied.
-7. Tauri/React create/list/add/remove/reorder/delete integrations exist. Extend tests for update, repeated-source copy reuse, old JSON migration and state after restart; update `MIGRATION_LOG.md`, `PHASE3_PLAN.md`, and `PARITY_CHECKLIST.md`. Commit and push only after the checkpoint passes.
+7. Tauri/React create/list/add/remove/reorder/delete integrations exist. The current tag-edit changes passed all listed checks and Windows Tauri desktop build. Commit and push this checkpoint, then continue with artwork extraction and playlist source-copy reuse/migration.
 
 ## Completed and pushed
 
@@ -21,12 +21,12 @@ Read-only source: `C:\Users\krako\Desktop\BSC-main`
 - Phase 1 Tauri 2 / React 19 / TypeScript / Vite shell and Windows desktop build setup.
 - Phase 2 substantial audio core: local decoding, output, seek, queue/preload, crossfade/advance, DSP, spectrum. Checkpoints pushed through `7ddca52`.
 - Phase 3.1 scanner and Saved Songs view; Phase 3.2 source add/remove/rescan and settings migration. Commit `589dd51 feat: manage local library sources` is pushed to `origin/codex/resonance-tauri-migration`.
-- Phase 3.3 candidate checks: 35 Rust tests, strict Clippy and fmt, ESLint, frontend build, Vitest (2), Playwright (1) pass on Windows. The Windows desktop Tauri build also passed and produced `%TEMP%\\resonance-target\\release\\resonance.exe`.
+- Phase 3.3 candidate checks: 36 Rust tests, strict Clippy and fmt, ESLint, frontend build, Vitest (2), Playwright (1) pass on Windows. The Windows desktop Tauri build also passed and produced `%TEMP%\\resonance-target\\release\\resonance.exe`.
 
 ## In progress
 
-- Phase 3.3 local playlist data layer has been started but is verified at crate/workspace/frontend level, but not yet full legacy parity; not committed. `playlists.rs` currently copies selected files and companion files, stores ordered song records atomically, and implements CRUD/reorder operations. The cleanup test is failing; fix before extending it.
-- Current parity gaps: legacy playlists reuse an unchanged source copy per playlist (even for repeated occurrences), preserve artwork and `.lrc` companions, migrate old outside-path playlist records, collect copies only when no playlist holds them, and keep each repeated URI as an independent occurrence. The current initial implementation does not yet fully meet these semantics.
+- Phase 3.3 local playlist data layer has been started but is verified at crate/workspace/frontend/desktop-build level, but not yet full legacy parity; not committed. `playlists.rs` currently copies selected files and companion files, stores ordered song records atomically, and implements CRUD/reorder operations. The copy cleanup test passes after canonical-path comparison fix.
+- Current parity gaps: legacy playlists reuse an unchanged source copy per playlist, migrate old outside-path playlist records and support cover editing. Embedded artwork is written/removed in tags, but extraction and replacement UI are not complete.
 
 ## Remaining work by phase
 
@@ -43,7 +43,7 @@ Read-only source: `C:\Users\krako\Desktop\BSC-main`
 
 ## Approximate remaining size
 
-The source specification contains 12 phases (0вЂ“11); Phases 0вЂ“1 and portions of 2вЂ“3 are done. Roughly 8 full phases plus the remaining portions of Phases 2вЂ“3 remain. This is a large migration, likely many implementation/checkpoint cycles; do not equate a passing shell build with feature parity. Update this estimate when a phase is audited against `PARITY_CHECKLIST.md`.
+The source specification contains 12 phases (0Р Р†Р вЂљРІР‚Сљ11); Phases 0Р Р†Р вЂљРІР‚Сљ1 and portions of 2Р Р†Р вЂљРІР‚Сљ3 are done. Roughly 8 full phases plus the remaining portions of Phases 2Р Р†Р вЂљРІР‚Сљ3 remain. This is a large migration, likely many implementation/checkpoint cycles; do not equate a passing shell build with feature parity. Update this estimate when a phase is audited against `PARITY_CHECKLIST.md`.
 
 ## Important decisions and constraints
 
