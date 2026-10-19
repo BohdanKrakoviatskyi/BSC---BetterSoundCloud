@@ -1,0 +1,13 @@
+node_modules/
+dist/
+target/
+.env
+.env.*
+!.env.example
+src-tauri/gen/schemas/
+*.log
+playwright-report/
+test-results/
+ui-smoke.png
+test-results/
+playwright-report/

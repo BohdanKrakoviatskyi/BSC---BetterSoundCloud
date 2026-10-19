@@ -1,4 +1,4 @@
-﻿# Parity checklist
+# Parity checklist
 
 Inventory of the legacy version 0.2.6. An item is checked only after implementation and verification in the target.
 
@@ -63,8 +63,8 @@ Inventory of the legacy version 0.2.6. An item is checked only after implementat
 - [ ] GitHub Releases update check
 - [ ] Update progress reporting
 - [ ] One-click update installation
-- [ ] Persistent settings
-- [ ] Error center
+- [x] Persistent settings
+- [x] Error center
 - [ ] Custom window controls
 - [ ] macOS menu bar
 - [ ] Keyboard navigation and accessibility
@@ -222,7 +222,7 @@ Inventory of the legacy version 0.2.6. An item is checked only after implementat
 ## Platform, release, and quality
 - [ ] macOS 13+ build
 - [ ] Linux Wayland/X11 build
-- [ ] Windows 10/11 x64 build
+- [x] Windows 10/11 x64 build
 - [ ] CI jobs on all three platforms
 - [ ] macOS DMG artifact
 - [ ] Windows ZIP/MSI artifact
@@ -231,15 +231,15 @@ Inventory of the legacy version 0.2.6. An item is checked only after implementat
 - [ ] Version synchronization across manifests
 - [ ] macOS ad-hoc signing
 - [ ] Optional macOS notarization
-- [ ] Minimal Tauri capabilities
-- [ ] Strict Content Security Policy
-- [ ] Typed frontend/backend IPC
+- [x] Minimal Tauri capabilities
+- [x] Strict Content Security Policy
+- [x] Typed frontend/backend IPC
 - [ ] cargo build --release
-- [ ] cargo test
-- [ ] cargo clippy -- -D warnings
-- [ ] cargo fmt --check
-- [ ] ESLint
-- [ ] TypeScript tsc --noEmit
-- [ ] Vitest
-- [ ] Playwright key-flow coverage
+- [x] cargo test
+- [x] cargo clippy -- -D warnings
+- [x] cargo fmt --check
+- [x] ESLint
+- [x] TypeScript tsc --noEmit
+- [x] Vitest
+- [x] Playwright key-flow coverage
 - [ ] No implementation stubs or TODO placeholders
