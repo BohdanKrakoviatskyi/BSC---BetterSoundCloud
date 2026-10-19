@@ -8,9 +8,9 @@ Read-only source: `C:\Users\krako\Desktop\BSC-main`
 ## Resume here first
 
 1. In PowerShell, enter the migration repo and run `git status --short` and `git branch --show-current`. Stay on `codex/resonance-tauri-migration`; do not change repository access or contributors.
-2. Latest pushed commit: `5f8a94a feat: map Spotify library response models`. Local work adds the first authenticated `SpotifyWebApi::playlists` call with loopback-only HTTP test roots and bearer auth; tests/strict checks are green. Commit this slice and continue with pagination and more endpoints.
+2. Latest pushed commit: `fc5f052 feat: add Spotify playlist API client`. It adds track/playlist response mapping and the first authenticated playlist request. Next implement safe multi-page collection, then saved tracks/search and token refresh integration.
 3. CI run `39293399821` passed all jobs on `e346601`: Playwright, quality, Windows NSIS, macOS DMG, Linux AppImage/DEB, and artifact upload on all three platforms. Verify the pending provider CI runs with `gh run list --branch codex/resonance-tauri-migration --limit 5`.
-4. Current local checks: full `cargo test --workspace` passes (67 tests), strict workspace Clippy passes, and rustfmt check plus `git diff --check` pass. CI run `39299823382` for `0227194` was still in progress at last query; poll before marking the integration CI-green.
+4. Current local checks at `fc5f052`: full `cargo test --workspace` passes (67 tests), strict workspace Clippy passes, and rustfmt check plus `git diff --check` pass. CI runs `39299823382` (`0227194`), `39300137924` (`5f8a94a`), and `39300378354` (`fc5f052`) were still in progress at last query; poll before marking provider integration CI-green.
 5. Remaining audio checks: real compressed-format fixtures, output-device runtime/listening, and legacy spectrum comparisons. Native file picker and queue UI also remain.
 6. Keep Cargo output outside the repo when space is limited: `$env:CARGO_TARGET_DIR="$env:TEMP\resonance-target"`.
 
@@ -21,7 +21,7 @@ Read-only source: `C:\Users\krako\Desktop\BSC-main`
 - Phase 3.1 scanner/Saved Songs and 3.2 local source management/settings migration.
 - Phase 3.3 playlist CRUD, copy-on-add, persistence/order, play/add/remove/reorder UI and desktop build.
 - Phase 3.4 indexed local tag editing via Lofty, plus embedded/folder artwork extraction and validated artwork data URLs.
-- Latest pushed checkpoint: `e346601 fix: normalize bundle icons and artifact paths`.
+- Latest fully green cross-platform bundle checkpoint: `e346601 fix: normalize bundle icons and artifact paths`; newer provider commits are in CI.
 - CoreAudio output is owned by a dedicated thread; Tauri holds a `Send + Sync` handle. CI confirmed Windows, macOS, and Linux packages and artifacts all succeed.
 
 ## Remaining work by phase
