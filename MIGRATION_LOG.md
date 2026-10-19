@@ -204,3 +204,5 @@ Migration workspace is this sibling directory and has its own git repository on 
 - Added a compile-time regression assertion that `AudioPlayer: Send + Sync`.
 - Local verification after the change: Windows Tauri release build, strict Clippy, rustfmt, workspace tests (46 total), and `git diff --check` pass. The next CI run must confirm the macOS bundle.
 - Remaining care: validate queue error recovery and worker shutdown/runtime audio behavior with platform output devices; this remains part of Phase 2 verification.
+- Follow-up regression: sending a play request for a missing file returns the error promptly and the worker continues to serve snapshots. The workspace now has 47 Rust tests; tests, strict Clippy, rustfmt, release build and whitespace check pass.
+- Follow-up CI run `39290324571` is in progress; Playwright passed so far. Await quality and platform bundle results before recording the cross-platform checkpoint as green.

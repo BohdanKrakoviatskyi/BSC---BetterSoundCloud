@@ -8,10 +8,11 @@ Read-only source: `C:\Users\krako\Desktop\BSC-main`
 ## Resume here first
 
 1. In PowerShell, enter the migration repo and run `git status --short` and `git branch --show-current`. Stay on `codex/resonance-tauri-migration`; do not change repository access or contributors.
-2. Current uncommitted changes move all Rodio/CoreAudio stream ownership to a dedicated audio-output worker. Tauri receives a `Send + Sync` command handle; automatic queue advance and crossfade run on the output worker. Windows compile/release, Rust tests, strict Clippy, rustfmt, and `git diff --check` pass. Commit and push, then inspect the new cross-platform run.
-3. CI run `39287130778`: quality and Playwright passed; Windows NSIS and Linux AppImage/DEB bundles passed; macOS DMG failed because Tauri's `AudioPlayer` state was not `Send` due to a CoreAudio property callback. The new worker architecture addresses that compile error; macOS confirmation is pending.
-4. Keep Cargo output outside the repo when space is limited: `$env:CARGO_TARGET_DIR="$env:TEMP\resonance-target"`.
-5. After the next CI run, update this file and continue Phase 2/3 integration scenarios, then move to the Rust providers in Phase 4.
+2. Latest commit pushed: `5a07718 fix: isolate audio output on worker thread`. A dedicated output worker owns Rodio/CoreAudio streams and processes a `Send + Sync` command handle. Automatic queue advance runs in that worker. A follow-up regression test is currently uncommitted: missing-file play errors return without hanging and snapshot commands still work.
+3. Local verification: workspace Rust tests (47 total), strict Clippy, rustfmt, Windows Tauri release build, and `git diff --check` pass.
+4. CI run `39290324571`: Playwright passed; quality and platform bundle jobs are still running. Previous run `39287130778` passed Windows NSIS and Linux AppImage/DEB, while macOS DMG failed on CoreAudio's non-Send callback. Verify this run's macOS result before proceeding.
+5. Keep Cargo output outside the repo when space is limited: `$env:CARGO_TARGET_DIR="$env:TEMP\resonance-target"`.
+6. Then finish audio queue/output-device validation and Phase 3 integration scenarios, followed by Rust providers in Phase 4.
 
 ## Completed and pushed
 
@@ -22,6 +23,7 @@ Read-only source: `C:\Users\krako\Desktop\BSC-main`
 - Phase 3.4 indexed local tag editing via Lofty, plus embedded/folder artwork extraction and validated artwork data URLs.
 - Latest pushed checkpoint before current work: `813b491 fix: harden local library and release bundles`.
 - Playlist-copy tag editing, playlist/source mutation recovery, concurrent scan status, CI Linux/Windows bundle fixes and preference synchronization are pushed. Run `39287130778` confirmed Linux and Windows packages build; macOS exposed a CoreAudio Send boundary now addressed by a dedicated audio worker.
+- Commit `5a07718` contains the CoreAudio worker architecture; CI run `39290324571` is the active verification. A follow-up worker request/reply regression is local and not yet committed.
 
 ## Remaining work by phase
 

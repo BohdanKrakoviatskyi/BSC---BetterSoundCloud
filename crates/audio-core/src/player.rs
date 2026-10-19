@@ -444,4 +444,18 @@ mod tests {
         assert!(player.preload_next().is_err());
         assert_eq!(player.queue(), vec!["first.wav", "second.wav"]);
     }
+
+    #[test]
+    fn output_worker_returns_file_errors_without_hanging_the_caller() {
+        let player = AudioPlayer::new();
+        let missing = std::env::temp_dir()
+            .join(format!(
+                "resonance-missing-worker-{}.wav",
+                std::process::id()
+            ))
+            .display()
+            .to_string();
+        assert!(player.play_file(missing, DspSettings::default()).is_err());
+        assert!(!player.snapshot().playing);
+    }
 }
