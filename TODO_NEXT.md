@@ -8,9 +8,9 @@ Read-only source: `C:\Users\krako\Desktop\BSC-main`
 ## Resume here first
 
 1. In PowerShell, enter the migration repo and run `git status --short` and `git branch --show-current`. Stay on `codex/resonance-tauri-migration`; do not change repository access or contributors.
-2. Latest pushed commit: `0227194 feat: integrate Spotify desktop library login`. Local work has begun Spotify Web API JSON mapping; its contract tests are green. Finish strict checks, record the checkpoint, and continue endpoint implementation.
+2. Latest pushed commit: `5f8a94a feat: map Spotify library response models`. Local work adds the first authenticated `SpotifyWebApi::playlists` call with loopback-only HTTP test roots and bearer auth; tests/strict checks are green. Commit this slice and continue with pagination and more endpoints.
 3. CI run `39293399821` passed all jobs on `e346601`: Playwright, quality, Windows NSIS, macOS DMG, Linux AppImage/DEB, and artifact upload on all three platforms. Verify the pending provider CI runs with `gh run list --branch codex/resonance-tauri-migration --limit 5`.
-4. Current local checks after the latest local mapping change: full `cargo test --workspace` passes (66 tests), strict workspace Clippy passes, and rustfmt check plus `git diff --check` pass. The last pushed commit's CI run `39299823382` was still in progress at last query; poll before marking the integration CI-green.
+4. Current local checks: full `cargo test --workspace` passes (67 tests), strict workspace Clippy passes, and rustfmt check plus `git diff --check` pass. CI run `39299823382` for `0227194` was still in progress at last query; poll before marking the integration CI-green.
 5. Remaining audio checks: real compressed-format fixtures, output-device runtime/listening, and legacy spectrum comparisons. Native file picker and queue UI also remain.
 6. Keep Cargo output outside the repo when space is limited: `$env:CARGO_TARGET_DIR="$env:TEMP\resonance-target"`.
 
@@ -28,7 +28,7 @@ Read-only source: `C:\Users\krako\Desktop\BSC-main`
 
 1. **Phase 2:** output-device runtime checks; real MP3/FLAC/Vorbis/AAC/ALAC/AIFF fixtures and seek; remaining legacy spectrum comparisons; previous/queue UI and native file picker.
 2. **Phase 3:** broaden `tst_local`, `tst_covers`, `tst_session`, `tst_settings` parity/integration tests; add command/UI flow coverage; verify scan cancellation/stale-result behavior and native folder picking.
-3. **Phase 4:** shared provider types/trait, SoundCloud REST client, progressive/HLS/preview stream selection, Spotify PKCE/token exchange and native keyring are committed. Tauri Spotify library login/logout/status commands and Settings controls are committed. Local Spotify Web API mapping now converts playlist and track JSON into shared provider types; endpoint operations, pagination, token refresh/restore, librespot playback, SoundCloud auth/cache/lyrics, and UI content remain. The old checkout has no Go files or `go.mod`; `docs/SOUNDCLOUD_API_REFERENCE.md` is incomplete. Confirm SoundCloud's account-playlist endpoint against sidecar source if available.
+3. **Phase 4:** shared provider types/trait, SoundCloud REST client, progressive/HLS/preview stream selection, Spotify PKCE/token exchange and native keyring are committed. Tauri Spotify library login/logout/status commands and Settings controls are committed. Spotify Web API mapping for track/playlist records and first authenticated playlist request are implemented locally. Pagination, token refresh/restore, saved tracks/search, playlist detail, writes, librespot playback, SoundCloud auth/cache/lyrics, and UI content remain. The old checkout has no Go files or `go.mod`; `docs/SOUNDCLOUD_API_REFERENCE.md` is incomplete. Confirm SoundCloud's account-playlist endpoint against sidecar source if available.
 4. **Phase 5:** Material 3 artwork palette, design tokens, 15 motion primitives, 40 controls, theme/settings parity.
 5. **Phase 6:** inventory/port 25 shaders to WebGL2; spectrum/backdrop/material components, frame pacing and benchmark.
 6. **Phase 7:** port all 18 screens, shell navigation and window/view behavior.

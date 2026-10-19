@@ -11,6 +11,101 @@ use url::Url;
 use zeroize::Zeroizing;
 
 const REDIRECT_URI: &str = "http://127.0.0.1:8898/login";
+const WEB_API_ROOT: &str = "https://api.spotify.com/";
+
+#[derive(Clone)]
+pub struct SpotifyWebApi {
+    client: Client,
+    api_root: Url,
+}
+
+impl SpotifyWebApi {
+    pub fn new() -> Result<Self, ProviderError> {
+        Self::with_api_root(WEB_API_ROOT)
+    }
+
+    pub fn with_api_root(root: &str) -> Result<Self, ProviderError> {
+        let api_root = Url::parse(root).map_err(|error| {
+            ProviderError::InvalidData(format!("invalid Spotify API URL: {error}"))
+        })?;
+        if api_root.host_str().is_none()
+            || !(api_root.scheme() == "https"
+                || (api_root.scheme() == "http"
+                    && api_root.host_str().is_some_and(is_loopback_host)))
+        {
+            return Err(ProviderError::InvalidData(
+                "Spotify API URL must use HTTPS (HTTP is permitted only on loopback for tests)"
+                    .into(),
+            ));
+        }
+        let client = Client::builder()
+            .user_agent("Resonance/0.2.6")
+            .timeout(Duration::from_secs(30))
+            .build()?;
+        Ok(Self { client, api_root })
+    }
+
+    pub async fn playlists(
+        &self,
+        access_token: &str,
+    ) -> Result<Vec<ProviderPlaylist>, ProviderError> {
+        if access_token.trim().is_empty() {
+            return Err(ProviderError::OAuth(
+                "Spotify access token is required".into(),
+            ));
+        }
+        let mut url = self.api_root.join("v1/me/playlists").map_err(|error| {
+            ProviderError::InvalidData(format!("invalid Spotify playlist URL: {error}"))
+        })?;
+        url.query_pairs_mut().append_pair("limit", "50");
+        ensure_api_origin(&url, &self.api_root)?;
+        let response = self
+            .client
+            .get(url)
+            .bearer_auth(access_token)
+            .send()
+            .await?;
+        let status = response.status();
+        let payload: Value = response.json().await?;
+        if !status.is_success() {
+            let message = payload
+                .get("error")
+                .and_then(|error| error.get("message"))
+                .and_then(Value::as_str)
+                .unwrap_or("Spotify playlist request failed");
+            return Err(ProviderError::Http {
+                status: status.as_u16(),
+                message: message.to_owned(),
+            });
+        }
+        Ok(payload
+            .get("items")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|item| spotify_playlist_from_json(item.clone()))
+            .collect())
+    }
+}
+
+fn is_loopback_host(host: &str) -> bool {
+    host.eq_ignore_ascii_case("localhost")
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback())
+}
+
+fn ensure_api_origin(url: &Url, root: &Url) -> Result<(), ProviderError> {
+    if url.scheme() != root.scheme()
+        || url.host_str() != root.host_str()
+        || url.port_or_known_default() != root.port_or_known_default()
+    {
+        return Err(ProviderError::InvalidData(
+            "Spotify pagination URL changed API origin".into(),
+        ));
+    }
+    Ok(())
+}
 
 pub fn spotify_track_from_json(value: Value) -> Option<ProviderTrack> {
     if value
