@@ -1,4 +1,5 @@
 use std::f32::consts::TAU;
+use std::sync::{Arc, Mutex};
 use thiserror::Error;
 
 const CHANNELS: usize = 2;
@@ -81,6 +82,8 @@ pub struct DspProcessor {
     resampler: LinearResampler,
     stretcher: WsolaStretcher,
 }
+
+pub type SharedDsp = Arc<Mutex<DspProcessor>>;
 
 impl DspProcessor {
     pub fn new(settings: DspSettings) -> Self {

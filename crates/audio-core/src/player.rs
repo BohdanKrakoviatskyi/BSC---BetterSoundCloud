@@ -1,12 +1,9 @@
-use crate::{AudioError, DspSettings, LocalTrack, SharedSpectrum};
+use crate::{AudioError, DspSettings, LocalTrack, SharedDsp, SharedSpectrum};
 use rodio::{OutputStream, OutputStreamBuilder, Sink, Source};
 use std::{
     collections::VecDeque,
     path::PathBuf,
-    sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
-    },
+    sync::{Arc, Mutex},
     thread,
     time::Duration,
 };
@@ -26,7 +23,7 @@ struct State {
     duration_ms: Option<u64>,
     volume: f32,
     position_base: Duration,
-    paused: Arc<AtomicBool>,
+    dsp: SharedDsp,
 }
 
 /// Device-backed playback controller. Track opening happens off the UI thread.
@@ -55,9 +52,9 @@ impl AudioPlayer {
     }
     pub fn play_file(&self, path: String, settings: DspSettings) -> Result<(), AudioError> {
         let mut source = LocalTrack::open(path, settings)?;
+        let dsp = source.shared_dsp();
         let duration_ms = source.total_duration().map(|d| d.as_millis() as u64);
-        let paused = Arc::new(AtomicBool::new(false));
-        source.set_observers(Arc::clone(&paused), self.spectrum.clone());
+        source.set_observers(self.spectrum.clone());
         let stream = OutputStreamBuilder::open_default_stream()
             .map_err(|e| std::io::Error::other(e.to_string()))?;
         let sink = Arc::new(Sink::connect_new(stream.mixer()));
@@ -72,7 +69,7 @@ impl AudioPlayer {
             duration_ms,
             volume: 1.0,
             position_base: Duration::ZERO,
-            paused,
+            dsp,
         });
         Ok(())
     }
@@ -80,7 +77,6 @@ impl AudioPlayer {
         if let Ok(state) = self.state.lock()
             && let Some(s) = state.as_ref()
         {
-            s.paused.store(true, Ordering::Release);
             s.sink.pause();
         }
     }
@@ -88,7 +84,6 @@ impl AudioPlayer {
         if let Ok(state) = self.state.lock()
             && let Some(s) = state.as_ref()
         {
-            s.paused.store(false, Ordering::Release);
             s.sink.play();
         }
     }
@@ -186,7 +181,13 @@ impl AudioPlayer {
     pub fn set_dsp_settings(&self, settings: DspSettings) -> Result<(), String> {
         let state = self.state.lock().map_err(|_| "audio state lock poisoned")?;
         let current = state.as_ref().ok_or("no active track")?;
-        current.sink.set_speed(settings.tempo.clamp(0.5, 2.0));
+        let mut dsp = current
+            .dsp
+            .lock()
+            .map_err(|_| "audio processor lock poisoned")?;
+        let mut updated = dsp.settings();
+        updated.tempo = settings.tempo;
+        dsp.update_settings(updated);
         Ok(())
     }
     pub fn seek(&self, position_ms: u64) -> Result<(), String> {
@@ -202,13 +203,15 @@ impl AudioPlayer {
         Ok(())
     }
     pub fn set_equalizer(&self, settings: DspSettings) -> Result<(), String> {
-        if settings
-            .gains_db
-            .iter()
-            .any(|gain| gain.abs() > f32::EPSILON)
-        {
-            return Err("Equalizer updates take effect when the next local track starts".into());
-        }
+        let state = self.state.lock().map_err(|_| "audio state lock poisoned")?;
+        let current = state.as_ref().ok_or("no active track")?;
+        let mut dsp = current
+            .dsp
+            .lock()
+            .map_err(|_| "audio processor lock poisoned")?;
+        let mut updated = dsp.settings();
+        updated.gains_db = settings.gains_db;
+        dsp.update_settings(updated);
         Ok(())
     }
     pub fn set_volume(&self, volume: f32) -> Result<(), String> {
@@ -268,11 +271,11 @@ impl AudioPlayer {
         duration: Duration,
     ) -> Result<(), AudioError> {
         let mut next = self.open_next(path, settings)?;
+        let dsp = next.shared_dsp();
         let duration_ms = next.total_duration().map(|d| d.as_millis() as u64);
         let stream = OutputStreamBuilder::open_default_stream()
             .map_err(|e| std::io::Error::other(e.to_string()))?;
-        let paused = Arc::new(AtomicBool::new(false));
-        next.set_observers(Arc::clone(&paused), self.spectrum.clone());
+        next.set_observers(self.spectrum.clone());
         let sink = Arc::new(Sink::connect_new(stream.mixer()));
         sink.set_volume(0.0);
         sink.append(next);
@@ -287,7 +290,7 @@ impl AudioPlayer {
                 _stream: stream,
                 sink: sink.clone(),
                 position_base: Duration::ZERO,
-                paused,
+                dsp,
                 duration_ms,
                 volume: 1.0,
             });

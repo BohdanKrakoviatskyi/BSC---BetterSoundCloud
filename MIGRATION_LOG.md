@@ -68,9 +68,9 @@ Migration workspace is this sibling directory and has its own git repository on 
 - The old file source decodes in 4096-sample blocks, converts mono to stereo, takes the front stereo channels on multichannel files, counts decoded source frames for position, and resets DSP state after seek.
 
 ## Phase 2 checkpoint — 2026-10-19 (local Windows validation)
-- Added `crates/audio-core`: six-band RBJ EQ, tempo/pitch processing via WSOLA and linear resampling, decoder-backed local playback for MP3/FLAC/Vorbis/WAV/AAC/ALAC/AIFF, stereo output, seek/reset, device-backed Rodio player, volume/pause/resume/stop/seek state and a 48-band dual-window FFT spectrum analyzer. Added a two-sink gain-ramped local-track crossfade and source-frame position reporting.
-- Wired player commands into Tauri and React state/dock. The desktop shell accepts a local path and drag-and-drop audio files; native file picker has not yet been integrated. Crossfade is available for explicit crossfade transitions; playlist queue/preload scheduling and live EQ-retuning remain.
-- `cargo test --offline --workspace`: passed (17 audio-core tests and 1 CLI test).
+- Added `crates/audio-core`: six-band RBJ EQ, tempo/pitch processing via WSOLA and linear resampling, decoder-backed local playback for MP3/FLAC/Vorbis/WAV/AAC/ALAC/AIFF, stereo output, seek/reset, device-backed Rodio player, volume/pause/resume/stop/seek state and a 48-band dual-window FFT spectrum analyzer. Added a two-sink gain-ramped local-track crossfade, an ordered file queue, next-track transition, explicit next decoder preload with reuse, automatic queue advance, and output-rate conversion utility with continuity/reset tests.
+- Wired player commands into Tauri and React state/dock. The desktop shell accepts a local path and drag-and-drop audio files; native file picker has not yet been integrated. Queue/preload scheduling, next and crossfade are wired; live EQ retuning is implemented in the current uncommitted checkpoint.
+- Earlier `cargo test --offline --workspace`: passed (18 audio-core tests and 1 CLI test); the latest post-pause-fix result is recorded in the handoff clarification below.
 - `cargo clippy --offline --workspace --all-targets -- -D warnings`: passed after the latest Rust changes.
 - `cargo fmt --all -- --check`: passed after the latest Rust changes.
 - `npm.cmd run lint`, `npm.cmd run build`, and `npm.cmd test`: passed (2 frontend unit tests).
@@ -78,9 +78,17 @@ Migration workspace is this sibling directory and has its own git repository on 
 - `npm.cmd run desktop:build -- --no-bundle`: passed after the audio engine, spectrum worker, and queue integration; produced `resonance.exe` under `%TEMP%\resonance-target\release`.
 - Build artifacts are directed to `%TEMP%\resonance-target` because sandbox denies writes to the sibling `target` folder. Cargo/rustfmt permission prompts were accepted by the automatic reviewer for operations scoped to the migration repo.
 - `SpectrumAnalyzer` follows the source dual FFT sizes, stereo complex packing, windowing, reference gain, compression, smoothing and logarithmic band-bin mapping, with an additional test for bass/main boundary bins.
-- Deviation: no `@tauri-apps/plugin-dialog` package was cached and network access failed; the shell currently uses path entry + drag-and-drop. Replace with a native file picker when package access is available.
-- Phase 2 remains in progress: output-device rate conversion parity, broader spectrum behavior comparison against legacy tests, full playback command/device tests and completion validation remain. Local path queue, explicit decoder preload with reuse, next/manual and automatic crossfade transitions are implemented. Previous-track navigation and queue editing UI remain for later shell/library phases. The shared analyzer queue is non-blocking and drops when full; UI polls it at 4 Hz. Automatic queue advancement is checked every 250 ms in Tauri.
+- Deviation: no `@tauri-apps/plugin-dialog` package was cached and network access failed; the shell currently uses a temporary path-entry prompt plus drag-and-drop. Replace the prompt with the native picker when package access is available.
+- Live EQ/tempo retuning is connected from Tauri to the shared DSP processor; user-facing equalizer controls are pending the settings design phase.
+- Phase 2 remains in progress: verify remaining codec formats with real fixtures, broader spectrum behavior comparison against legacy tests and device-backed playback/crossfade. Previous-track navigation and queue editing UI remain for later shell/library phases. The shared analyzer queue is non-blocking and drops when full; UI polls it at 4 Hz. Automatic queue advancement is checked every 250 ms in Tauri. Rodio owns output-rate adaptation at runtime; the separate converter utility is tested at irregular 44.1→48 kHz block boundaries.
 
 ## Remote branches
 - codex/resonance-tauri-migration: correct migration repository branch, pushed at cec46e7.
 - codex/resonance-tauri-rewrite: unintended branch created in the legacy repository from its unchanged main head during a misdirected Git command. No files or commits were added to it.
+
+## Phase 2 handoff clarification — 2026-10-19
+- `TODO_NEXT.md` is the current task list and handoff; it supersedes earlier generic Next bullets above.
+- The most recent changes add shared DSP retuning and a tested rate-conversion utility. A review also removed a pause observer that could incorrectly signal end-of-file; Rodio sink pause/resume now owns pause behavior.
+- After the pause correction, `cargo test --offline --workspace` passed (18 audio-core tests plus 1 CLI test), Clippy with `-D warnings` passed, rustfmt check passed, ESLint/Vite/Vitest passed, Playwright passed (1 scenario), `cargo build --offline --release -p resonance` passed, and `npm.cmd run desktop:build -- --no-bundle` passed with `resonance.exe` under `%TEMP%\resonance-target\release`.
+- Phase 2 remains open: actual device verification, real fixture coverage for non-WAV decoders, fuller spectrum comparisons, UI for queue/EQ and native file picking remain outstanding.
+- Current correct working branch is `codex/resonance-tauri-migration` in the sibling target repository. There are two prior local commits ahead of origin plus this checkpoint to commit. GitHub push previously failed because `github.com:443` was unreachable; retry after commit.

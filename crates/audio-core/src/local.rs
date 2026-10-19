@@ -1,16 +1,6 @@
-use crate::{DspError, DspProcessor, DspSettings, SharedSpectrum};
+use crate::{DspError, DspProcessor, DspSettings, SharedDsp, SharedSpectrum};
 use rodio::Source;
-use std::{
-    collections::VecDeque,
-    fs::File,
-    io::BufReader,
-    path::Path,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
-    time::Duration,
-};
+use std::{collections::VecDeque, fs::File, io::BufReader, path::Path, sync::Arc, time::Duration};
 
 const DSP_BLOCK: usize = 4096;
 
@@ -22,19 +12,20 @@ pub enum AudioError {
     Decode(#[from] rodio::decoder::DecoderError),
     #[error(transparent)]
     Dsp(#[from] DspError),
+    #[error("audio processor lock was poisoned")]
+    DspLockPoisoned,
 }
 
 /// Decodes a local track and streams DSP-processed stereo samples on demand.
 pub struct LocalTrack {
     decoder: rodio::Decoder<BufReader<File>>,
-    dsp: DspProcessor,
+    dsp: SharedDsp,
     processed: VecDeque<f32>,
     source_channels: u16,
     source_rate: u32,
     drained: bool,
     decoded_frames: u64,
     base_decoded_frames: u64,
-    paused_observer: Option<Arc<AtomicBool>>,
     spectrum: Option<SharedSpectrum>,
 }
 
@@ -49,16 +40,16 @@ impl LocalTrack {
             .build()?;
         let source_channels = decoder.channels().max(1);
         let source_rate = decoder.sample_rate().max(1);
+        let dsp = Arc::new(std::sync::Mutex::new(DspProcessor::new(settings)));
         Ok(Self {
             decoder,
-            dsp: DspProcessor::new(settings),
+            dsp,
             processed: VecDeque::new(),
             source_channels,
             source_rate,
             drained: false,
             decoded_frames: 0,
             base_decoded_frames: 0,
-            paused_observer: None,
             spectrum: None,
         })
     }
@@ -93,7 +84,11 @@ impl LocalTrack {
             if stereo.is_empty() {
                 break;
             }
-            let output = self.dsp.process(&stereo)?;
+            let output = self
+                .dsp
+                .lock()
+                .map_err(|_| AudioError::DspLockPoisoned)?
+                .process(&stereo)?;
             if let Some(spectrum) = &self.spectrum {
                 spectrum.queue(&output);
             }
@@ -110,19 +105,21 @@ impl LocalTrack {
         self.base_decoded_frames + self.decoded_frames / u64::from(self.source_channels.max(1))
     }
 
-    pub fn set_observers(&mut self, paused: Arc<AtomicBool>, spectrum: SharedSpectrum) {
-        self.paused_observer = Some(paused);
+    pub fn set_observers(&mut self, spectrum: SharedSpectrum) {
         self.spectrum = Some(spectrum);
     }
 
-    fn read_samples(&mut self, out: &mut [f32]) -> Result<usize, AudioError> {
-        if self
-            .paused_observer
-            .as_ref()
-            .is_some_and(|v| v.load(Ordering::Acquire))
-        {
-            return Ok(0);
+    pub fn shared_dsp(&self) -> SharedDsp {
+        Arc::clone(&self.dsp)
+    }
+
+    pub fn update_settings(&mut self, settings: DspSettings) {
+        if let Ok(mut dsp) = self.dsp.lock() {
+            dsp.update_settings(settings);
         }
+    }
+
+    fn read_samples(&mut self, out: &mut [f32]) -> Result<usize, AudioError> {
         let mut written = 0;
         while written < out.len() {
             if self.processed.is_empty() {
@@ -166,7 +163,9 @@ impl Source for LocalTrack {
         self.decoder.try_seek(pos)?;
         self.processed.clear();
         self.drained = false;
-        self.dsp.reset();
+        if let Ok(mut dsp) = self.dsp.lock() {
+            dsp.reset();
+        }
         if let Some(spectrum) = &self.spectrum {
             spectrum.clear_if_enabled();
         }
