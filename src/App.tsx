@@ -4,7 +4,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isTauri } from '@tauri-apps/api/core';
 import { motion } from 'framer-motion';
 import { readLocalMusicSources, readPreferences, saveLocalMusicSources } from './app/preferences';
-import { commands, type LaunchAction } from './app/commands';
+import { commands, type LaunchAction, type LocalPlaylist } from './app/commands';
 import { useAppStore } from './app/useAppStore';
 import { SettingsDialog } from './shell/SettingsDialog';
 import { Sidebar } from './shell/Sidebar';
@@ -34,6 +34,8 @@ function App() {
   const localSources = useAppStore((state) => state.localSources);
   const localLibraryReady = useAppStore((state) => state.localLibraryReady);
   const [libraryScanning, setLibraryScanning] = useState(false);
+  const [localPlaylists, setLocalPlaylists] = useState<LocalPlaylist[]>([]);
+  const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
 
   useEffect(() => { if (isTauri()) void commands.spectrumEnable(); }, []);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
@@ -67,6 +69,7 @@ function App() {
       }
     }).catch((reason: unknown) => showError(String(reason)));
     if (isTauri()) {
+      void commands.localPlaylists().then(setLocalPlaylists).catch((reason: unknown) => showError(String(reason)));
       void commands.initialAction().then((action) => { if (action) applyAction(action); }).catch((reason: unknown) => showError(String(reason)));
       void listen<LaunchAction>('launch-action', (event) => applyAction(event.payload)).then((unlisten) => { unlistenAction = unlisten; });
       void listen<string>('app-error', (event) => showError(event.payload)).then((unlisten) => { unlistenError = unlisten; });
@@ -146,10 +149,49 @@ function App() {
     } catch (reason) { showError(String(reason)); }
     finally { setLibraryScanning(false); }
   };
+  const createLocalPlaylist = async () => {
+    const name = window.prompt('Playlist name')?.trim();
+    if (!name) return;
+    try {
+      const playlist = await commands.localPlaylistCreate(name);
+      setLocalPlaylists((items) => [playlist, ...items]);
+      setSelectedPlaylistId(playlist.id);
+    } catch (reason) { showError(String(reason)); }
+  };
+  const addSongToPlaylist = async (song: (typeof localSongs)[number]) => {
+    if (!selectedPlaylistId) return;
+    try {
+      await commands.localPlaylistAddSongs(selectedPlaylistId, [song]);
+      setLocalPlaylists(await commands.localPlaylists());
+    } catch (reason) { showError(String(reason)); }
+  };
+  const deleteLocalPlaylist = async (id: string) => {
+    try {
+      await commands.localPlaylistDelete(id);
+      setLocalPlaylists(await commands.localPlaylists());
+      if (selectedPlaylistId === id) setSelectedPlaylistId(null);
+    } catch (reason) { showError(String(reason)); }
+  };
+  const removePlaylistSong = async (id: string, uri: string) => {
+    try {
+      await commands.localPlaylistRemoveSong(id, uri);
+      setLocalPlaylists(await commands.localPlaylists());
+    } catch (reason) { showError(String(reason)); }
+  };
+  const movePlaylistSong = async (playlist: LocalPlaylist, index: number, delta: -1 | 1) => {
+    const target = index + delta;
+    if (target < 0 || target >= playlist.songs.length) return;
+    const songs = [...playlist.songs];
+    [songs[index], songs[target]] = [songs[target], songs[index]];
+    try {
+      await commands.localPlaylistReorder(playlist.id, songs.map((song) => song.uri));
+      setLocalPlaylists(await commands.localPlaylists());
+    } catch (reason) { showError(String(reason)); }
+  };
   const showPage = () => {
     if (route === 'home') return <><section className="welcome-card"><div className="welcome-copy"><p className="eyebrow">A LITTLE SPACE FOR SOUND</p><h2>Your music,<br /><em>your atmosphere.</em></h2><p>Bring your favorite music together in one calm, expressive player.</p><button className="primary-button" onClick={() => setSettingsOpen(true)}>Choose a music source <span aria-hidden="true">&#8599;</span></button></div><div className="art-orbit" aria-hidden="true"><div className="orbit orbit-one"/><div className="orbit orbit-two"/><div className="orbit-core">{("\u266b")}</div><div className="orbit-star">{("\u2733")}</div></div></section><section className="getting-started"><div><p className="eyebrow">GETTING STARTED</p><h3>Make it yours</h3><p>Connect a source in settings to start building your listening space.</p></div><button className="text-button" onClick={() => setSettingsOpen(true)}>Open settings <span aria-hidden="true">&#8594;</span></button></section></>;
     if (route === 'search') return <section className="empty-view"><span className="empty-symbol">{("\u2315")}</span><h2>Find your next favorite</h2><p>Search across your connected music sources.</p><button className="primary-button" onClick={() => setSettingsOpen(true)}>Connect a source</button></section>;
-    if (route === 'playlists') return <section className="empty-view"><span className="empty-symbol">{("\u25a4")}</span><h2>Your playlists will live here</h2><p>Connect a music source to browse and organize playlists.</p><button className="primary-button" onClick={() => setSettingsOpen(true)}>Connect a source</button></section>;
+    if (route === 'playlists') { const selected = localPlaylists.find((playlist) => playlist.id === selectedPlaylistId); return <section className="local-library-view"><div className="local-library-heading"><div><p className="eyebrow">LOCAL PLAYLISTS</p><h2>{selected?.name ?? 'Your playlists'}</h2><p>Playlists saved on this device.</p></div><div className="library-actions"><button className="primary-button" onClick={() => void createLocalPlaylist()}>Create playlist</button></div></div>{selected ? <><button className="text-button" onClick={() => setSelectedPlaylistId(null)}>All playlists</button><ul className="local-song-list">{selected.songs.map((song, index) => <li key={`${song.instanceId}-${index}`}><button className="local-song-row" onClick={() => { setTrackPath(song.path); void commands.playLocalFile(song.path).catch((reason: unknown) => showError(String(reason))); }}><span className="song-art">♫</span><span className="song-meta"><strong>{song.name}</strong><small>{song.artists} · {song.albumName}</small></span></button><button className="text-button" aria-label={`Move ${song.name} up`} onClick={() => void movePlaylistSong(selected, index, -1)} disabled={index === 0}>↑</button><button className="text-button" aria-label={`Move ${song.name} down`} onClick={() => void movePlaylistSong(selected, index, 1)} disabled={index === selected.songs.length - 1}>↓</button><button className="text-button" aria-label={`Remove ${song.name}`} onClick={() => void removePlaylistSong(selected.id, song.uri)}>Remove</button></li>)}</ul>{localSongs.length > 0 && <details><summary>Add songs</summary><ul className="local-song-list">{localSongs.map((song) => <li key={song.instanceId}><button className="local-song-row" onClick={() => void addSongToPlaylist(song)}><span className="song-meta"><strong>{song.name}</strong><small>{song.artists} · {song.albumName}</small></span><span>+</span></button></li>)}</ul></details>}</> : localPlaylists.length ? <ul className="library-source-list">{localPlaylists.map((playlist) => <li key={playlist.id}><button className="text-button" onClick={() => setSelectedPlaylistId(playlist.id)}>{playlist.name} · {playlist.songs.length} songs</button><button className="text-button" aria-label={`Delete ${playlist.name}`} onClick={() => void deleteLocalPlaylist(playlist.id)}>Delete</button></li>)}</ul> : <div className="empty-view"><span className="empty-symbol">▤</span><h2>Your playlists will live here</h2><p>Create a playlist and add local music to it.</p><button className="primary-button" onClick={() => void createLocalPlaylist()}>Create playlist</button></div>}</section>; }
     return <section className="local-library-view"><div className="local-library-heading"><div><p className="eyebrow">LOCAL FILES</p><h2>{localSongs.length ? `${localSongs.length} songs` : 'Your music collection'}</h2><p>Scanned folders and audio files on this device.</p></div><div className="library-actions"><button className="text-button" onClick={() => void rescanLibrary()} disabled={libraryScanning}>{libraryScanning ? 'Scanning…' : 'Rescan'}</button><button className="primary-button" onClick={() => void addLibrarySource()} disabled={libraryScanning}>Add file or folder</button></div></div>{localSources.length > 0 && <ul className="library-source-list" aria-label="Library sources">{localSources.map((path) => <li key={path}><span title={path}>{path}</span><button className="text-button" aria-label={`Remove ${path}`} onClick={() => void removeLibrarySource(path)} disabled={libraryScanning}>Remove</button></li>)}</ul>}{localSongs.length ? <ul className="local-song-list">{localSongs.map((song) => <li key={song.instanceId}><button className="local-song-row" onClick={() => { setTrackPath(song.path); void commands.playLocalFile(song.path).catch((reason: unknown) => showError(String(reason))); }}><span className="song-art">{song.artworkPath ? <img src={`asset://localhost/${song.artworkPath}`} alt="" /> : '♫'}</span><span className="song-meta"><strong>{song.name}</strong><small>{song.artists} · {song.albumName}</small></span><span className="song-duration">{song.durationMs ? `${Math.floor(song.durationMs / 60000)}:${String(Math.floor(song.durationMs / 1000) % 60).padStart(2, '0')}` : '—'}</span></button></li>)}</ul> : <div className="empty-view"><span className="empty-symbol">{("\u266b")}</span><h2>A home for the songs you love</h2><p>Add an audio file from your device to start your local library.</p><button className="primary-button" onClick={() => void addLibrarySource()}>Add file or folder</button></div>}</section>;
   };
 

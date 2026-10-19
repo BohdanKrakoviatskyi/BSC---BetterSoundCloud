@@ -12,6 +12,7 @@ export type LaunchAction =
 export type PlaybackSnapshot = { playing: boolean; position_ms: number; duration_ms: number | null; volume: number };
 export type LocalSong = { instanceId: number; uri: string; path: string; name: string; artists: string; albumName: string; durationMs: number; artworkPath: string | null };
 export type LocalLibraryStatus = { sources: string[]; songCount: number; scanning: boolean };
+export type LocalPlaylist = { id: string; name: string; description: string; artworkPath: string | null; songs: LocalSong[] };
 
 export const commands = {
   initialAction: () => invoke<LaunchAction | null>('initial_action'),
@@ -43,6 +44,12 @@ export const commands = {
   localLibraryStatus: () => invoke<LocalLibraryStatus>('local_library_status'),
   localLibraryRemoveSource: (path: string) => invoke<boolean>('local_library_remove_source', { path }),
   localLibraryRescan: () => invoke<number>('local_library_rescan'),
+  localPlaylists: () => invoke<LocalPlaylist[]>('local_playlists'),
+  localPlaylistCreate: (name: string) => invoke<LocalPlaylist>('local_playlist_create', { name }),
+  localPlaylistAddSongs: (id: string, songs: LocalSong[]) => invoke<number>('local_playlist_add_songs', { id, songs }),
+  localPlaylistDelete: (id: string) => invoke<boolean>('local_playlist_delete', { id }),
+  localPlaylistRemoveSong: (id: string, uri: string) => invoke<number>('local_playlist_remove_song', { id, uri }),
+  localPlaylistReorder: (id: string, uris: string[]) => invoke<void>('local_playlist_reorder', { id, uris }),
   pathFromFileDrop: () => window.prompt('Enter the full path to an audio file or folder') || null,
   pickLocalFile: async () => window.prompt('Enter the full path to an audio file') || null,
 };

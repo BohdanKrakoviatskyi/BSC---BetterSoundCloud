@@ -1,5 +1,5 @@
 use audio_core::{AudioPlayer, DspSettings, PlaybackSnapshot};
-use library::{LocalLibrary, Song};
+use library::{LocalLibrary, LocalPlaylist, LocalPlaylistStore, Song};
 use serde::Serialize;
 use std::sync::{
     Arc,
@@ -9,7 +9,93 @@ use tauri::{Emitter, Manager, Runtime, WebviewWindow};
 
 struct LibraryState {
     library: Arc<std::sync::Mutex<LocalLibrary>>,
+    playlists: Arc<std::sync::Mutex<LocalPlaylistStore>>,
     scanning: Arc<AtomicBool>,
+}
+
+#[tauri::command]
+fn local_playlists(state: tauri::State<'_, LibraryState>) -> Result<Vec<LocalPlaylist>, String> {
+    let playlists = state
+        .inner()
+        .playlists
+        .lock()
+        .map_err(|_| "playlist lock poisoned")?;
+    Ok(playlists.playlists().to_vec())
+}
+
+#[tauri::command]
+fn local_playlist_create(
+    name: String,
+    state: tauri::State<'_, LibraryState>,
+) -> Result<LocalPlaylist, String> {
+    let mut playlists = state
+        .inner()
+        .playlists
+        .lock()
+        .map_err(|_| "playlist lock poisoned")?;
+    playlists
+        .create(&name, "", &[])
+        .cloned()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn local_playlist_add_songs(
+    id: String,
+    songs: Vec<Song>,
+    state: tauri::State<'_, LibraryState>,
+) -> Result<usize, String> {
+    state
+        .inner()
+        .playlists
+        .lock()
+        .map_err(|_| "playlist lock poisoned")?
+        .add_songs(&id, &songs)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn local_playlist_delete(
+    id: String,
+    state: tauri::State<'_, LibraryState>,
+) -> Result<bool, String> {
+    state
+        .inner()
+        .playlists
+        .lock()
+        .map_err(|_| "playlist lock poisoned")?
+        .delete(&id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn local_playlist_remove_song(
+    id: String,
+    uri: String,
+    state: tauri::State<'_, LibraryState>,
+) -> Result<usize, String> {
+    state
+        .inner()
+        .playlists
+        .lock()
+        .map_err(|_| "playlist lock poisoned")?
+        .remove_uri(&id, &uri)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn local_playlist_reorder(
+    id: String,
+    uris: Vec<String>,
+    state: tauri::State<'_, LibraryState>,
+) -> Result<(), String> {
+    state
+        .inner()
+        .playlists
+        .lock()
+        .map_err(|_| "playlist lock poisoned")?
+        .reorder(&id, &uris)
+        .map_err(|error| error.to_string())
 }
 
 #[derive(Serialize)]
@@ -394,6 +480,8 @@ pub fn run() {
     std::fs::create_dir_all(&library_dir).expect("could not create local library directory");
     let mut local_library = LocalLibrary::open(library_dir.join("local-files.json"))
         .expect("could not open local library cache");
+    let playlist_store = LocalPlaylistStore::open(library_dir.join("local-playlists.json"))
+        .expect("could not open local playlists");
     local_library
         .load_persisted_sources()
         .expect("could not load local library sources");
@@ -426,6 +514,7 @@ pub fn run() {
         .manage(playback)
         .manage(LibraryState {
             library: Arc::new(std::sync::Mutex::new(local_library)),
+            playlists: Arc::new(std::sync::Mutex::new(playlist_store)),
             scanning: Arc::new(AtomicBool::new(true)),
         })
         .invoke_handler(tauri::generate_handler![
@@ -458,6 +547,12 @@ pub fn run() {
             local_library_status,
             local_library_remove_source,
             local_library_rescan,
+            local_playlists,
+            local_playlist_create,
+            local_playlist_add_songs,
+            local_playlist_delete,
+            local_playlist_remove_song,
+            local_playlist_reorder,
         ])
         .setup(|app| {
             let state = Arc::clone(&app.state::<LibraryState>().library);

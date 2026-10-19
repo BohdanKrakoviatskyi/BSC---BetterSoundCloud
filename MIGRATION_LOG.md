@@ -121,3 +121,10 @@ Migration workspace is this sibling directory and has its own git repository on 
 - Updated the shell e2e assertion for the two identical Add file or folder actions.
 - Verification: workspace check and tests pass (34 tests); strict Clippy and rustfmt check pass; ESLint/build and Vitest pass (2 tests); Playwright passes (1 scenario).
 - Phase 3 remains open: cancel/stale-scan handling, native picker, robust metadata/artwork editing and playlist storage/copy semantics still need implementation. The full-path prompt is a temporary path-entry interaction.
+
+## Phase 3.3 working checkpoint - 2026-10-19 (initial local playlists)
+- Added `LocalPlaylistStore` with versioned atomic JSON persistence, playlist create/update/delete, local track copies, `.lrc` and adjacent image companions, song order operations, and collection of unheld playlist folders. A Windows canonical-path comparison issue was found by the test and fixed; a track referenced after reopening remains on disk until its playlist is deleted.
+- Added Tauri commands to list/create/add/delete playlists and connected the React Playlists route to create, browse, play and add indexed local songs. Updated the shell e2e assertion.
+- Verification: workspace tests pass (35 total: 13 audio-core + 8 DSP + 5 local playback + 8 library + 1 CLI); workspace check, strict Clippy, rustfmt, ESLint, Vite build, Vitest (2) and Playwright (1) pass.
+- Not yet a Phase 3 completion checkpoint: repeated source tracks currently receive separate copies, occurrence identity/keying needs refinement, legacy playlist JSON migration and artwork editing are missing, and remove/reorder/update need complete frontend commands and user flows. Desktop Tauri packaging build must be rerun before commit.
+- Follow-up within Phase 3.3: added playlist track removal and reorder Tauri commands/UI, and unique IDs for copied playlist occurrences so repeated entries render as distinct React rows. The full Windows Tauri no-bundle build passed and produced `%TEMP%\resonance-target\release\resonance.exe`.
