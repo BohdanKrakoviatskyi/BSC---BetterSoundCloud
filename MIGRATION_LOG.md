@@ -197,3 +197,10 @@ Migration workspace is this sibling directory and has its own git repository on 
 - Fixes: `ramp_volume` now gives its worker only an `Arc<Sink>` (and updates the stored target volume); Linux CI installs `libasound2-dev`; Tauri category is the accepted `Music` enum value.
 - Validation: Windows NSIS bundle completed locally and produced `target/release/bundle/nsis/Resonance_0.2.6_x64-setup.exe` (3.36 MiB). ESLint, TypeScript/Vite build, Vitest (3), Playwright (1), workspace Rust tests (46), strict Clippy, rustfmt check and `git diff --check` pass. macOS and Ubuntu bundle fixes still require CI confirmation after push.
 - Phase 3 remains open for broader legacy parity scenarios and command/UI integration coverage.
+
+## Audio output thread ownership and cross-platform bundle follow-up - 2026-10-19
+- Cross-platform workflow `39287130778` passed quality and Playwright; Linux AppImage/DEB and Windows NSIS bundle jobs also passed. macOS DMG failed because CoreAudio's property-listener callback makes `rodio::OutputStream` non-Send, so `AudioPlayer` could not be stored in Tauri state or captured in blocking tasks.
+- Reworked `AudioPlayer` into a `Send + Sync` command handle with a dedicated `resonance-audio-output` thread. The worker creates and retains output streams and sinks; play, pause, resume, stop, seek, volume, DSP, queue advance and crossfade commands are routed to it. Removed the second Tauri-side playback polling thread so the worker owns output and queue advancement together.
+- Added a compile-time regression assertion that `AudioPlayer: Send + Sync`.
+- Local verification after the change: Windows Tauri release build, strict Clippy, rustfmt, workspace tests (46 total), and `git diff --check` pass. The next CI run must confirm the macOS bundle.
+- Remaining care: validate queue error recovery and worker shutdown/runtime audio behavior with platform output devices; this remains part of Phase 2 verification.

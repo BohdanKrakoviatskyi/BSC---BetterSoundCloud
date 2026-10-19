@@ -8,11 +8,10 @@ Read-only source: `C:\Users\krako\Desktop\BSC-main`
 ## Resume here first
 
 1. In PowerShell, enter the migration repo and run `git status --short` and `git branch --show-current`. Stay on `codex/resonance-tauri-migration`; do not change repository access or contributors.
-2. Current uncommitted changes include Phase 3 playlist-copy tag editing, rollback-safe playlist/source persistence, concurrent scan status, and source preference sync without duplicate scans. CI bundle causes are fixed: macOS ramp thread captures only Sink; Ubuntu installs `libasound2-dev`; Tauri category is `Music`. Regression coverage lives in `crates/library/src/playlists.rs`, `crates/library/src/local.rs`, and `src-tauri/src/lib.rs`.
-3. Keep Cargo output outside the repo: `$env:CARGO_TARGET_DIR="$env:TEMP\resonance-target"`.
-4. Latest verification: workspace Rust tests (46), strict Clippy, rustfmt, ESLint, TypeScript/Vite, Vitest (3), Playwright (1), Windows release build, Windows NSIS package, and `git diff --check` pass.
-5. Exact prior CI failures (run `39281586980`): macOS `AudioPlayer`/CoreAudio non-Send capture in `ramp_volume`; Ubuntu missing ALSA development package; Windows invalid category `AudioVideo`. Fixes are local; push and inspect the new Actions run to confirm macOS/Linux bundles.
-6. Commit/push this checkpoint to `codex/resonance-tauri-migration`; then continue Phase 3 parity/integration scenarios.
+2. Current uncommitted changes move all Rodio/CoreAudio stream ownership to a dedicated audio-output worker. Tauri receives a `Send + Sync` command handle; automatic queue advance and crossfade run on the output worker. Windows compile/release, Rust tests, strict Clippy, rustfmt, and `git diff --check` pass. Commit and push, then inspect the new cross-platform run.
+3. CI run `39287130778`: quality and Playwright passed; Windows NSIS and Linux AppImage/DEB bundles passed; macOS DMG failed because Tauri's `AudioPlayer` state was not `Send` due to a CoreAudio property callback. The new worker architecture addresses that compile error; macOS confirmation is pending.
+4. Keep Cargo output outside the repo when space is limited: `$env:CARGO_TARGET_DIR="$env:TEMP\resonance-target"`.
+5. After the next CI run, update this file and continue Phase 2/3 integration scenarios, then move to the Rust providers in Phase 4.
 
 ## Completed and pushed
 
@@ -21,8 +20,8 @@ Read-only source: `C:\Users\krako\Desktop\BSC-main`
 - Phase 3.1 scanner/Saved Songs and 3.2 local source management/settings migration.
 - Phase 3.3 playlist CRUD, copy-on-add, persistence/order, play/add/remove/reorder UI and desktop build.
 - Phase 3.4 indexed local tag editing via Lofty, plus embedded/folder artwork extraction and validated artwork data URLs.
-- Latest pushed checkpoint before current work: `3e4ca0b feat: migrate legacy local playlists`.
-- Playlist-copy tag editing, playlist/source mutation recovery, concurrent scan status, CI bundle fixes and preference synchronization are verified locally. Windows NSIS package builds; macOS/Linux packages await CI confirmation.
+- Latest pushed checkpoint before current work: `813b491 fix: harden local library and release bundles`.
+- Playlist-copy tag editing, playlist/source mutation recovery, concurrent scan status, CI Linux/Windows bundle fixes and preference synchronization are pushed. Run `39287130778` confirmed Linux and Windows packages build; macOS exposed a CoreAudio Send boundary now addressed by a dedicated audio worker.
 
 ## Remaining work by phase
 
@@ -42,7 +41,7 @@ Read-only source: `C:\Users\krako\Desktop\BSC-main`
 The specification defines Phases 0–11. Phase 0–1 and parts of 2–3 are done; approximately eight full phases plus the remainder of Phases 2–3 are left. This is a large migration with many implementation/checkpoint cycles; no claim of full feature parity is warranted yet.
 
 - Keep `BSC-main` read-only.
-- Only Windows has been verified locally; macOS and Linux need CI evidence.
+- Windows is verified locally; Windows and Linux bundles passed CI on `813b491`; macOS bundle needs CI confirmation after the audio worker change.
 - Native dialog dependency was unavailable locally; path entry/drag-drop remain interim.
 - Legacy source contains no audio fixture corpus; generated WAVs do not validate every decoder.
 - Enabling Tauri asset protocol with empty scope was rejected by automatic approval review as potentially broad local-file access. The change was not applied; indexed artwork is sent through validated IPC as data URLs.

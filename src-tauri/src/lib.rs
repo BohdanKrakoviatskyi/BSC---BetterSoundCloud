@@ -6,7 +6,7 @@ use library::{
 use serde::Serialize;
 use std::sync::{
     Arc,
-    atomic::{AtomicBool, AtomicUsize, Ordering},
+    atomic::{AtomicUsize, Ordering},
 };
 use tauri::{Emitter, Manager, Runtime, WebviewWindow};
 
@@ -692,20 +692,6 @@ pub fn run() {
     local_library
         .load_persisted_sources()
         .expect("could not load local library sources");
-    let playback_worker = playback.clone();
-    let shutdown = Arc::new(AtomicBool::new(false));
-    let worker_shutdown = Arc::clone(&shutdown);
-    let _ = std::thread::Builder::new()
-        .name("resonance-playback-queue".into())
-        .spawn(move || {
-            while !worker_shutdown.load(Ordering::Acquire) {
-                let _ = playback_worker.advance_if_finished(
-                    DspSettings::default(),
-                    std::time::Duration::from_millis(500),
-                );
-                std::thread::sleep(std::time::Duration::from_millis(250));
-            }
-        });
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
