@@ -8,11 +8,12 @@ Read-only source: `C:\Users\krako\Desktop\BSC-main`
 ## Resume here first
 
 1. In PowerShell, enter the migration repo and run `git status --short` and `git branch --show-current`. Stay on `codex/resonance-tauri-migration`; do not change repository access or contributors.
-2. Latest commit pushed: `5a07718 fix: isolate audio output on worker thread`. A dedicated output worker owns Rodio/CoreAudio streams and processes a `Send + Sync` command handle. Automatic queue advance runs in that worker. A follow-up regression test is currently uncommitted: missing-file play errors return without hanging and snapshot commands still work.
-3. Local verification: workspace Rust tests (47 total), strict Clippy, rustfmt, Windows Tauri release build, and `git diff --check` pass.
-4. CI run `39290324571`: Playwright passed; quality and platform bundle jobs are still running. Previous run `39287130778` passed Windows NSIS and Linux AppImage/DEB, while macOS DMG failed on CoreAudio's non-Send callback. Verify this run's macOS result before proceeding.
-5. Keep Cargo output outside the repo when space is limited: `$env:CARGO_TARGET_DIR="$env:TEMP\resonance-target"`.
-6. Then finish audio queue/output-device validation and Phase 3 integration scenarios, followed by Rust providers in Phase 4.
+2. Latest feature commit pushed: `f13b2e9 test: cover audio worker error recovery`. It contains the dedicated CoreAudio worker and missing-file request/reply regression. Local follow-up changes fix the WAV fixture's stereo layout and CI bundle paths/icon.
+3. CI run `39290506325`: UI and quality jobs passed. Windows and Linux desktop bundle builds passed but artifact upload failed because workflow searched `src-tauri/target/...`; fixed locally to `target/release/bundle/**`. macOS bundling failed because its icon is RGBA16; a visually equivalent 256x256 RGBA8 `src-tauri/icons/icon-8bit.png` is generated and selected in Tauri config.
+4. Local follow-up: all five audio playback/seek tests pass with valid stereo PCM WAV; strict Clippy, rustfmt, Windows release build and diff checks passed before the bundle path/icon adjustments. Re-run them and build the NSIS bundle.
+5. Commit/push these CI and fixture fixes. Inspect fresh Actions logs to confirm macOS DMG and artifact uploads on all three platforms.
+6. Keep Cargo output outside the repo when space is limited: `$env:CARGO_TARGET_DIR="$env:TEMP\resonance-target"`.
+7. Then finish audio queue/output-device validation and Phase 3 integration scenarios, followed by Rust providers in Phase 4.
 
 ## Completed and pushed
 
@@ -23,7 +24,7 @@ Read-only source: `C:\Users\krako\Desktop\BSC-main`
 - Phase 3.4 indexed local tag editing via Lofty, plus embedded/folder artwork extraction and validated artwork data URLs.
 - Latest pushed checkpoint before current work: `813b491 fix: harden local library and release bundles`.
 - Playlist-copy tag editing, playlist/source mutation recovery, concurrent scan status, CI Linux/Windows bundle fixes and preference synchronization are pushed. Run `39287130778` confirmed Linux and Windows packages build; macOS exposed a CoreAudio Send boundary now addressed by a dedicated audio worker.
-- Commit `5a07718` contains the CoreAudio worker architecture; CI run `39290324571` is the active verification. A follow-up worker request/reply regression is local and not yet committed.
+- Commit `5a07718` contains the CoreAudio worker architecture; `f13b2e9` adds worker request/reply regression. CI `39290506325` confirmed quality, UI and build compilation; a local follow-up corrects artifact directory and macOS PNG depth.
 
 ## Remaining work by phase
 
@@ -43,7 +44,7 @@ Read-only source: `C:\Users\krako\Desktop\BSC-main`
 The specification defines Phases 0–11. Phase 0–1 and parts of 2–3 are done; approximately eight full phases plus the remainder of Phases 2–3 are left. This is a large migration with many implementation/checkpoint cycles; no claim of full feature parity is warranted yet.
 
 - Keep `BSC-main` read-only.
-- Windows is verified locally; Windows and Linux bundles passed CI on `813b491`; macOS bundle needs CI confirmation after the audio worker change.
+- Windows/Linux bundle commands compile on `f13b2e9`, but artifact upload path is being corrected; macOS icon was RGBA16 and is normalized to RGBA8 locally. Fresh CI confirmation is pending.
 - Native dialog dependency was unavailable locally; path entry/drag-drop remain interim.
 - Legacy source contains no audio fixture corpus; generated WAVs do not validate every decoder.
 - Enabling Tauri asset protocol with empty scope was rejected by automatic approval review as potentially broad local-file access. The change was not applied; indexed artwork is sent through validated IPC as data URLs.

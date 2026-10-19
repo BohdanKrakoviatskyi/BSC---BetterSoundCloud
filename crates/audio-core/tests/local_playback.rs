@@ -6,20 +6,22 @@ use std::path::Path;
 use std::time::Duration;
 
 fn write_wav(path: &Path, frames: usize, rate: u32) {
-    let mut data = Vec::with_capacity(frames * 2);
+    let mut data = Vec::with_capacity(frames * 4);
     for frame in 0..frames {
         let sample = (TAU * 440.0 * frame as f32 / rate as f32).sin() * 0.5;
-        data.extend_from_slice(&((sample * i16::MAX as f32) as i16).to_le_bytes());
+        let sample = ((sample * i16::MAX as f32) as i16).to_le_bytes();
+        data.extend_from_slice(&sample);
+        data.extend_from_slice(&sample);
     }
     let mut body = Vec::new();
     body.extend_from_slice(b"WAVE");
     body.extend_from_slice(b"fmt ");
     body.extend_from_slice(&16_u32.to_le_bytes());
     body.extend_from_slice(&1_u16.to_le_bytes());
-    body.extend_from_slice(&1_u16.to_le_bytes());
-    body.extend_from_slice(&rate.to_le_bytes());
-    body.extend_from_slice(&(rate * 2).to_le_bytes());
     body.extend_from_slice(&2_u16.to_le_bytes());
+    body.extend_from_slice(&rate.to_le_bytes());
+    body.extend_from_slice(&(rate * 4).to_le_bytes());
+    body.extend_from_slice(&4_u16.to_le_bytes());
     body.extend_from_slice(&16_u16.to_le_bytes());
     body.extend_from_slice(b"data");
     body.extend_from_slice(&(data.len() as u32).to_le_bytes());
@@ -84,7 +86,7 @@ fn local_decoder_reads_a_bounded_block_ahead() {
 
     let mut first_frame = [0.0; 2];
     assert_eq!(track.read(&mut first_frame), 2);
-    assert_eq!(track.decoded_frames(), 4_410 + 4_096);
+    assert_eq!(track.decoded_frames(), 4_410 + 2_048);
 
     fs::remove_file(path).unwrap();
 }

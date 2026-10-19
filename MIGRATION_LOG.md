@@ -206,3 +206,9 @@ Migration workspace is this sibling directory and has its own git repository on 
 - Remaining care: validate queue error recovery and worker shutdown/runtime audio behavior with platform output devices; this remains part of Phase 2 verification.
 - Follow-up regression: sending a play request for a missing file returns the error promptly and the worker continues to serve snapshots. The workspace now has 47 Rust tests; tests, strict Clippy, rustfmt, release build and whitespace check pass.
 - Follow-up CI run `39290324571` is in progress; Playwright passed so far. Await quality and platform bundle results before recording the cross-platform checkpoint as green.
+
+## CI bundle follow-up - 2026-10-19
+- CI run `39290506325`: UI and quality jobs passed. Windows and Linux Tauri bundle build steps succeeded, but artifact upload failed because workflow referenced `src-tauri/target/release/bundle/**`; Cargo workspace target output is at `target/release/bundle/**`. Workflow path corrected.
+- macOS bundle reached Tauri packaging and failed with `Failed to create app icon: unsupported ColorType: Rgba16`. The 256x256 configured PNG was 16-bit RGBA. Generated `src-tauri/icons/icon-8bit.png` in 8-bit RGBA preserving the image appearance and selected it in Tauri config.
+- Corrected the generated WAV integration fixture to declare and contain stereo PCM frames (two samples per frame), and adjusted the bounded read-ahead expectation to the actual 2048 frames per channel. All five local playback/seek tests now pass; strict Clippy passes.
+- Re-run bundle verification after these fixes; macOS package and successful artifact uploads remain unconfirmed.
