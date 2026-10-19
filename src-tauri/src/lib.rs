@@ -1,9 +1,12 @@
 use audio_core::{AudioPlayer, DspSettings, PlaybackSnapshot};
-use library::{LocalLibrary, LocalPlaylist, LocalPlaylistStore, Song, TagEdits, write_local_tags};
+use library::{
+    LocalLibrary, LocalPlaylist, LocalPlaylistStore, Song, TagEdits, read_local_tags_with_artwork,
+    write_local_tags,
+};
 use serde::Serialize;
 use std::sync::{
     Arc,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use tauri::{Emitter, Manager, Runtime, WebviewWindow};
 
@@ -12,7 +15,23 @@ struct LibraryState {
     playlists: Arc<std::sync::Mutex<LocalPlaylistStore>>,
     artwork_dir: std::path::PathBuf,
     playlist_artwork_dir: std::path::PathBuf,
-    scanning: Arc<AtomicBool>,
+    scanning: Arc<AtomicUsize>,
+}
+
+fn run_library_scan<T>(
+    scanning: &AtomicUsize,
+    scan: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    struct ScanGuard<'a>(&'a AtomicUsize);
+    impl Drop for ScanGuard<'_> {
+        fn drop(&mut self) {
+            self.0.fetch_sub(1, Ordering::AcqRel);
+        }
+    }
+
+    scanning.fetch_add(1, Ordering::AcqRel);
+    let _guard = ScanGuard(scanning);
+    scan()
 }
 
 #[derive(Serialize)]
@@ -254,7 +273,7 @@ fn base64_encode(bytes: &[u8]) -> String {
 fn local_library_status(
     state: tauri::State<'_, LibraryState>,
 ) -> Result<LocalLibraryStatus, String> {
-    let scanning = state.inner().scanning.load(Ordering::Acquire);
+    let scanning = state.inner().scanning.load(Ordering::Acquire) != 0;
     let library = state
         .inner()
         .library
@@ -279,8 +298,7 @@ async fn local_library_set_sources(
     let library = Arc::clone(&state.inner().library);
     let scanning = Arc::clone(&state.inner().scanning);
     tauri::async_runtime::spawn_blocking(move || {
-        scanning.store(true, Ordering::Release);
-        let result = (|| {
+        let result = run_library_scan(&scanning, || {
             let mut library = library.lock().map_err(|_| "local library lock poisoned")?;
             library.set_sources(sources);
             library
@@ -291,8 +309,7 @@ async fn local_library_set_sources(
                 .map_err(|error| error.to_string())?
                 .len();
             Ok::<_, String>(count)
-        })();
-        scanning.store(false, Ordering::Release);
+        });
         if let Ok(count) = result {
             let _ = app.emit("local-library-scanned", count);
         }
@@ -308,11 +325,14 @@ async fn local_library_add_sources(
     paths: Vec<String>,
     state: tauri::State<'_, LibraryState>,
 ) -> Result<usize, String> {
-    let state = Arc::clone(&state.inner().library);
+    let library_state = Arc::clone(&state.inner().library);
+    let scanning = Arc::clone(&state.inner().scanning);
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let (added, count) = {
-            let mut library = state.lock().map_err(|_| "local library lock poisoned")?;
+        let (added, count) = run_library_scan(&scanning, || {
+            let mut library = library_state
+                .lock()
+                .map_err(|_| "local library lock poisoned")?;
             let mut all_sources = library
                 .sources()
                 .iter()
@@ -326,8 +346,8 @@ async fn local_library_add_sources(
             library
                 .rescan_with_lofty()
                 .map_err(|error| error.to_string())?;
-            (added, library.songs().len())
-        };
+            Ok::<_, String>((added, library.songs().len()))
+        })?;
         let _ = app.emit("local-library-scanned", count);
         Ok::<_, String>(added)
     })
@@ -341,11 +361,14 @@ async fn local_library_remove_source(
     path: String,
     state: tauri::State<'_, LibraryState>,
 ) -> Result<bool, String> {
-    let state = Arc::clone(&state.inner().library);
+    let library_state = Arc::clone(&state.inner().library);
+    let scanning = Arc::clone(&state.inner().scanning);
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let (removed, count) = {
-            let mut library = state.lock().map_err(|_| "local library lock poisoned")?;
+        let (removed, count) = run_library_scan(&scanning, || {
+            let mut library = library_state
+                .lock()
+                .map_err(|_| "local library lock poisoned")?;
             let removed = library
                 .remove_source_persisted(&path)
                 .map_err(|error| error.to_string())?;
@@ -354,8 +377,8 @@ async fn local_library_remove_source(
                     .rescan_with_lofty()
                     .map_err(|error| error.to_string())?;
             }
-            (removed, library.songs().len())
-        };
+            Ok::<_, String>((removed, library.songs().len()))
+        })?;
         if removed {
             let _ = app.emit("local-library-scanned", count);
         }
@@ -370,15 +393,20 @@ async fn local_library_rescan(
     app: tauri::AppHandle,
     state: tauri::State<'_, LibraryState>,
 ) -> Result<usize, String> {
-    let state = Arc::clone(&state.inner().library);
+    let library_state = Arc::clone(&state.inner().library);
+    let scanning = Arc::clone(&state.inner().scanning);
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let count = state
-            .lock()
-            .map_err(|_| "local library lock poisoned")?
-            .rescan_persisted()
-            .map_err(|error| error.to_string())?
-            .len();
+        let count = run_library_scan(&scanning, || {
+            Ok::<_, String>(
+                library_state
+                    .lock()
+                    .map_err(|_| "local library lock poisoned")?
+                    .rescan_persisted()
+                    .map_err(|error| error.to_string())?
+                    .len(),
+            )
+        })?;
         let _ = app.emit("local-library-scanned", count);
         Ok::<_, String>(count)
     })
@@ -394,9 +422,9 @@ async fn local_song_edit_tags(
     artwork: Option<Vec<u8>>,
     state: tauri::State<'_, LibraryState>,
 ) -> Result<(), String> {
-    let path = {
-        let library = state
-            .inner()
+    let app_state = state.inner();
+    let indexed_path = {
+        let library = app_state
             .library
             .lock()
             .map_err(|_| "local library lock poisoned")?;
@@ -405,19 +433,40 @@ async fn local_song_edit_tags(
             .iter()
             .find(|song| song.uri == uri)
             .map(|song| song.path.clone())
-            .ok_or_else(|| {
-                "Only music files in the indexed local library can be edited.".to_owned()
-            })?
     };
-    let library = Arc::clone(&state.inner().library);
+    let playlist_owned = indexed_path.is_none();
+    let path = match indexed_path {
+        Some(path) => path,
+        None => app_state
+            .playlists
+            .lock()
+            .map_err(|_| "playlist lock poisoned")?
+            .song_path_for_uri(&uri)
+            .ok_or_else(|| {
+                "Only indexed local songs and local playlist copies can be edited.".to_owned()
+            })?,
+    };
+    let library = Arc::clone(&app_state.library);
+    let playlists = Arc::clone(&app_state.playlists);
+    let artwork_dir = app_state.artwork_dir.clone();
     tauri::async_runtime::spawn_blocking(move || {
         write_local_tags(&path, &edits, artwork.as_deref())?;
-        let mut library = library.lock().map_err(|_| "local library lock poisoned")?;
-        let count = library
-            .rescan_with_lofty()
-            .map_err(|error| error.to_string())?
-            .len();
-        let _ = app.emit("local-library-scanned", count);
+        if playlist_owned {
+            let tags = read_local_tags_with_artwork(&path, &artwork_dir)?;
+            playlists
+                .lock()
+                .map_err(|_| "playlist lock poisoned")?
+                .refresh_song_tags(&uri, tags)
+                .map_err(|error| error.to_string())?;
+            let _ = app.emit("local-playlists-changed", ());
+        } else {
+            let mut library = library.lock().map_err(|_| "local library lock poisoned")?;
+            let count = library
+                .rescan_with_lofty()
+                .map_err(|error| error.to_string())?
+                .len();
+            let _ = app.emit("local-library-scanned", count);
+        }
         Ok::<_, String>(())
     })
     .await
@@ -675,7 +724,7 @@ pub fn run() {
             playlists: Arc::new(std::sync::Mutex::new(playlist_store)),
             artwork_dir: library_dir.join("local-artwork"),
             playlist_artwork_dir: library_dir.join("local-playlist-covers"),
-            scanning: Arc::new(AtomicBool::new(true)),
+            scanning: Arc::new(AtomicUsize::new(1)),
         })
         .invoke_handler(tauri::generate_handler![
             initial_action,
@@ -723,7 +772,7 @@ pub fn run() {
             let _ = std::thread::Builder::new()
                 .name("resonance-local-library-scan".into())
                 .spawn(move || {
-                    scanning.store(true, Ordering::Release);
+                    scanning.fetch_add(1, Ordering::AcqRel);
                     let result = state
                         .lock()
                         .map_err(|_| "local library lock poisoned".to_owned())
@@ -733,7 +782,7 @@ pub fn run() {
                                 .map(|songs| songs.len())
                                 .map_err(|error| error.to_string())
                         });
-                    scanning.store(false, Ordering::Release);
+                    scanning.fetch_sub(1, Ordering::AcqRel);
                     match result {
                         Ok(count) => {
                             let _ = handle.emit("local-library-scanned", count);
@@ -771,7 +820,39 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{LaunchAction, parse_launch_action};
+    use super::{LaunchAction, parse_launch_action, run_library_scan};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[test]
+    fn library_scan_status_is_reset_after_success_and_failure() {
+        let scanning = AtomicUsize::new(0);
+        let result = run_library_scan(&scanning, || {
+            assert_ne!(scanning.load(Ordering::Acquire), 0);
+            Ok(7)
+        });
+        assert_eq!(result, Ok(7));
+        assert_eq!(scanning.load(Ordering::Acquire), 0);
+
+        let result = run_library_scan(&scanning, || {
+            assert_ne!(scanning.load(Ordering::Acquire), 0);
+            Err::<(), _>("scan failed".to_owned())
+        });
+        assert_eq!(result, Err("scan failed".to_owned()));
+        assert_eq!(scanning.load(Ordering::Acquire), 0);
+
+        let result = run_library_scan(&scanning, || {
+            assert_eq!(scanning.load(Ordering::Acquire), 1);
+            let nested = run_library_scan(&scanning, || {
+                assert_eq!(scanning.load(Ordering::Acquire), 2);
+                Ok(())
+            });
+            assert_eq!(nested, Ok(()));
+            assert_eq!(scanning.load(Ordering::Acquire), 1);
+            Ok(())
+        });
+        assert_eq!(result, Ok(()));
+        assert_eq!(scanning.load(Ordering::Acquire), 0);
+    }
 
     #[test]
     fn parses_legacy_cli_actions_and_routes() {

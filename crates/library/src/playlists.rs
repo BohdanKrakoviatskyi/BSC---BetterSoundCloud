@@ -1,4 +1,4 @@
-use crate::{Song, read_local_tags_with_artwork};
+use crate::{LocalTags, Song, read_local_tags_with_artwork};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -25,6 +25,8 @@ pub enum PlaylistError {
     EmptyName,
     #[error("playlist artwork must be a JPEG or PNG smaller than 20 MiB")]
     InvalidArtwork,
+    #[error("track is not owned by a local playlist")]
+    MissingTrack,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -121,6 +123,41 @@ impl LocalPlaylistStore {
         &self.playlists
     }
 
+    pub fn song_path_for_uri(&self, uri: &str) -> Option<PathBuf> {
+        let root = fs::canonicalize(&self.tracks_dir).ok()?;
+        let song = self
+            .playlists
+            .iter()
+            .flat_map(|playlist| &playlist.songs)
+            .find(|song| song.uri == uri)?;
+        let path = fs::canonicalize(&song.path).ok()?;
+        (path.is_file() && path.starts_with(root)).then_some(path)
+    }
+
+    pub fn refresh_song_tags(&mut self, uri: &str, tags: LocalTags) -> Result<(), PlaylistError> {
+        let path = self
+            .song_path_for_uri(uri)
+            .ok_or(PlaylistError::MissingTrack)?;
+        let previous = self.playlists.clone();
+        let refreshed = Song::from_tags(&path, tags);
+        for song in self
+            .playlists
+            .iter_mut()
+            .flat_map(|playlist| &mut playlist.songs)
+        {
+            if song.uri == uri {
+                let instance_id = song.instance_id;
+                *song = refreshed.clone();
+                song.instance_id = instance_id;
+            }
+        }
+        if let Err(error) = self.persist() {
+            self.playlists = previous;
+            return Err(error);
+        }
+        Ok(())
+    }
+
     pub fn create(
         &mut self,
         name: &str,
@@ -141,10 +178,17 @@ impl LocalPlaylistStore {
             origins: HashMap::new(),
         };
         for song in songs {
-            append_song(&self.tracks_dir, &mut playlist, song)?;
+            if let Err(error) = append_song(&self.tracks_dir, &mut playlist, song) {
+                let _ = self.collect_unheld();
+                return Err(error);
+            }
         }
         self.playlists.insert(0, playlist);
-        self.persist()?;
+        if let Err(error) = self.persist() {
+            self.playlists.remove(0);
+            let _ = self.collect_unheld();
+            return Err(error);
+        }
         Ok(&self.playlists[0])
     }
 
@@ -188,12 +232,26 @@ impl LocalPlaylistStore {
 
     pub fn add_songs(&mut self, id: &str, songs: &[Song]) -> Result<usize, PlaylistError> {
         let tracks_dir = self.tracks_dir.clone();
-        let playlist = self.find_mut(id)?;
+        let index = self
+            .playlists
+            .iter()
+            .position(|playlist| playlist.id == id)
+            .ok_or(PlaylistError::Missing)?;
+        let previous = self.playlists[index].clone();
+        let playlist = &mut self.playlists[index];
         for song in songs {
-            append_song(&tracks_dir, playlist, song)?;
+            if let Err(error) = append_song(&tracks_dir, playlist, song) {
+                self.playlists[index] = previous;
+                let _ = self.collect_unheld();
+                return Err(error);
+            }
         }
         let count = songs.len();
-        self.persist()?;
+        if let Err(error) = self.persist() {
+            self.playlists[index] = previous;
+            let _ = self.collect_unheld();
+            return Err(error);
+        }
         Ok(count)
     }
 
@@ -667,6 +725,118 @@ mod tests {
     }
 
     #[test]
+    fn readding_changed_source_replaces_copy_and_collects_stale_copy() {
+        let dir = TempDir::new();
+        let source_path = dir.0.join("Track.wav");
+        let source = song(&source_path, "Version one");
+        let data = dir.0.join("local-playlists.json");
+        let mut store = LocalPlaylistStore::open(&data).unwrap();
+        let id = store
+            .create("Mix", "", std::slice::from_ref(&source))
+            .unwrap()
+            .id
+            .clone();
+        let old_copy = store.playlists()[0].songs[0].path.clone();
+        assert!(old_copy.is_file());
+
+        fs::write(&source_path, b"Version two is longer").unwrap();
+        let changed = Song::from_tags(
+            &source_path,
+            LocalTags {
+                title: Some("Version two".into()),
+                ..LocalTags::default()
+            },
+        );
+        store.add_songs(&id, &[changed]).unwrap();
+
+        let playlist = &store.playlists()[0];
+        assert_eq!(playlist.songs.len(), 2);
+        assert_eq!(playlist.songs[0].path, old_copy);
+        assert_ne!(playlist.songs[1].path, old_copy);
+        assert_eq!(playlist.songs[1].name, "Version two");
+        assert!(old_copy.is_file());
+
+        let old_uri = playlist.songs[0].uri.clone();
+        store.remove_uri(&id, &old_uri).unwrap();
+        assert!(!old_copy.exists());
+        assert!(store.playlists()[0].songs[0].path.is_file());
+
+        let reopened = LocalPlaylistStore::open(&data).unwrap();
+        assert_eq!(reopened.playlists()[0].songs[0].name, "Version two");
+    }
+
+    #[test]
+    fn failed_playlist_create_and_add_leave_no_partial_state_or_copies() {
+        let dir = TempDir::new();
+        let existing = song(&dir.0.join("Existing.wav"), "Existing");
+        let missing = Song::from_tags(
+            &dir.0.join("missing.wav"),
+            LocalTags {
+                title: Some("Missing".into()),
+                ..LocalTags::default()
+            },
+        );
+        let data = dir.0.join("local-playlists.json");
+        let mut store = LocalPlaylistStore::open(&data).unwrap();
+
+        assert!(
+            store
+                .create("Broken", "", &[existing.clone(), missing.clone()])
+                .is_err()
+        );
+        assert!(store.playlists().is_empty());
+        let failed_create_copies = dir.0.join("local-playlist-tracks");
+        assert!(
+            fs::read_dir(&failed_create_copies)
+                .unwrap()
+                .next()
+                .is_none()
+        );
+
+        let id = store
+            .create("Working", "", std::slice::from_ref(&existing))
+            .unwrap()
+            .id
+            .clone();
+        let original_uri = store.playlists()[0].songs[0].uri.clone();
+        assert!(store.add_songs(&id, &[existing, missing]).is_err());
+        assert_eq!(store.playlists()[0].songs.len(), 1);
+        assert_eq!(store.playlists()[0].songs[0].uri, original_uri);
+
+        let track_copies = dir.0.join("local-playlist-tracks");
+        let playlist_folder = track_copies.join(id.replace(':', "_"));
+        let entries: Vec<_> = fs::read_dir(playlist_folder)
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        assert_eq!(entries.len(), 1);
+        let reopened = LocalPlaylistStore::open(&data).unwrap();
+        assert_eq!(reopened.playlists()[0].songs.len(), 1);
+    }
+
+    #[test]
+    fn playlist_owned_copy_remains_playable_after_source_is_deleted() {
+        let dir = TempDir::new();
+        let source_path = dir.0.join("Original.wav");
+        let source = song(&source_path, "Survivor");
+        let data = dir.0.join("local-playlists.json");
+        let mut store = LocalPlaylistStore::open(&data).unwrap();
+        store
+            .create("Saved mix", "", std::slice::from_ref(&source))
+            .unwrap();
+        let copied = store.playlists()[0].songs[0].path.clone();
+        assert_ne!(copied, source_path);
+
+        fs::remove_file(source_path).unwrap();
+        let reopened = LocalPlaylistStore::open(&data).unwrap();
+        let saved_song = &reopened.playlists()[0].songs[0];
+        assert_eq!(saved_song.name, "Survivor");
+        assert_eq!(saved_song.path, copied);
+        assert!(saved_song.path.is_file());
+        assert!(reopened.song_path_for_uri(&saved_song.uri).is_some());
+    }
+
+    #[test]
     fn playlist_update_persists_metadata_and_replaces_its_owned_cover() {
         let dir = TempDir::new();
         let data = dir.0.join("local-playlists.json");
@@ -787,5 +957,51 @@ mod tests {
         let migrated_json: serde_json::Value =
             serde_json::from_slice(&fs::read(&data).unwrap()).unwrap();
         assert!(migrated_json["playlists"][0]["songs"][0].is_object());
+    }
+
+    #[test]
+    fn refreshing_playlist_copy_tags_updates_every_occurrence_and_survives_reopen() {
+        let dir = TempDir::new();
+        let source = song(&dir.0.join("Track.wav"), "Before");
+        let data = dir.0.join("local-playlists.json");
+        let mut store = LocalPlaylistStore::open(&data).unwrap();
+        store.create("Mix", "", &[source.clone(), source]).unwrap();
+        let uri = store.playlists()[0].songs[0].uri.clone();
+        let identities: Vec<_> = store.playlists()[0]
+            .songs
+            .iter()
+            .map(|song| song.instance_id)
+            .collect();
+
+        store
+            .refresh_song_tags(
+                &uri,
+                LocalTags {
+                    title: Some("After".into()),
+                    ..LocalTags::default()
+                },
+            )
+            .unwrap();
+
+        let playlist = &store.playlists()[0];
+        assert_eq!(
+            playlist
+                .songs
+                .iter()
+                .map(|song| song.name.as_str())
+                .collect::<Vec<_>>(),
+            ["After", "After"]
+        );
+        assert_eq!(
+            playlist
+                .songs
+                .iter()
+                .map(|song| song.instance_id)
+                .collect::<Vec<_>>(),
+            identities
+        );
+        assert!(store.song_path_for_uri(&uri).is_some());
+        let reopened = LocalPlaylistStore::open(&data).unwrap();
+        assert_eq!(reopened.playlists()[0].songs[0].name, "After");
     }
 }

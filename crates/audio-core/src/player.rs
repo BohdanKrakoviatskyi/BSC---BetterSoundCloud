@@ -252,13 +252,23 @@ impl AudioPlayer {
         }
     }
     pub fn ramp_volume(&self, target: f32, duration: Duration) {
-        let player = self.clone();
+        let target = target.clamp(0.0, 1.0);
+        let (sink, start) = {
+            let Ok(mut state) = self.state.lock() else {
+                return;
+            };
+            let Some(current) = state.as_mut() else {
+                return;
+            };
+            let start = current.volume;
+            current.volume = target;
+            (Arc::clone(&current.sink), start)
+        };
         thread::spawn(move || {
-            let start = player.snapshot().volume;
             let frames = 30_u32;
             for i in 1..=frames {
                 let t = i as f32 / frames as f32;
-                let _ = player.set_volume(start + (target.clamp(0.0, 1.0) - start) * t);
+                sink.set_volume(start + (target - start) * t);
                 thread::sleep(duration / frames);
             }
         });

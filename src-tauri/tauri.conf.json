@@ -33,7 +33,7 @@
     "active": true,
     "targets": ["nsis", "dmg", "appimage", "deb"],
     "icon": ["icons/icon.png"],
-    "category": "AudioVideo",
+    "category": "Music",
     "shortDescription": "A desktop music player",
     "longDescription": "Resonance is a desktop music player with streaming and local library support."
   }

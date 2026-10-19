@@ -39,7 +39,7 @@ Inventory of the legacy version 0.2.6. An item is checked only after implementat
 - [ ] Material 3 color scheme generation
 - [ ] Playlist cover generation
 - [ ] Playlist editing (local create/add/remove/reorder/delete, playback, metadata and owned JPEG/PNG cover editing exist; repeated unchanged sources reuse copies with distinct occurrence IDs; broad parity tests remain)
-- [x] Local metadata editing (indexed local song fields write to file, empty clears, unspecified fields persist; generated WAV write/read regression test)
+- [x] Local metadata editing (indexed library tracks and managed playlist copies write fields, empty clears, unspecified fields persist; repeated playlist occurrences refresh together)
 - [x] Local cover editing (indexed song editor replaces front cover with JPEG/PNG and removes embedded artwork)
 - [ ] Image wallpaper
 - [ ] Animated GIF wallpaper

@@ -1,4 +1,4 @@
-import { invoke, isTauri } from '@tauri-apps/api/core';
+import { isTauri } from '@tauri-apps/api/core';
 import { load } from '@tauri-apps/plugin-store';
 import type { MusicSource, ThemeMode } from './useAppStore';
 
@@ -44,5 +44,4 @@ export async function saveLocalMusicSources(sources: string[]): Promise<void> {
     await settings.set('localMusicSources', sources);
     await settings.save();
   }
-  if (isTauri()) await invoke<void>('local_library_set_sources', { sources });
 }

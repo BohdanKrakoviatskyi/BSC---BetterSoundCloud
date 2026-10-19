@@ -116,8 +116,12 @@ impl LocalLibrary {
         I: IntoIterator<Item = P>,
         P: AsRef<Path>,
     {
+        let previous = self.sources.clone();
         let added = self.add_sources(paths);
-        self.persist_sources()?;
+        if let Err(error) = self.persist_sources() {
+            self.sources = previous;
+            return Err(error);
+        }
         Ok(added)
     }
 
@@ -126,8 +130,12 @@ impl LocalLibrary {
         I: IntoIterator<Item = P>,
         P: AsRef<Path>,
     {
+        let previous = self.sources.clone();
         let added = self.add_sources(paths);
-        self.persist_sources()?;
+        if let Err(error) = self.persist_sources() {
+            self.sources = previous;
+            return Err(error);
+        }
         Ok(added)
     }
 
@@ -212,9 +220,13 @@ impl LocalLibrary {
         &mut self,
         path: impl AsRef<Path>,
     ) -> Result<bool, LocalLibraryError> {
+        let previous_sources = self.sources.clone();
+        let previous_songs = self.songs.clone();
         let removed = self.remove_source(path);
-        if removed {
-            self.persist_sources()?;
+        if removed && let Err(error) = self.persist_sources() {
+            self.sources = previous_sources;
+            self.songs = previous_songs;
+            return Err(error);
         }
         Ok(removed)
     }
@@ -628,6 +640,35 @@ mod tests {
         let mut reopened = LocalLibrary::open(&cache).unwrap();
         assert_eq!(reopened.load_persisted_sources().unwrap(), 1);
         assert_eq!(reopened.sources().len(), 1);
+    }
+
+    #[test]
+    fn failed_source_persistence_keeps_the_previous_sources_and_songs() {
+        let temp = TempDir::new();
+        let music = temp.path().join("Music");
+        let song_path = music.join("one.wav");
+        put(&song_path, b"fixture");
+        let cache_path = temp.path().join("cache.json");
+        let mut library = LocalLibrary::open(&cache_path).unwrap();
+        library.restore_sources([&music]).unwrap();
+        library.rescan(|_| Ok(tags("One", "Album", 1))).unwrap();
+        let original_sources = library.sources().to_vec();
+        let original_songs = library.songs().to_vec();
+
+        let sources_path = temp.path().join("local-sources.json");
+        fs::remove_file(&sources_path).unwrap();
+        fs::create_dir(&sources_path).unwrap();
+        assert!(library.remove_source_persisted(&music).is_err());
+        assert_eq!(library.sources(), original_sources);
+        assert_eq!(library.songs(), original_songs);
+
+        let extra = temp.path().join("Extra");
+        fs::create_dir(&extra).unwrap();
+        assert!(library.add_sources_persisted([&extra]).is_err());
+        assert_eq!(library.sources(), original_sources);
+
+        assert!(library.restore_sources([&extra]).is_err());
+        assert_eq!(library.sources(), original_sources);
     }
 
     #[test]
