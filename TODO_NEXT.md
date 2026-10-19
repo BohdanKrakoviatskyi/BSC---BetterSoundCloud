@@ -17,28 +17,27 @@ Working directory: `C:\Users\krako\Desktop\resonance-tauri`
   - Shared DSP updates can retune the current track's EQ/tempo.
   - Separate 44.1 kHz to 48 kHz linear-rate-converter utility with irregular-block continuity and reset tests. Rodio's output mixer performs the actual device-rate conversion at runtime.
   - Pause handling uses Rodio's sink pause, so the decoder source remains alive for resume.
-- Verification performed after the pause-source fix on Windows: `cargo test --offline --workspace` passed (18 audio-core tests and 1 CLI test), Clippy with warnings denied passed, rustfmt check passed, ESLint passed, TypeScript/Vite production build passed, Vitest passed (2 tests), Playwright passed (1 shell/preferences flow), `cargo build --offline --release -p resonance` passed, and `npm.cmd run desktop:build -- --no-bundle` passed with `resonance.exe` under `%TEMP%\resonance-target\release`.
-- Phase 2 work is committed locally in earlier commits; the latest two local commits are ahead of origin because GitHub networking failed on push.
+- Verification on Windows: current audio-core suite has 13 unit + 8 DSP + 5 playback tests, plus 1 Tauri CLI test (27 total). Rust fmt, strict Clippy, release Rust build and Tauri desktop build have passed for this checkpoint. Prior frontend ESLint, TypeScript/Vite build, Vitest (2) and Playwright (1) checks passed; no frontend code changed in the current audio-core checkpoint.
+- The current uncommitted checkpoint fixes seek position accounting and bounded read-ahead; adds provider-volume compensation and spectrum tests; and makes the spectrum worker account for dropped chunks so FFT history and release timing advance correctly.
 
 ## Exact stopping point
 
-The working tree contains uncommitted `SharedDsp` live-retuning and `RateConverter` implementation changes, plus the pause-source correction and this handoff document. Full unit, lint, frontend build, e2e, strict Clippy/fmt, optimized Rust release build, and Tauri desktop build checks have now passed. Commit these changes and push before starting a new phase.
+The working tree contains Phase 2 corrections in `local.rs`, `spectrum.rs`, `spectrum_worker.rs` and playback tests. Seek now counts source frames once and clamps past-duration positions; decoder read-ahead respects the legacy 4096-scalar block size; the analyzer compensates provider output gain and ages FFT/release state when its bounded worker queue drops chunks. The Rust and Tauri builds and strict checks pass. Commit and push this checkpoint, then continue Phase 2 parity.
 
 The native file picker is not integrated. The current shell has drag-and-drop plus a temporary full-path prompt because the Tauri dialog plugin was absent from local caches and package-registry network access failed. The original repository contains no audio fixtures, so only generated WAV decoding and seeking are directly fixture-verified; verify the remaining decoder formats when fixtures or an encoder are available.
 
 ## Next actions, in order
 
-1. Run `cargo fmt --all -- --check`, `cargo test --offline --workspace`, `cargo clippy --offline --workspace --all-targets -- -D warnings`, `npm.cmd run lint`, `npm.cmd run build`, `npm.cmd test`, `npm.cmd run test:e2e`, and `npm.cmd run desktop:build -- --no-bundle` using `%TEMP%\resonance-target` for Cargo output.
-2. Review `git diff`, update this file, `MIGRATION_LOG.md` and `PARITY_CHECKLIST.md`; commit the current Phase 2 checkpoint on `codex/resonance-tauri-migration`.
-3. Push `codex/resonance-tauri-migration` to `origin`. If GitHub is still unreachable, keep the local commits and record the failed push and error.
-4. Finish Phase 2 parity: native file picker when dependency access is available, real decoder fixtures for all advertised formats, output-device/playback verification, spectrum comparison against remaining legacy spectrum tests, and playback control coverage. Do not mark Phase 2 complete until its checklist entries and validations are satisfied.
-5. Proceed to Phase 3 local library: fully read the corresponding old library, scan/index files, metadata/cover editor, playlist operations, settings/session migration and tests.
-6. Continue in order through Phases 4–11 in `resonance-tauri-rewrite-prompt.md`; keep `PARITY_CHECKLIST.md` as the completion source of truth, record decisions/checkpoints here and in `MIGRATION_LOG.md`, and commit each green phase.
+1. Complete strict Rust workspace checks and verify the Windows Tauri executable.
+2. Update this handoff, the migration log and parity ledger, commit the Phase 2 checkpoint on `codex/resonance-tauri-migration`, and push it to `origin`.
+3. Continue Phase 2: investigate native file picker dependency, add real codec fixtures if available locally, test output-device handling, port remaining spectrum signal tests and playback controls. Keep Phase 2 open until evidence supports completion.
+4. Proceed to Phase 3 by fully reading the legacy library sources, then implement scanning/indexing, metadata/cover editing, playlist operations, settings/session migration and tests.
+5. Continue in order through Phases 4–11, updating this task list/log/checklist and committing each verified checkpoint. Do not claim overall completion until the Phase 11 audit passes.
 
 ## Known issues and limits
 
-- GitHub network access failed in this environment; previous push did not reach GitHub.
-- `gh auth status` previously reported an invalid token; Git Credential Manager had succeeded on earlier pushes, so retry ordinary Git push after network availability returns.
+- GitHub push access has worked for earlier commits, but a previous attempt failed due to network reachability; retry push after this checkpoint.
+- Local output device runtime and non-WAV fixture coverage remain unverified.
 - Only Windows is locally available. macOS/Linux build and runtime checks must be provided by CI before claiming cross-platform verification.
 - Local queue editing UI and previous-track behavior are not complete.
 - User-facing EQ controls belong to the later design/settings phase; Rust/Tauri commands already support live updates.

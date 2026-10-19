@@ -59,6 +59,37 @@ fn local_wav_source_can_seek_and_resume_from_the_requested_position() {
 }
 
 #[test]
+fn decoded_position_counts_seek_offset_once_and_clamps_to_duration() {
+    let path = std::env::temp_dir().join(format!("resonance-position-{}.wav", std::process::id()));
+    write_wav(&path, 11_025, 44_100);
+    let mut track = LocalTrack::open(&path, DspSettings::default()).unwrap();
+
+    track.try_seek(Duration::from_millis(50)).unwrap();
+    assert_eq!(track.decoded_frames(), 2_205);
+    track.try_seek(Duration::from_millis(100)).unwrap();
+    assert_eq!(track.decoded_frames(), 4_410);
+    track.try_seek(Duration::from_secs(1)).unwrap();
+    assert_eq!(track.decoded_frames(), 11_025);
+
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn local_decoder_reads_a_bounded_block_ahead() {
+    let path =
+        std::env::temp_dir().join(format!("resonance-read-ahead-{}.wav", std::process::id()));
+    write_wav(&path, 11_025, 44_100);
+    let mut track = LocalTrack::open(&path, DspSettings::default()).unwrap();
+    track.try_seek(Duration::from_millis(100)).unwrap();
+
+    let mut first_frame = [0.0; 2];
+    assert_eq!(track.read(&mut first_frame), 2);
+    assert_eq!(track.decoded_frames(), 4_410 + 4_096);
+
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
 fn missing_local_files_return_an_error() {
     let path = std::env::temp_dir().join(format!("resonance-missing-{}.flac", std::process::id()));
     assert!(LocalTrack::open(&path, DspSettings::default()).is_err());

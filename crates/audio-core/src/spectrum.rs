@@ -75,14 +75,54 @@ impl SpectrumAnalyzer {
 
     /// Analyze interleaved stereo PCM; chunks are treated as elapsed 1024-frame hops.
     pub fn push_interleaved(&mut self, samples: &[f32]) {
-        for chunk in samples.chunks(HOP * 2) {
-            let frames = (chunk.len() / 2).min(BASS_FFT);
-            if frames == 0 {
+        self.push_interleaved_with_gain_and_skip(samples, 1.0, 1);
+    }
+
+    /// Analyze PCM after compensating for gain already applied by a provider.
+    pub fn push_interleaved_with_gain(&mut self, samples: &[f32], output_gain: f32) {
+        self.push_interleaved_with_gain_and_skip(samples, output_gain, 1);
+    }
+
+    /// Advance by `frame_skip` hops before the first chunk, aging out audio lost by the worker queue.
+    pub fn push_interleaved_with_gain_and_skip(
+        &mut self,
+        samples: &[f32],
+        output_gain: f32,
+        frame_skip: u64,
+    ) {
+        let gain = if output_gain.is_finite() && output_gain > 1.0e-4 {
+            output_gain.recip()
+        } else {
+            1.0
+        };
+        for (chunk_index, chunk) in samples.chunks(HOP * 2).enumerate() {
+            let sample_frames = (chunk.len() / 2).min(BASS_FFT);
+            if sample_frames == 0 {
                 continue;
             }
-            self.input.copy_within(..BASS_FFT - frames, frames);
-            self.input[..frames].fill(Complex::default());
-            for (index, pair) in chunk.as_chunks::<2>().0.iter().take(frames).enumerate() {
+            let skipped_hops = if chunk_index == 0 {
+                frame_skip.saturating_sub(1).min((BASS_FFT / HOP) as u64) as usize
+            } else {
+                0
+            };
+            let skipped_frames = skipped_hops * HOP;
+            if skipped_frames >= BASS_FFT {
+                self.input.fill(Complex::default());
+            } else if skipped_frames > 0 {
+                self.input
+                    .copy_within(..BASS_FFT - skipped_frames, skipped_frames);
+                self.input[..skipped_frames].fill(Complex::default());
+            }
+            self.input
+                .copy_within(..BASS_FFT - sample_frames, sample_frames);
+            self.input[..sample_frames].fill(Complex::default());
+            for (index, pair) in chunk
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .take(sample_frames)
+                .enumerate()
+            {
                 let sanitize = |x: f32| {
                     if x.is_finite() {
                         x.clamp(-16.0, 16.0)
@@ -90,9 +130,23 @@ impl SpectrumAnalyzer {
                         0.0
                     }
                 };
-                self.input[frames - index - 1] = Complex::new(sanitize(pair[0]), sanitize(pair[1]));
+                self.input[sample_frames - index - 1] =
+                    Complex::new(sanitize(pair[0] * gain), sanitize(pair[1] * gain));
             }
-            self.transform(frames as f32 / SAMPLE_RATE);
+            let elapsed_frames = if chunk_index == 0 {
+                sample_frames.saturating_mul(frame_skip.clamp(1, 1024) as usize)
+            } else {
+                sample_frames
+            };
+            if skipped_hops > 0 {
+                self.levels.iter_mut().for_each(|level| {
+                    *level *= (-((skipped_hops * HOP) as f32 / SAMPLE_RATE) / 0.065).exp();
+                    if *level < 0.0001 {
+                        *level = 0.0;
+                    }
+                });
+            }
+            self.transform(elapsed_frames as f32 / SAMPLE_RATE);
         }
     }
 
@@ -238,6 +292,32 @@ fn band_ranges() -> [BandRange; SPECTRUM_BAND_COUNT] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn tone(frequency: f32, amplitude: f32, frames: usize, invert_right: bool) -> Vec<f32> {
+        (0..frames)
+            .flat_map(|frame| {
+                let sample = (TAU * frequency * frame as f32 / SAMPLE_RATE).sin() * amplitude;
+                [sample, if invert_right { -sample } else { sample }]
+            })
+            .collect()
+    }
+
+    fn band_for_frequency(frequency: f32) -> usize {
+        let ranges = band_ranges();
+        ranges
+            .iter()
+            .position(|range| {
+                let fft_size = if matches!(range.resolution, FftResolution::Bass) {
+                    BASS_FFT
+                } else {
+                    MAIN_FFT
+                };
+                let bin = (frequency * fft_size as f32 / SAMPLE_RATE).round() as usize;
+                (range.lower_bin..=range.upper_bin).contains(&bin)
+            })
+            .expect("frequency is covered by analyzer bands")
+    }
+
     #[test]
     fn tone_activates_nearby_bands_and_silence_releases() {
         let mut analyzer = SpectrumAnalyzer::new();
@@ -279,5 +359,77 @@ mod tests {
         assert_eq!(ranges[0].upper_bin, 7);
         assert_eq!(ranges[1].lower_bin, 8);
         assert_eq!(ranges[1].upper_bin, 8);
+    }
+
+    #[test]
+    fn tone_is_localized_to_its_frequency_band() {
+        let mut analyzer = SpectrumAnalyzer::new();
+        let target = band_for_frequency(440.0);
+        analyzer.push_interleaved(&tone(440.0, 0.65, HOP * 160, false));
+        let levels = analyzer.levels();
+        let loudest = levels
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.total_cmp(b.1))
+            .unwrap()
+            .0;
+        assert_eq!(loudest, target);
+        assert!(levels[target] > 0.65, "target band was {}", levels[target]);
+    }
+
+    #[test]
+    fn phase_inverted_stereo_keeps_the_same_energy() {
+        let mut normal = SpectrumAnalyzer::new();
+        let mut inverted = SpectrumAnalyzer::new();
+        let samples = tone(863.0, 0.7, HOP * 100, false);
+        let opposite = tone(863.0, 0.7, HOP * 100, true);
+        normal.push_interleaved(&samples);
+        inverted.push_interleaved(&opposite);
+        assert!(normal.levels().iter().any(|level| *level > 0.3));
+        for (left, right) in normal.levels().iter().zip(inverted.levels()) {
+            assert!((left - right).abs() < 0.002, "{left} != {right}");
+        }
+    }
+
+    #[test]
+    fn compensating_provider_output_gain_preserves_visual_levels() {
+        let samples = tone(220.0, 0.55, HOP * 100, false);
+        let quiet: Vec<f32> = samples.iter().map(|sample| sample * 0.08).collect();
+        let mut normal = SpectrumAnalyzer::new();
+        let mut reduced = SpectrumAnalyzer::new();
+        normal.push_interleaved_with_gain(&samples, 1.0);
+        reduced.push_interleaved_with_gain(&quiet, 0.08);
+        for (left, right) in normal.levels().iter().zip(reduced.levels()) {
+            assert!((left - right).abs() < 0.015, "{left} != {right}");
+        }
+    }
+
+    #[test]
+    fn clear_discards_previous_track_and_invalid_pcm_stays_finite() {
+        let mut analyzer = SpectrumAnalyzer::new();
+        analyzer.push_interleaved(&tone(440.0, 0.7, HOP * 50, false));
+        assert!(analyzer.levels().iter().any(|level| *level > 0.1));
+        analyzer.clear();
+        assert_eq!(analyzer.levels(), &[0.0; SPECTRUM_BAND_COUNT]);
+        let invalid: Vec<f32> = (0..HOP * 2)
+            .map(|i| if i % 2 == 0 { f32::NAN } else { f32::INFINITY })
+            .collect();
+        analyzer.push_interleaved(&invalid);
+        assert!(analyzer.levels().iter().all(|level| level.is_finite()));
+    }
+
+    #[test]
+    fn skipped_analysis_hops_age_out_old_audio_and_advance_release() {
+        let mut analyzer = SpectrumAnalyzer::new();
+        let samples = tone(440.0, 0.7, HOP * 2 * 20, false);
+        analyzer.push_interleaved(&samples);
+        let before = analyzer.levels().iter().copied().fold(0.0_f32, f32::max);
+        assert!(before > 0.5);
+        analyzer.push_interleaved_with_gain_and_skip(&vec![0.0; HOP * 2], 1.0, 8);
+        let after = analyzer.levels().iter().copied().fold(0.0_f32, f32::max);
+        assert!(after < before * 0.1, "{before} -> {after}");
+        analyzer.push_interleaved_with_gain_and_skip(&vec![0.0; HOP * 2], 1.0, u64::MAX);
+        assert!(analyzer.levels().iter().all(|level| level.is_finite()));
+        assert!(analyzer.levels().iter().all(|level| *level < 0.0001));
     }
 }

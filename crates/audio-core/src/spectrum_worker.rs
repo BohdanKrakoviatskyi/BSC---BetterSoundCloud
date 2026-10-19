@@ -13,6 +13,7 @@ const CHUNK_SAMPLES: usize = 256 * 2;
 struct Chunk {
     samples: Vec<f32>,
     generation: u64,
+    sequence: u64,
 }
 
 #[derive(Clone)]
@@ -20,6 +21,7 @@ pub struct SharedSpectrum {
     levels: Arc<Mutex<Vec<f32>>>,
     enabled: Arc<AtomicBool>,
     generation: Arc<AtomicU64>,
+    sequence: Arc<AtomicU64>,
     sender: Sender<Chunk>,
 }
 
@@ -34,6 +36,7 @@ impl SharedSpectrum {
         let levels = Arc::new(Mutex::new(vec![0.0; 48]));
         let enabled = Arc::new(AtomicBool::new(false));
         let generation = Arc::new(AtomicU64::new(0));
+        let sequence = Arc::new(AtomicU64::new(0));
         let (sender, receiver) = bounded::<Chunk>(1);
         let worker_levels = Arc::clone(&levels);
         let worker_enabled = Arc::clone(&enabled);
@@ -45,6 +48,7 @@ impl SharedSpectrum {
             levels,
             enabled,
             generation,
+            sequence,
             sender,
         }
     }
@@ -81,6 +85,7 @@ impl SharedSpectrum {
             .try_send(Chunk {
                 samples,
                 generation,
+                sequence: self.sequence.fetch_add(1, Ordering::Relaxed),
             })
             .is_ok()
     }
@@ -90,9 +95,11 @@ impl SharedSpectrum {
         }
         let generation = self.generation.load(Ordering::Acquire);
         for samples in samples.chunks(CHUNK_SAMPLES) {
+            let sequence = self.sequence.fetch_add(1, Ordering::Relaxed);
             match self.sender.try_send(Chunk {
                 samples: samples.to_vec(),
                 generation,
+                sequence,
             }) {
                 Ok(()) | Err(TrySendError::Full(_)) | Err(TrySendError::Disconnected(_)) => {}
             }
@@ -107,18 +114,31 @@ fn worker(
     generation: Arc<AtomicU64>,
 ) {
     let mut analyzer = SpectrumAnalyzer::new();
+    let mut analyzer_generation = 0;
+    let mut previous_sequence = None;
     while let Ok(chunk) = receiver.recv() {
         let current = generation.load(Ordering::Acquire);
         if current != chunk.generation || !enabled.load(Ordering::Acquire) {
             continue;
         }
-        analyzer.push_interleaved(&chunk.samples);
+        if analyzer_generation != current {
+            analyzer.clear();
+            analyzer_generation = current;
+            previous_sequence = None;
+        }
+        let frame_skip = previous_sequence
+            .map(|previous: u64| chunk.sequence.wrapping_sub(previous).max(1))
+            .unwrap_or(1);
+        previous_sequence = Some(chunk.sequence);
+        analyzer.push_interleaved_with_gain_and_skip(&chunk.samples, 1.0, frame_skip);
         if generation.load(Ordering::Acquire) == current && enabled.load(Ordering::Acquire) {
             if let Ok(mut published) = levels.lock() {
                 published.copy_from_slice(analyzer.levels());
             }
         } else {
             analyzer.clear();
+            previous_sequence = None;
+            analyzer_generation = generation.load(Ordering::Acquire);
         }
     }
 }
@@ -142,5 +162,28 @@ mod tests {
         }
         spectrum.set_enabled(false);
         assert!(spectrum.levels().iter().all(|value| *value == 0.0));
+    }
+
+    #[test]
+    fn sequence_numbers_include_dropped_chunks() {
+        let (sender, receiver) = bounded::<Chunk>(1);
+        let sequence = Arc::new(AtomicU64::new(0));
+        let submit = || {
+            let next = sequence.fetch_add(1, Ordering::Relaxed);
+            sender.try_send(Chunk {
+                samples: vec![],
+                generation: 0,
+                sequence: next,
+            })
+        };
+        assert!(
+            submit().is_ok()
+        );
+        assert!(submit().is_err());
+        let received = receiver.try_recv().unwrap();
+        assert_eq!(received.sequence, 0);
+        assert!(submit().is_ok());
+        let received = receiver.try_recv().unwrap();
+        assert_eq!(received.sequence, 2);
     }
 }

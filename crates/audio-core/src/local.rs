@@ -56,8 +56,9 @@ impl LocalTrack {
 
     fn fill(&mut self) -> Result<(), AudioError> {
         while self.processed.is_empty() && !self.drained {
-            let mut stereo = Vec::with_capacity(DSP_BLOCK * 2);
-            for _ in 0..DSP_BLOCK {
+            let frame_limit = (DSP_BLOCK / usize::from(self.source_channels.max(1))).max(1);
+            let mut stereo = Vec::with_capacity(frame_limit * 2);
+            for _ in 0..frame_limit {
                 let mut frame = Vec::with_capacity(usize::from(self.source_channels));
                 for _ in 0..self.source_channels {
                     match self.decoder.next() {
@@ -160,7 +161,9 @@ impl Source for LocalTrack {
         self.decoder.total_duration()
     }
     fn try_seek(&mut self, pos: Duration) -> Result<(), rodio::source::SeekError> {
-        self.decoder.try_seek(pos)?;
+        let duration = self.decoder.total_duration();
+        let seek_to = duration.map_or(pos, |duration| pos.min(duration));
+        self.decoder.try_seek(seek_to)?;
         self.processed.clear();
         self.drained = false;
         if let Ok(mut dsp) = self.dsp.lock() {
@@ -169,10 +172,9 @@ impl Source for LocalTrack {
         if let Some(spectrum) = &self.spectrum {
             spectrum.clear_if_enabled();
         }
-        self.decoded_frames =
-            (pos.as_secs_f64() * f64::from(self.source_rate) * f64::from(self.source_channels))
-                .round() as u64;
-        self.base_decoded_frames = (pos.as_secs_f64() * f64::from(self.source_rate)).round() as u64;
+        self.decoded_frames = 0;
+        self.base_decoded_frames =
+            (seek_to.as_secs_f64() * f64::from(self.source_rate)).round() as u64;
         Ok(())
     }
 }
