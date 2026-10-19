@@ -1,0 +1,245 @@
+﻿# Parity checklist
+
+Inventory of the legacy version 0.2.6. An item is checked only after implementation and verification in the target.
+
+## Product behavior
+- [ ] SoundCloud OAuth and session persistence
+- [ ] SoundCloud REST client and streaming
+- [ ] SoundCloud likes
+- [ ] SoundCloud playlists
+- [ ] SoundCloud artist tracks
+- [ ] SoundCloud global search
+- [ ] Spotify OAuth and credential storage
+- [ ] Spotify Premium playback with librespot
+- [ ] Spotify library synchronization
+- [ ] Spotify playlists
+- [ ] Spotify search
+- [ ] Unified provider selection
+- [ ] Local library scanning and indexing
+- [ ] Local playback: MP3
+- [ ] Local playback: FLAC
+- [ ] Local playback: OGG/Vorbis
+- [ ] Local playback: WAV
+- [ ] Local playback: M4A/AAC
+- [ ] Local playback: ALAC
+- [ ] Local playback: AIFF
+- [ ] Playback queue and queue editing
+- [ ] Play/pause/next/previous controls
+- [ ] Seek and duration reporting
+- [ ] Volume control
+- [ ] Crossfade between tracks
+- [ ] Next-track preload
+- [ ] 10-band equalizer
+- [ ] Spectrum stream
+- [ ] Synced lyrics
+- [ ] Karaoke lyric highlight and ambient glow
+- [ ] Explicit track indicators
+- [ ] Album artwork extraction
+- [ ] Dynamic artwork palette extraction
+- [ ] Material 3 color scheme generation
+- [ ] Playlist cover generation
+- [ ] Playlist editing
+- [ ] Local metadata editing
+- [ ] Local cover editing
+- [ ] Image wallpaper
+- [ ] Animated GIF wallpaper
+- [ ] Looping video wallpaper
+- [ ] Sleep timer
+- [ ] MPRIS on Linux
+- [ ] Media keys
+- [ ] Now Playing on macOS
+- [ ] Now Playing on Windows
+- [ ] System tray
+- [ ] Lock screen metadata
+- [ ] Single-instance IPC
+- [ ] CLI --immersive
+- [ ] CLI --close-immersive
+- [ ] CLI --play-pause
+- [ ] CLI --next
+- [ ] CLI --previous
+- [ ] CLI home navigation
+- [ ] CLI playlists navigation
+- [ ] CLI songs navigation
+- [ ] GitHub Releases update check
+- [ ] Update progress reporting
+- [ ] One-click update installation
+- [ ] Persistent settings
+- [ ] Error center
+- [ ] Custom window controls
+- [ ] macOS menu bar
+- [ ] Keyboard navigation and accessibility
+- [ ] Low overhead animation and rendering
+
+## Legacy QML files
+- [ ] Port qml/Main.qml
+- [ ] Port qml/components/ArtworkImage.qml
+- [ ] Port qml/components/CornerCaps.qml
+- [ ] Port qml/components/EmptyState.qml
+- [ ] Port qml/components/IconButton.qml
+- [ ] Port qml/components/LoadingSpinner.qml
+- [ ] Port qml/components/MenuLoader.qml
+- [ ] Port qml/components/MusicPicker.qml
+- [ ] Port qml/components/OutlinedTextField.qml
+- [ ] Port qml/components/PlayButton.qml
+- [ ] Port qml/components/Ripple.qml
+- [ ] Port qml/components/RippleButton.qml
+- [ ] Port qml/components/RollingText.qml
+- [ ] Port qml/components/SearchField.qml
+- [ ] Port qml/components/SectionHeader.qml
+- [ ] Port qml/components/SeekBar.qml
+- [ ] Port qml/components/Segment.qml
+- [ ] Port qml/components/SegmentedControl.qml
+- [ ] Port qml/components/ShapeButton.qml
+- [ ] Port qml/components/ShapeIcon.qml
+- [ ] Port qml/components/Snackbar.qml
+- [ ] Port qml/components/SquiggleRing.qml
+- [ ] Port qml/components/Stickers.qml
+- [ ] Port qml/components/StyledDialog.qml
+- [ ] Port qml/components/StyledMenu.qml
+- [ ] Port qml/components/StyledMenuItem.qml
+- [ ] Port qml/components/StyledMenuSeparator.qml
+- [ ] Port qml/components/StyledScrollBar.qml
+- [ ] Port qml/components/StyledSlider.qml
+- [ ] Port qml/components/StyledSwitch.qml
+- [ ] Port qml/components/StyledText.qml
+- [ ] Port qml/components/StyledToolTip.qml
+- [ ] Port qml/components/TextButton.qml
+- [ ] Port qml/components/TitleText.qml
+- [ ] Port qml/components/Toast.qml
+- [ ] Port qml/components/ToolbarButton.qml
+- [ ] Port qml/components/TransportButton.qml
+- [ ] Port qml/components/WavyClip.qml
+- [ ] Port qml/components/WavyPill.qml
+- [ ] Port qml/design/Appearance.qml
+- [ ] Port qml/design/Format.qml
+- [ ] Port qml/design/Shapes.qml
+- [ ] Port qml/design/SongMenus.qml
+- [ ] Port qml/design/UiState.qml
+- [ ] Port qml/editor/CoverCropper.qml
+- [ ] Port qml/editor/LocalTrackEditor.qml
+- [ ] Port qml/editor/PlaylistEditor.qml
+- [ ] Port qml/immersive/EqualizerCurve.qml
+- [ ] Port qml/immersive/ImmersiveLyrics.qml
+- [ ] Port qml/immersive/ImmersiveNowPlaying.qml
+- [ ] Port qml/immersive/ImmersivePlayer.qml
+- [ ] Port qml/immersive/ImmersiveQueue.qml
+- [ ] Port qml/immersive/ImmersiveQueueRow.qml
+- [ ] Port qml/immersive/LiquidBackdrop.qml
+- [ ] Port qml/immersive/SleepTimerPanel.qml
+- [ ] Port qml/immersive/SoundPanel.qml
+- [ ] Port qml/immersive/VerticalFader.qml
+- [ ] Port qml/library/ArtworkGlow.qml
+- [ ] Port qml/library/CollectionHero.qml
+- [ ] Port qml/library/GenreCard.qml
+- [ ] Port qml/library/Genres.qml
+- [ ] Port qml/library/HomeShortcut.qml
+- [ ] Port qml/library/MediaArtwork.qml
+- [ ] Port qml/library/MediaCard.qml
+- [ ] Port qml/library/Shelf.qml
+- [ ] Port qml/library/SongOptionsMenu.qml
+- [ ] Port qml/library/SongRow.qml
+- [ ] Port qml/motion/Bounce.qml
+- [ ] Port qml/motion/ClickBounce.qml
+- [ ] Port qml/motion/Drift.qml
+- [ ] Port qml/motion/ElementMove.qml
+- [ ] Port qml/motion/ElementMoveEnter.qml
+- [ ] Port qml/motion/ElementMoveExit.qml
+- [ ] Port qml/motion/ElementMoveFast.qml
+- [ ] Port qml/motion/ElementMoveFastColor.qml
+- [ ] Port qml/motion/ElementMoveSmall.qml
+- [ ] Port qml/motion/ElementResize.qml
+- [ ] Port qml/motion/HeroFlight.qml
+- [ ] Port qml/motion/HoverFade.qml
+- [ ] Port qml/motion/ShapeBurst.qml
+- [ ] Port qml/motion/SidebarSlideEnter.qml
+- [ ] Port qml/motion/SidebarSlideExit.qml
+- [ ] Port qml/player/LyricsPanel.qml
+- [ ] Port qml/player/PlayerBar.qml
+- [ ] Port qml/player/QueuePanel.qml
+- [ ] Port qml/player/QueueRow.qml
+- [ ] Port qml/player/VolumeControl.qml
+- [ ] Port qml/settings/ConfigSelection.qml
+- [ ] Port qml/settings/ConfigSlider.qml
+- [ ] Port qml/settings/ConfigSwitch.qml
+- [ ] Port qml/settings/ContentSection.qml
+- [ ] Port qml/settings/NoteText.qml
+- [ ] Port qml/settings/SettingsDialog.qml
+- [ ] Port qml/settings/SettingsPages.qml
+- [ ] Port qml/settings/ThemeSwatch.qml
+- [ ] Port qml/shell/CornerCameo.qml
+- [ ] Port qml/shell/DeletePlaylistDialog.qml
+- [ ] Port qml/shell/LoginDialog.qml
+- [ ] Port qml/shell/MacMenuBar.qml
+- [ ] Port qml/shell/NavigationItem.qml
+- [ ] Port qml/shell/PageHost.qml
+- [ ] Port qml/shell/PageSlot.qml
+- [ ] Port qml/shell/PlaybackMenu.qml
+- [ ] Port qml/shell/SectionLabel.qml
+- [ ] Port qml/shell/Sidebar.qml
+- [ ] Port qml/shell/TopBar.qml
+- [ ] Port qml/shell/WindowControls.qml
+- [ ] Port qml/views/AlbumView.qml
+- [ ] Port qml/views/ArtistView.qml
+- [ ] Port qml/views/HomeView.qml
+- [ ] Port qml/views/LocalFilesView.qml
+- [ ] Port qml/views/LocalTracksView.qml
+- [ ] Port qml/views/PlaylistsView.qml
+- [ ] Port qml/views/PlaylistView.qml
+- [ ] Port qml/views/SavedSongsView.qml
+- [ ] Port qml/views/SearchView.qml
+- [ ] Port qml/views/SetupView.qml
+- [ ] Port qml/views/SongListPage.qml
+- [ ] Port qml/views/SoundCloudArtistLikesView.qml
+- [ ] Port qml/views/SoundCloudArtistTracksView.qml
+- [ ] Port qml/views/SoundCloudArtistView.qml
+- [ ] Port qml/views/SoundCloudPlaylistView.qml
+- [ ] Port qml/views/SoundCloudTrackView.qml
+- [ ] Port qml/views/StartupView.qml
+- [ ] Port qml/visualizers/CompactMeter.qml
+
+## Legacy shader files
+
+## Legacy tests and checks
+- [ ] Port or replace tests/bench_frames.cpp
+- [ ] Port or replace tests/check_download_asset.cmake
+- [ ] Port or replace tests/check_icon_names.py
+- [ ] Port or replace tests/check_qml_statements.py
+- [ ] Port or replace tests/check_windows_build.ps1
+- [ ] Port or replace tests/CMakeLists.txt
+- [ ] Port or replace tests/FakeCore.h
+- [ ] Port or replace tests/tst_covers.cpp
+- [ ] Port or replace tests/tst_local.cpp
+- [ ] Port or replace tests/tst_palette.cpp
+- [ ] Port or replace tests/tst_playback.cpp
+- [ ] Port or replace tests/tst_session.cpp
+- [ ] Port or replace tests/tst_settings.cpp
+- [ ] Port or replace tests/tst_spectrum.cpp
+- [ ] Port or replace tests/tst_theme.cpp
+- [ ] Port or replace tests/tst_views.cpp
+- [ ] Port or replace tests/tst_windows.cpp
+- [ ] Port or replace tests/ViewRig.h
+
+## Platform, release, and quality
+- [ ] macOS 13+ build
+- [ ] Linux Wayland/X11 build
+- [ ] Windows 10/11 x64 build
+- [ ] CI jobs on all three platforms
+- [ ] macOS DMG artifact
+- [ ] Windows ZIP/MSI artifact
+- [ ] Linux AppImage artifact
+- [ ] Linux PKGBUILD
+- [ ] Version synchronization across manifests
+- [ ] macOS ad-hoc signing
+- [ ] Optional macOS notarization
+- [ ] Minimal Tauri capabilities
+- [ ] Strict Content Security Policy
+- [ ] Typed frontend/backend IPC
+- [ ] cargo build --release
+- [ ] cargo test
+- [ ] cargo clippy -- -D warnings
+- [ ] cargo fmt --check
+- [ ] ESLint
+- [ ] TypeScript tsc --noEmit
+- [ ] Vitest
+- [ ] Playwright key-flow coverage
+- [ ] No implementation stubs or TODO placeholders

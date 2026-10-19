@@ -1,0 +1,425 @@
+
+=== DIRECTORY TREE (max depth 3, source files only) ===
+.agents
+.agents\skills
+.gemini
+.gemini\skills
+.github
+.github\workflows
+.github\workflows\release.yml
+.gitignore
+build-symbols
+build-symbols\sources
+build-symbols\sources\qcoro
+build-symbols\sources\qcoro\.clang-format
+build-symbols\sources\qcoro\.git-blame-ignore-revs
+build-symbols\sources\qcoro\.github
+build-symbols\sources\qcoro\.gitignore
+build-symbols\sources\qcoro\.reuse
+build-symbols\sources\qcoro\cmake
+build-symbols\sources\qcoro\CMakeLists.txt
+build-symbols\sources\qcoro\config.cmake.in
+build-symbols\sources\qcoro\docker
+build-symbols\sources\qcoro\docs
+build-symbols\sources\qcoro\examples
+build-symbols\sources\qcoro\LICENSE
+build-symbols\sources\qcoro\LICENSES
+build-symbols\sources\qcoro\mkdocs.yml
+build-symbols\sources\qcoro\qcoro
+build-symbols\sources\qcoro\QCoroConfig.cmake.in
+build-symbols\sources\qcoro\README.md
+build-symbols\sources\qcoro\requirements.txt
+build-symbols\sources\qcoro\tests
+build-symbols\sources\qtkeychain
+build-symbols\sources\qtkeychain\.clang-format
+build-symbols\sources\qtkeychain\.github
+build-symbols\sources\qtkeychain\.gitignore
+build-symbols\sources\qtkeychain\autotest
+build-symbols\sources\qtkeychain\ChangeLog
+build-symbols\sources\qtkeychain\cmake
+build-symbols\sources\qtkeychain\CMakeLists.txt
+build-symbols\sources\qtkeychain\COPYING
+build-symbols\sources\qtkeychain\qtkeychain
+build-symbols\sources\qtkeychain\qtkeychain.pri
+build-symbols\sources\qtkeychain\QtKeychainConfig.cmake.in
+build-symbols\sources\qtkeychain\ReadMe.md
+build-symbols\sources\qtkeychain\TestAppExample
+build-symbols\sources\qtkeychain\testclient.cpp
+build-symbols\sources\qtkeychain\translations
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\deps
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\deps\include
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\deps\lib
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\deps\mkspecs
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qcoro
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qcoro\.ninja_deps
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qcoro\.ninja_log
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qcoro\.qt
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qcoro\build.ninja
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qcoro\cmake_install.cmake
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qcoro\CMakeCache.txt
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qcoro\CMakeFiles
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qcoro\config.h
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qcoro\install_manifest.txt
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qcoro\qcoro
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qcoro\QCoro6Config.cmake
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qcoro\QCoro6ConfigVersion.cmake
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qtkeychain
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qtkeychain\.ninja_deps
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qtkeychain\.ninja_log
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qtkeychain\.qt
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qtkeychain\build.ninja
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qtkeychain\cmake_install.cmake
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qtkeychain\CMakeCache.txt
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qtkeychain\CMakeFiles
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qtkeychain\install_manifest.txt
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qtkeychain\lib
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qtkeychain\Qt6KeychainConfig.cmake
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qtkeychain\Qt6KeychainConfigVersion.cmake
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qtkeychain\qt_Qt6Keychain.pri
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\qtkeychain\qtkeychain
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\.ninja_deps
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\.ninja_log
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\.qsb
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\.qt
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\.rcc
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\_deps
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\build.ninja
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\cargo
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\cmake_install.cmake
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\CMakeCache.txt
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\CMakeFiles
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\compile_commands.json
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\corrosion
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\fonts
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\install_manifest.txt
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\material_color_utilities.lib
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\material_color_utilities_autogen
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\meta_types
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\qml_modules
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\qmltypes
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\shape_atlas.exe
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\shape_atlas.ilk
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\shape_atlas.pdb
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\shape_atlas_autogen
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\shapes
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\sidecar
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\spotify_core.lib
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\swiftify.exe
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\swiftify.exp
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\swiftify.ilk
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\swiftify.lib
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\swiftify.pdb
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\swiftify_app.lib
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\swiftify_app_autogen
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\swiftify_app_qmltyperegistrations.cpp
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\swiftify_appplugin_autogen
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\swiftify_appplugin_init.cpp
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\swiftify_appplugin_init_autogen
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\swiftify_appplugin_SwiftifyPlugin.cpp
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\swiftify_appplugin_SwiftifyPlugin_in.cpp
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\swiftify_autogen
+build-windows
+build-windows\sources
+build-windows\sources\qcoro
+build-windows\sources\qcoro\.clang-format
+build-windows\sources\qcoro\.git-blame-ignore-revs
+build-windows\sources\qcoro\.github
+build-windows\sources\qcoro\.gitignore
+build-windows\sources\qcoro\.reuse
+build-windows\sources\qcoro\cmake
+build-windows\sources\qcoro\CMakeLists.txt
+build-windows\sources\qcoro\config.cmake.in
+build-windows\sources\qcoro\docker
+build-windows\sources\qcoro\docs
+build-windows\sources\qcoro\examples
+build-windows\sources\qcoro\LICENSE
+build-windows\sources\qcoro\LICENSES
+build-windows\sources\qcoro\mkdocs.yml
+build-windows\sources\qcoro\qcoro
+build-windows\sources\qcoro\QCoroConfig.cmake.in
+build-windows\sources\qcoro\README.md
+build-windows\sources\qcoro\requirements.txt
+build-windows\sources\qcoro\tests
+build-windows\sources\qtkeychain
+build-windows\sources\qtkeychain\.clang-format
+build-windows\sources\qtkeychain\.github
+build-windows\sources\qtkeychain\.gitignore
+build-windows\sources\qtkeychain\autotest
+build-windows\sources\qtkeychain\ChangeLog
+build-windows\sources\qtkeychain\cmake
+build-windows\sources\qtkeychain\CMakeLists.txt
+build-windows\sources\qtkeychain\COPYING
+build-windows\sources\qtkeychain\qtkeychain
+build-windows\sources\qtkeychain\qtkeychain.pri
+build-windows\sources\qtkeychain\QtKeychainConfig.cmake.in
+build-windows\sources\qtkeychain\ReadMe.md
+build-windows\sources\qtkeychain\TestAppExample
+build-windows\sources\qtkeychain\testclient.cpp
+build-windows\sources\qtkeychain\translations
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\deps
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\deps\include
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\deps\lib
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\deps\mkspecs
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qcoro
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qcoro\.ninja_deps
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qcoro\.ninja_log
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qcoro\.qt
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qcoro\build.ninja
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qcoro\cmake_install.cmake
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qcoro\CMakeCache.txt
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qcoro\CMakeFiles
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qcoro\config.h
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qcoro\install_manifest.txt
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qcoro\qcoro
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qcoro\QCoro6Config.cmake
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qcoro\QCoro6ConfigVersion.cmake
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qtkeychain
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qtkeychain\.ninja_deps
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qtkeychain\.ninja_log
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qtkeychain\.qt
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qtkeychain\build.ninja
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qtkeychain\cmake_install.cmake
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qtkeychain\CMakeCache.txt
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qtkeychain\CMakeFiles
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qtkeychain\install_manifest.txt
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qtkeychain\lib
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qtkeychain\Qt6KeychainConfig.cmake
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qtkeychain\Qt6KeychainConfigVersion.cmake
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qtkeychain\qt_Qt6Keychain.pri
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\qtkeychain\qtkeychain
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\swiftify
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\swiftify\.ninja_deps
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\swiftify\.ninja_log
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\swiftify\.qsb
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\swiftify\.qt
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\swiftify\.rcc
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\swiftify\_deps
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\swiftify\build.ninja
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\swiftify\cargo
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\swiftify\cmake_install.cmake
+
+=== STACK DETECTION (manifest files) ===
+
+--- CMakeLists.txt ---
+cmake_minimum_required(VERSION 3.24)
+
+project(Swiftify
+    VERSION 0.2.6
+    DESCRIPTION "A native Spotify client"
+    LANGUAGES C CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# the window's title bar on macos is styled through appkit
+if(APPLE)
+    enable_language(OBJCXX)
+    set(CMAKE_OBJCXX_STANDARD 20)
+    set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
+endif()
+
+# on windows <cmath> gives M_PI only when asked, and windows.h's min and
+# max macros are kept off std::min and std::max; msvc also reads the
+# sources as utf-8
+if(WIN32)
+    add_compile_definitions(_USE_MATH_DEFINES NOMINMAX)
+endif()
+if(MSVC)
+    add_compile_options(/utf-8)
+    # material-color-utilities is vendored as it ships upstream, and it builds a
+    # constant with the gnu compound-literal syntax, (Type){...}. msvc accepts
+    # it under /permissive-, which cmake leaves off by default, and reports
+    # C4576 without it. The warning is silenced rather than the vendored source
+    # rewritten: every other compiler here takes the syntax already, so this
+    # keeps the windows build agreeing with them instead of carrying a local
+    # patch to a third party.
+    add_compile_options(/wd4576)
+endif()
+
+include(GNUInstallDirs)
+include(CTest)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(SWIFTIFY_IS_LINUX ON)
+else()
+    set(SWIFTIFY_IS_LINUX OFF)
+endif()
+
+# the wayland, d-bus and pipewire pieces. off elsewhere so the portable parts
+# can be built and tested on a development machine without them.
+option(SWIFTIFY_DESKTOP_INTEGRATION "Build the Linux desktop integration" ${SWIFTIFY_IS_LINUX})
+
+find_package(Qt6 6.9 REQUIRED COMPONENTS
+    Core Gui Network Concurrent Qml Quick QuickControls2 ShaderTools Multimedia)
+if(BUILD_TESTING)
+    find_package(Qt6 6.9 REQUIRED COMPONENTS Test QuickTest)
+endif()
+if(SWIFTIFY_IS_LINUX)
+    find_package(Qt6 6.9 REQUIRED COMPONENTS DBus Widgets)
+else()
+    find_package(Qt6 6.9 OPTIONAL_COMPONENTS DBus)
+endif()
+if(SWIFTIFY_DESKTOP_INTEGRATION)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET libpulse)
+endif()
+find_package(Qt6Keychain REQUIRED)
+if(WIN32)
+    find_package(Qt6 6.9 REQUIRED COMPONENTS Widgets)
+endif()
+find_package(QCoro6 0.10 REQUIRED COMPONENTS Core Network)
+qcoro_enable_coroutines()
+
+qt_standard_project_setup(REQUIRES 6.9)
+# modules get their own folder so tooling finds them as <dir>/Swiftify/qmldir,
+# clear of the executable (the same name on a case-insensitive disk).
+set(QT_QML_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml_modules)
+
+# --- spotify-core (Rust) -----------------------------------------------------
+
+# the core sits inside this folder in swiftify-linux, and beside it in the
+# swiftify repository with the apple apps
+
+[TRUNCATED] Showing first 80 of 489 lines.
+--- package.json ---
+{
+  "name": "resonance",
+  "version": "0.2.6",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "sync:version": "node scripts/sync-release-version.mjs",
+    "release": "node scripts/trigger-release.mjs"
+  }
+}
+
+
+=== ENTRY POINTS ===
+No common entry points found. Check 'main' or 'scripts.start' in manifest files above.
+
+=== LINTING AND FORMATTING CONFIG ===
+No linting or formatting config files found in project root.
+
+=== ENVIRONMENT VARIABLE TEMPLATES ===
+No .env.example or .env.template found. Identify required environment variables by searching the code and config for environment variable reads.
+
+=== TODO / FIXME / HACK (production code only, test dirs excluded) ===
+build-symbols\sources\qcoro\qcoro\coroutine.h:272: // TODO: Check that result of co_await() satisfies Awaitable again
+build-symbols\sources\qcoro\qcoro\coroutine.h:278: // TODO: Check that result of the operator satisfied Awaitable again
+build-symbols\sources\qcoro\qcoro\coroutine.h:280: // FIXME: MSVC is unable to perform ADL lookup for operator co_await and just fails to compile
+build-symbols\sources\qcoro\qcoro\core\qcoroiodevice.h:137: // TODO
+build-symbols\sources\qcoro\qcoro\network\qcoronetworkreply.h:31: // FIXME: Remove in 1.0
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\deps\include\qcoro6\qcoro\coroutine.h:272: // TODO: Check that result of co_await() satisfies Awaitable again
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\deps\include\qcoro6\qcoro\coroutine.h:278: // TODO: Check that result of the operator satisfied Awaitable again
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\deps\include\qcoro6\qcoro\coroutine.h:280: // FIXME: MSVC is unable to perform ADL lookup for operator co_await and just fails to compile
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\deps\include\qcoro6\qcoro\qcoroiodevice.h:137: // TODO
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\deps\include\qcoro6\qcoro\qcoronetworkreply.h:31: // FIXME: Remove in 1.0
+build-windows\sources\qcoro\qcoro\coroutine.h:272: // TODO: Check that result of co_await() satisfies Awaitable again
+build-windows\sources\qcoro\qcoro\coroutine.h:278: // TODO: Check that result of the operator satisfied Awaitable again
+build-windows\sources\qcoro\qcoro\coroutine.h:280: // FIXME: MSVC is unable to perform ADL lookup for operator co_await and just fails to compile
+build-windows\sources\qcoro\qcoro\core\qcoroiodevice.h:137: // TODO
+build-windows\sources\qcoro\qcoro\network\qcoronetworkreply.h:31: // FIXME: Remove in 1.0
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\deps\include\qcoro6\qcoro\coroutine.h:272: // TODO: Check that result of co_await() satisfies Awaitable again
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\deps\include\qcoro6\qcoro\coroutine.h:278: // TODO: Check that result of the operator satisfied Awaitable again
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\deps\include\qcoro6\qcoro\coroutine.h:280: // FIXME: MSVC is unable to perform ADL lookup for operator co_await and just fails to compile
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\deps\include\qcoro6\qcoro\qcoroiodevice.h:137: // TODO
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\deps\include\qcoro6\qcoro\qcoronetworkreply.h:31: // FIXME: Remove in 1.0
+build-windows\x86_64-pc-windows-msvc-35bb1f78caa8\deps\include\qcoro6\qcoro\coroutine.h:272: // TODO: Check that result of co_await() satisfies Awaitable again
+build-windows\x86_64-pc-windows-msvc-35bb1f78caa8\deps\include\qcoro6\qcoro\coroutine.h:278: // TODO: Check that result of the operator satisfied Awaitable again
+build-windows\x86_64-pc-windows-msvc-35bb1f78caa8\deps\include\qcoro6\qcoro\coroutine.h:280: // FIXME: MSVC is unable to perform ADL lookup for operator co_await and just fails to compile
+build-windows\x86_64-pc-windows-msvc-35bb1f78caa8\deps\include\qcoro6\qcoro\qcoroiodevice.h:137: // TODO
+build-windows\x86_64-pc-windows-msvc-35bb1f78caa8\deps\include\qcoro6\qcoro\qcoronetworkreply.h:31: // FIXME: Remove in 1.0
+Swiftify\Swiftify\Bridge\Generated\SwiftBridgeCore.swift:40: // TODO: When passing an owned Swift std String to Rust we've being wasteful here in that
+
+=== GIT RECENT COMMITS (last 20) ===
+454a4fa fix(ci): stop two self-inflicted failures, and let the artifact be the verdict
+ef3f4fb fix(ci): ask macos for the cocoa plugin, not the x11 one
+6b43b9e fix: let the loader find qtkeychain, and deploy what only the qml asks for
+65c854a fix: three packaging faults, one per platform
+f4bff34 ci(windows): check every dll the exe imports, not only the ones we thought of
+39e888d fix(windows): name the sidecar .exe, and let windeployqt skip what it cannot carry
+9db1dd5 fix(ci): build linux with clang, since gcc cannot compile these coroutines
+b879033 fix(ci): gcc 13 for linux, and the app's own dlls before windeployqt
+ec1b92d fix(qml): take final off the appearance palette's 52 properties too
+60464f3 fix(ci): real line continuations, and msvc's complaint about the vendored colour library
+6fd3b20 fix(qml): drop final from properties, and go back to qt 6.9 in ci
+70d18f3 fix(ci): match qt on every platform, and build windows with msvc
+9fca5a5 fix(ci): install qtshadertools, and clone url-first on windows
+52a4787 fix(ci): stop qt's build-time sdk from reaching the mac linker
+692b574 fix(ci): give qcoro the qt it asks for, and clone the way git expects
+b830b5c fix(ci): point the linux and windows jobs at the qt install-qt-action gives, and pair the mac linker with its sdk
+a33ce4c fix(release): rebuild the release pipeline on the tauri app's shape
+70289e0 fix(ci): check apple notarization via step output, not secrets in if
+b0b6565 fix(ci): use safe github.event.inputs syntax for release workflow
+358c1c1 chore: bump version to v0.2.6
+
+=== HIGH-CHURN FILES (last 90 days, top 20) ===
+  20 .github/workflows/release.yml
+  18 CMakeLists.txt
+  17 README.md
+   8 qml/settings/SettingsPages.qml
+   8 tests/tst_views.cpp
+   7 src/app/Settings.h
+   6 src/core/RustCore.cpp
+   6 src/main.cpp
+   5 qml/Main.qml
+   5 qml/immersive/ImmersiveLyrics.qml
+   5 qml/immersive/ImmersivePlayer.qml
+   5 spotify-core/include/swiftify_core.h
+   5 spotify-core/src/capi.rs
+   5 src/app/Settings.cpp
+   5 src/playback/PlaybackController.cpp
+   4 qml/immersive/ImmersiveNowPlaying.qml
+   4 qml/library/CollectionHero.qml
+   4 qml/shell/TopBar.qml
+   4 spotify-core/src/lib.rs
+   4 src/core/PlaybackCore.h
+
+=== MONOREPO SIGNALS ===
+No monorepo signals detected.
+
+=== CODE METRICS ===
+Total files scanned: 10611
+Total lines of code: 2254535
+
+Files by language:
+  Other: 9149
+  C++: 881
+  C Header: 360
+  Rust: 165
+  C: 18
+  TypeScript: 16
+  JavaScript: 14
+  Python: 6
+  Swift: 2
+
+Top 10 largest files:
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\swiftify_app.lib: 264349.7KB
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\swiftify.pdb: 138556.0KB
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\swiftify\swiftify_app.lib: 127839.6KB
+build-windows\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\swiftify_app.lib: 125415.5KB
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\swiftify.ilk: 94107.4KB
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\CMakeFiles\swiftify_app.dir\swiftify_app.pdb: 61484.0KB
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\cargo\spotify-core_b34c0\x86_64-pc-windows-msvc\release\deps\libwindows-068df5de6a100b6b.rlib: 50137.0KB
+build-windows\x86_64-pc-windows-msvc-18146b3db2bc\swiftify\cargo\spotify-core_b34c0\x86_64-pc-windows-msvc\release\deps\libwindows-068df5de6a100b6b.rlib: 50137.0KB
+build-windows\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\cargo\spotify-core_b34c0\x86_64-pc-windows-msvc\release\deps\libwindows-068df5de6a100b6b.rlib: 50137.0KB
+build-symbols\x86_64-pc-windows-msvc-35bb1f78caa8\swiftify\cargo\spotify-core_b34c0\x86_64-pc-windows-msvc\release\deps\libwindows-068df5de6a100b6b.rmeta: 48265.8KB
+
+=== CI/CD PIPELINES ===
+CI/CD: GitHub Actions
+
+=== CONTAINERS & ORCHESTRATION ===
+No containerization configs detected.
+
+=== SECURITY & COMPLIANCE ===
+No security configs detected.
+
+=== PERFORMANCE & TESTING ===
+No performance testing configs detected.
+
+=== SCAN COMPLETE ===
