@@ -229,7 +229,12 @@ function Invoke-WindowsBuild {
             "-DCMAKE_INSTALL_PREFIX=$($dependencyPrefix.Replace('\', '/'))", '-DCMAKE_INSTALL_BINDIR=bin'
         )
         $dependencies = @(
-            @{ Name = 'qtkeychain'; Url = 'https://github.com/frankosterfeld/qtkeychain.git'; Options = @('-DBUILD_WITH_QT5=OFF', '-DBUILD_TEST_APPLICATION=OFF', '-DBUILD_TRANSLATIONS=OFF') },
+            # Static, and not a preference: windeployqt cannot resolve a third-party dll, so a
+            # shared qtkeychain makes this script fail at the last step with "Unable to find dependent
+            # libraries of ...\bin\qt6keychain.dll". release.yml builds it the same way for the same
+            # reason, and explains it there. With no such import there is nothing for windeployqt to
+            # fail on, and nothing extra to ship.
+            @{ Name = 'qtkeychain'; Url = 'https://github.com/frankosterfeld/qtkeychain.git'; Options = @('-DBUILD_WITH_QT5=OFF', '-DBUILD_TEST_APPLICATION=OFF', '-DBUILD_TRANSLATIONS=OFF', '-DBUILD_SHARED_LIBS=OFF') },
             @{ Name = 'qcoro'; Url = 'https://github.com/qcoro/qcoro.git'; Options = @('-DUSE_QT_VERSION=6', '-DQCORO_WITH_QTDBUS=OFF', '-DQCORO_WITH_QTWEBSOCKETS=OFF', '-DQCORO_WITH_QTQUICK=OFF', '-DQCORO_WITH_QML=OFF', '-DQCORO_WITH_QTTEST=OFF', '-DQCORO_BUILD_EXAMPLES=OFF') }
         )
         foreach ($dependency in $dependencies) {
@@ -250,7 +255,13 @@ function Invoke-WindowsBuild {
         $installBin = Join-Path $InstallPrefix 'bin'
         $executable = Join-Path $installBin 'swiftify.exe'
         Invoke-Native $deployQt @('--release', '--force', '--compiler-runtime', '--qmldir', (Join-Path $sourceRoot 'qml'), $executable) | Out-Host
-        Copy-Item -Path "$dependencyPrefix\bin\*.dll" -Destination $installBin -Force
+        # Only present when a dependency was built shared. qtkeychain is static (see above) and qcoro
+        # builds static libs, so there is normally no bin directory under the deps prefix at all, and
+        # Copy-Item against a missing path is a hard error rather than a no-op — which made the script
+        # report failure after the build, the install and windeployqt had all succeeded.
+        if (Test-Path -LiteralPath $dependencyPrefix\bin) {
+            Copy-Item -Path "$dependencyPrefix\bin\*.dll" -Destination $installBin -Force
+        }
         if ($rustTarget -eq 'x86_64-pc-windows-gnu') {
             foreach ($runtime in @('libstdc++-6.dll', 'libgcc_s_seh-1.dll', 'libwinpthread-1.dll')) {
                 $runtimePath = Join-Path $mingw.Directory $runtime
