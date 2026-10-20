@@ -70,14 +70,11 @@ jobs:
             find squashfs-root -name "$library" -print -quit | grep -q .
           done
           rm -rf squashfs-root
-      - name: Upload to GitHub Release
-        if: github.event_name == 'push' || inputs.publish
-        uses: softprops/action-gh-release@v2
+      - name: Save Linux package
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          target_commitish: ${{ github.sha }}
-          name: Resonance ${{ env.RELEASE_TAG }}
-          files: release-artifacts/*
+          name: linux-package
+          path: release-artifacts/*
 
   windows:
     name: "Windows: build and package"
@@ -149,14 +146,11 @@ jobs:
           })
           if ($missingDlls) { throw "Windows package misses DLLs: $($missingDlls -join ', ')" }
           Compress-Archive -Path (Join-Path $staging '*') -DestinationPath "release-artifacts/Resonance-${version}-Windows.zip"
-      - name: Upload to GitHub Release
-        if: github.event_name == 'push' || inputs.publish
-        uses: softprops/action-gh-release@v2
+      - name: Save Windows package
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          target_commitish: ${{ github.sha }}
-          name: Resonance ${{ env.RELEASE_TAG }}
-          files: release-artifacts/*
+          name: windows-package
+          path: release-artifacts/*
 
   macos:
     name: "macOS: build and package"
@@ -215,8 +209,27 @@ jobs:
             echo 'App bundle still links against libraries from the build machine'
             exit 1
           fi
-      - name: Upload to GitHub Release
-        if: github.event_name == 'push' || inputs.publish
+      - name: Save macOS package
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-package
+          path: release-artifacts/*
+
+  publish:
+    name: Upload all packages to GitHub Release
+    needs: [linux, windows, macos]
+    if: github.event_name == 'push' || inputs.publish
+    runs-on: ubuntu-24.04
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '*-package'
+          path: release-artifacts
+          merge-multiple: true
+      - name: Upload all packages to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
