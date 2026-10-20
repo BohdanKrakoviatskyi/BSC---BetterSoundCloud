@@ -98,9 +98,10 @@ export QML_SOURCES_PATHS="$REPO_ROOT/qml"
 export EXTRA_QT_MODULES="QtQuick;QtQuickControls2;QtQml;QtMultimedia;QtSvg"
 
 echo "==> Running linuxdeploy"
+OUTPUT="Resonance-${VERSION}-Linux.AppImage"
+export OUTPUT
 DEPLOY_STATUS=0
-OUTPUT="Resonance-${VERSION}-Linux.AppImage" \
-    linuxdeploy \
+linuxdeploy \
     --appdir "$APPDIR" \
     --desktop-file "$APPDIR/usr/share/applications/swiftify.desktop" \
     --icon-file "$APPDIR/usr/share/icons/hicolor/512x512/apps/swiftify.png" \
