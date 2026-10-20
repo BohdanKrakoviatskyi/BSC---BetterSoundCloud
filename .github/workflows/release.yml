@@ -118,7 +118,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release `
             -DBUILD_TESTING=OFF `
             -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR;C:\qcoro-install" `
-            -DSWIFTIFY_SIDECAR_SOURCE_DIR="$GITHUB_WORKSPACE/BSC---BetterSoundCloud/backend"
+            -DSWIFTIFY_SIDECAR_SOURCE_DIR="$env:GITHUB_WORKSPACE/BSC---BetterSoundCloud/backend"
           cmake --build build
           $sidecar = 'build/sidecar/local-api.exe'
           if (-not (Test-Path $sidecar)) { throw "sidecar missing: $sidecar" }
