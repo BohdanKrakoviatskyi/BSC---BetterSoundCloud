@@ -134,6 +134,7 @@ void Settings::load()
         m_musicSource = raw == QLatin1StringView("soundcloud") ? QStringLiteral("soundcloud") : QStringLiteral("spotify");
     }
     m_soundcloudClientId = stored<QString>(m_store, "soundcloudClientId", m_soundcloudClientId);
+    m_soundcloudToken = stored<QString>(m_store, "soundcloudToken", m_soundcloudToken);
     m_pinnedPlaylistsExpanded = stored<bool>(m_store, "pinnedPlaylistsExpanded", m_pinnedPlaylistsExpanded);
     m_allPlaylistsExpanded = stored<bool>(m_store, "allPlaylistsExpanded", m_allPlaylistsExpanded);
     {
@@ -241,6 +242,16 @@ void Settings::setSoundcloudClientId(const QString &value)
     m_soundcloudClientId = value;
     m_store.setValue(QStringLiteral("soundcloudClientId"), value);
     emit soundcloudClientIdChanged();
+}
+
+void Settings::setSoundcloudToken(const QString &value)
+{
+    if (m_soundcloudToken == value) {
+        return;
+    }
+    m_soundcloudToken = value;
+    m_store.setValue(QStringLiteral("soundcloudToken"), value);
+    emit soundcloudTokenChanged();
 }
 
 void Settings::setVisualizerSensitivity(double raw)

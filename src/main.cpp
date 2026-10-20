@@ -272,12 +272,12 @@ int main(int argc, char *argv[])
     SoundCloud soundcloud(&sidecar, &settings, &network, &errors);
     library.attachSoundCloud(&soundcloud);
     player.attachSoundCloud(&soundcloud);
-    // TEMPORARY: disabled to get past a crash on start-up. The debugger puts it in
-    // SoundCloud::applyStatus, entered with a `this` of 5 — the object is fine when the
-    // coroutine is created (0x1d060fd090) and corrupt by the time it wakes. Removing the
-    // call removes the frame that carries the bad value. The window opens and the rest of
-    // the app works; SoundCloud reads as signed out until the real fault is fixed.
-    // soundcloud.refreshStatus();
+    // restored from a named member coroutine now: as a lambda one its captures
+    // lived in a temporary closure that was gone by the time it resumed, and it
+    // died on a garbage `this`. the sidecar keeps the token in its own auth file
+    // and reports the session back, so a launch that is already signed in never
+    // shows the connect form.
+    soundcloud.refreshStatus();
     // a song whose tags were edited shows as it is now wherever it is queued
     QObject::connect(&localFiles, &LocalLibrary::scanned, &player,
                      [&] { player.refreshSongDetails(localFiles.allSongs()); });

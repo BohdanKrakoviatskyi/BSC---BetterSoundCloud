@@ -153,6 +153,7 @@ SoundCloud::SoundCloud(SidecarClient *sidecar, Settings *settings, QNetworkAcces
     }
     if (m_settings != nullptr) {
         connect(m_settings, &Settings::soundcloudClientIdChanged, this, &SoundCloud::clientIdChanged);
+        connect(m_settings, &Settings::soundcloudTokenChanged, this, &SoundCloud::tokenChanged);
     }
     QDir().mkpath(streamCacheDirectory());
 }
@@ -186,6 +187,18 @@ void SoundCloud::setClientId(const QString &value)
 {
     if (m_settings != nullptr) {
         m_settings->setSoundcloudClientId(value);
+    }
+}
+
+QString SoundCloud::token() const
+{
+    return m_settings != nullptr ? m_settings->soundcloudToken() : QString();
+}
+
+void SoundCloud::setToken(const QString &value)
+{
+    if (m_settings != nullptr) {
+        m_settings->setSoundcloudToken(value);
     }
 }
 
@@ -262,22 +275,31 @@ void SoundCloud::applyStatus(const QJsonObject &status)
     emit accountChanged();
 }
 
+QCoro::Task<> SoundCloud::refreshStatusTask()
+{
+    const QJsonObject status = co_await call(QStringLiteral("auth.status"));
+    if (!status.contains(QStringLiteral("error"))) {
+        applyStatus(status);
+    }
+    if (m_settings != nullptr && m_settings->soundcloudClientId().isEmpty()) {
+        const QJsonObject settingsResp = co_await call(QStringLiteral("settings.get"));
+        const QString id = settingsResp.value(QStringLiteral("clientId")).toString();
+        if (!id.isEmpty()) {
+            m_settings->setSoundcloudClientId(id);
+            emit clientIdChanged();
+        }
+    }
+}
+
 void SoundCloud::refreshStatus()
 {
-    detach([this]() -> QCoro::Task<> {
-        const QJsonObject status = co_await call(QStringLiteral("auth.status"));
-        if (!status.contains(QStringLiteral("error"))) {
-            applyStatus(status);
-        }
-        if (m_settings != nullptr && m_settings->soundcloudClientId().isEmpty()) {
-            const QJsonObject settingsResp = co_await call(QStringLiteral("settings.get"));
-            const QString id = settingsResp.value(QStringLiteral("clientId")).toString();
-            if (!id.isEmpty()) {
-                m_settings->setSoundcloudClientId(id);
-                emit clientIdChanged();
-            }
-        }
-    }());
+    // a named member coroutine, not a lambda one: a lambda's captures live in a
+    // temporary closure that dies at the end of the statement, while its frame
+    // holds only a pointer to it. called from main() before the window exists,
+    // that stack slot is overwritten by the objects built next, and the coroutine
+    // woke on a `this` of 5. as a member function `this` is a real parameter,
+    // copied into the frame.
+    detach(refreshStatusTask());
 }
 
 QCoro::Task<> SoundCloud::runConnect(QString clientId, QString token, quint64 generation)
@@ -324,6 +346,7 @@ void SoundCloud::connectAccount(const QString &clientId, const QString &token)
         return;
     }
     setClientId(id);
+    setToken(accessToken);
     const quint64 generation = ++m_connectGeneration;
     setStatusMessage(QString());
     setBusy(true);
@@ -333,6 +356,7 @@ void SoundCloud::connectAccount(const QString &clientId, const QString &token)
 void SoundCloud::logOut()
 {
     ++m_connectGeneration;
+    setToken(QString());
     setBusy(true);
     detach([this]() -> QCoro::Task<> {
         const QJsonObject status = co_await call(QStringLiteral("auth.logout"));

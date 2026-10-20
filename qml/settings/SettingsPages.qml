@@ -872,6 +872,8 @@ Item {
                     x: 8
                     width: Math.min(460, parent.width - 16)
                     placeholder: "SoundCloud OAuth Token"
+                    text: SoundCloud.token
+                    onTextEdited: SoundCloud.token = text
                 }
                 Flow {
                     x: 8

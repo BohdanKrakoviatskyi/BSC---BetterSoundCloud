@@ -57,8 +57,11 @@ class Settings : public QObject {
     /// kept so the app opens on the one that was last used
     Q_PROPERTY(QString musicSource READ musicSource WRITE setMusicSource NOTIFY musicSourceChanged FINAL)
     /// the app's own soundcloud client id, which the sidecar needs to sign a
-    /// stream url. the access token is not kept here: the sidecar holds it
+    /// stream url. the sidecar keeps the token it is given as well, in its own
+    /// auth file; this copy is what the connect form fills back in, so a relaunch
+    /// does not ask for the same token again
     Q_PROPERTY(QString soundcloudClientId READ soundcloudClientId WRITE setSoundcloudClientId NOTIFY soundcloudClientIdChanged FINAL)
+    Q_PROPERTY(QString soundcloudToken READ soundcloudToken WRITE setSoundcloudToken NOTIFY soundcloudTokenChanged FINAL)
     Q_PROPERTY(QString customBackgroundPath READ customBackgroundPath WRITE setCustomBackgroundPath NOTIFY customBackgroundPathChanged FINAL)
     Q_PROPERTY(QStringList customBackgrounds READ customBackgrounds WRITE setCustomBackgrounds NOTIFY customBackgroundsChanged FINAL)
     Q_PROPERTY(double customBackgroundDim READ customBackgroundDim WRITE setCustomBackgroundDim NOTIFY customBackgroundDimChanged FINAL)
@@ -153,6 +156,8 @@ public:
     void setMusicSource(const QString &value);
     QString soundcloudClientId() const { return m_soundcloudClientId; }
     void setSoundcloudClientId(const QString &value);
+    QString soundcloudToken() const { return m_soundcloudToken; }
+    void setSoundcloudToken(const QString &value);
     QString customBackgroundPath() const { return m_customBackgroundPath; }
     void setCustomBackgroundPath(const QString &value);
     QStringList customBackgrounds() const { return m_customBackgrounds; }
@@ -193,6 +198,7 @@ signals:
     void trayIconChanged();
     void musicSourceChanged();
     void soundcloudClientIdChanged();
+    void soundcloudTokenChanged();
     void customBackgroundPathChanged();
     void customBackgroundsChanged();
     void customBackgroundDimChanged();
@@ -234,6 +240,8 @@ private:
     bool m_trayIcon = true;
     QString m_musicSource = QStringLiteral("spotify");
     QString m_soundcloudClientId;
+    /// the soundcloud access token, so the connect form can fill itself back in
+    QString m_soundcloudToken;
     QString m_customBackgroundPath;
     QStringList m_customBackgrounds;
     double m_customBackgroundDim = 0.35;

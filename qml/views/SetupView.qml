@@ -257,6 +257,8 @@ Flickable {
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: Math.min(460, parent.width)
                     placeholder: "OAuth Access Token"
+                    text: SoundCloud.token
+                    onTextEdited: SoundCloud.token = text
                 }
             }
 

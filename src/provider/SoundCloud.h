@@ -133,6 +133,9 @@ class SoundCloud : public QObject {
     Q_PROPERTY(QString statusMessage READ statusMessage NOTIFY statusMessageChanged FINAL)
     /// the app's own soundcloud client id, kept in the app's settings
     Q_PROPERTY(QString clientId READ clientId WRITE setClientId NOTIFY clientIdChanged FINAL)
+    /// the access token the user pasted, kept in the app's settings so the
+    /// connect form fills itself back in. the sidecar keeps its own copy too
+    Q_PROPERTY(QString token READ token WRITE setToken NOTIFY tokenChanged FINAL)
     /// whether this build has the sidecar at all
     Q_PROPERTY(bool available READ available NOTIFY availableChanged FINAL)
 
@@ -174,6 +177,8 @@ public:
     QString statusMessage() const { return m_statusMessage; }
     QString clientId() const;
     void setClientId(const QString &value);
+    QString token() const;
+    void setToken(const QString &value);
     bool available() const;
 
     SoundCloudArtistProfile currentArtist() const { return m_currentArtist; }
@@ -241,6 +246,7 @@ signals:
     void busyChanged();
     void statusMessageChanged();
     void clientIdChanged();
+    void tokenChanged();
     void availableChanged();
 
     void currentArtistChanged();
@@ -269,6 +275,7 @@ private:
     void report(const QString &message);
     QString streamCacheDirectory() const;
     QCoro::Task<> runConnect(QString clientId, QString token, quint64 generation);
+    QCoro::Task<> refreshStatusTask();
     void pruneStreamCache(const QString &keeping);
     /// download and cache an HLS stream by fetching the M3U8 and every segment
     QCoro::Task<QString> downloadHlsStream(const QString &m3u8Url, const QString &uri);
