@@ -44,6 +44,20 @@ else()
     set(SWIFTIFY_IS_LINUX OFF)
 endif()
 
+# clang, not gcc, on linux: gcc's coroutine support is still experimental and
+# miscompiles this codebase's QCoro tasks. A gcc build compiles and links, then
+# dies with a segfault the first time a coroutine resumes (seen on gcc 16:
+# a temporary QString in SoundCloud::applyStatus comes out uninitialised).
+# Failing here is clearer than a crash at startup. macos and windows use their
+# platform compilers and are not affected.
+if(SWIFTIFY_IS_LINUX AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    message(FATAL_ERROR
+        "Build Resonance on Linux with Clang, not GCC: GCC miscompiles the "
+        "coroutines this app is built on, and the resulting binary crashes at "
+        "startup. Configure again with "
+        "-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++.")
+endif()
+
 # the wayland, d-bus and pipewire pieces. off elsewhere so the portable parts
 # can be built and tested on a development machine without them.
 option(SWIFTIFY_DESKTOP_INTEGRATION "Build the Linux desktop integration" ${SWIFTIFY_IS_LINUX})
@@ -264,7 +278,12 @@ target_include_directories(swiftify_app PRIVATE ${SWIFTIFY_SOURCE_DIRECTORIES})
 target_include_directories(swiftify_app PRIVATE tools/shape_atlas)
 target_compile_definitions(swiftify_app PUBLIC SWIFTIFY_VERSION="${PROJECT_VERSION}")
 target_compile_definitions(swiftify_app PRIVATE
-    SWIFTIFY_BUILD_FONT_DIRECTORY="${SWIFTIFY_FONT_DIRECTORY}"
+    SWIFTIFY_BUILD_FONT_DIRECTORY="${SWIFTIFY_FONT_DIRECTORY}")
+# public, because main.cpp is the executable's own source rather than part of
+# this library: a private definition would leave it out, and the desktop
+# integration and mpris guards in it would compile away on the platform they
+# exist for
+target_compile_definitions(swiftify_app PUBLIC
     $<$<BOOL:${SWIFTIFY_DESKTOP_INTEGRATION}>:SWIFTIFY_DESKTOP_INTEGRATION>
     $<$<TARGET_EXISTS:Qt6::DBus>:SWIFTIFY_HAS_DBUS>)
 if(TARGET Qt6::DBus)
