@@ -67,11 +67,30 @@ void SidecarClient::Call::complete(Response value)
     }
     response = std::move(value);
     done = true;
-    if (continuation != nullptr) {
-        const std::coroutine_handle<> handle = continuation;
-        continuation = nullptr;
-        handle.resume();
+    if (continuation == nullptr) {
+        return;
     }
+    const std::coroutine_handle<> handle = continuation;
+    continuation = nullptr;
+
+    // Resuming here would return into an object that no longer exists. This Call is a local in the
+    // coroutine frame of SidecarClient::call; the continuation runs to its co_return, that destroys
+    // the frame, and with it this Call — while complete() is still a member function of it. Whatever
+    // the caller touches afterwards, deliver()'s own bookkeeping and the rest of onStdout()'s loop
+    // over m_buffer, is then reading freed memory.
+    //
+    // So the resume goes through the event loop: complete() returns first, the frame is torn down on
+    // the coroutine's own terms, and the call that was waiting is delivered on the next event loop
+    // pass. The handle is copied, so nothing here depends on this object still being alive.
+    if (client != nullptr) {
+        QMetaObject::invokeMethod(client, [handle]() { handle.resume(); }, Qt::QueuedConnection);
+        return;
+    }
+
+    // No client left to schedule on: the owner is shutting down and deliberately leaves its calls
+    // suspended. Destroying the frame runs the locals' destructors, which unhook the Call, and skips
+    // the body rather than running code that would touch an object on its way out.
+    handle.destroy();
 }
 
 SidecarClient::SidecarClient(QObject *parent)
