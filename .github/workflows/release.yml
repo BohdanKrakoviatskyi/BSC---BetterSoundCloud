@@ -49,17 +49,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node resonance/scripts/sync-release-version.mjs "$RELEASE_TAG"
+          node scripts/sync-release-version.mjs "$RELEASE_TAG"
           export PATH="$QT_ROOT_DIR/bin:$PATH"
           export LD_LIBRARY_PATH="/usr/local/lib:/usr/local/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
-          cmake -S resonance -B resonance/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
             -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 \
             -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
             -DSWIFTIFY_SIDECAR_SOURCE_DIR="$GITHUB_WORKSPACE/BSC---BetterSoundCloud/backend"
-          cmake --build resonance/build
-          test -f resonance/build/sidecar/local-api
+          cmake --build build
+          test -f build/sidecar/local-api
           mkdir -p release-artifacts
-          ./resonance/packaging/linux/package-appimage.sh resonance/build release-artifacts "${RELEASE_TAG#v}"
+          ./packaging/linux/package-appimage.sh build release-artifacts "${RELEASE_TAG#v}"
           APPIMAGE="$(find release-artifacts -maxdepth 1 -name 'Resonance-*-Linux*.AppImage' -print -quit)"
           test -n "$APPIMAGE"
           APPIMAGE_EXTRACT_AND_RUN=1 "$APPIMAGE" --appimage-extract > /dev/null
@@ -113,21 +113,21 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          node resonance/scripts/sync-release-version.mjs $env:RELEASE_TAG
-          cmake -S resonance -B resonance/build -G Ninja `
+          node scripts/sync-release-version.mjs $env:RELEASE_TAG
+          cmake -S . -B build -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
             -DBUILD_TESTING=OFF `
             -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR;C:\qcoro-install" `
             -DSWIFTIFY_SIDECAR_SOURCE_DIR="$GITHUB_WORKSPACE/BSC---BetterSoundCloud/backend"
-          cmake --build resonance/build
-          $sidecar = 'resonance/build/sidecar/local-api.exe'
+          cmake --build build
+          $sidecar = 'build/sidecar/local-api.exe'
           if (-not (Test-Path $sidecar)) { throw "sidecar missing: $sidecar" }
 
           $version = $env:RELEASE_TAG -replace '^v', ''
           $staging = Join-Path $env:RUNNER_TEMP 'pkg'
           New-Item -ItemType Directory -Force $staging, release-artifacts | Out-Null
-          Copy-Item 'resonance/build/resonance.exe', $sidecar $staging
-          & "$env:QT_ROOT_DIR/bin/windeployqt.exe" --release --qmldir (Join-Path $env:GITHUB_WORKSPACE 'resonance/qml') --no-translations --no-system-d3d-compiler --ignore-library-errors (Join-Path $staging 'resonance.exe')
+          Copy-Item 'build/resonance.exe', $sidecar $staging
+          & "$env:QT_ROOT_DIR/bin/windeployqt.exe" --release --qmldir (Join-Path $env:GITHUB_WORKSPACE 'qml') --no-translations --no-system-d3d-compiler --ignore-library-errors (Join-Path $staging 'resonance.exe')
           $required = @(
             'resonance.exe','local-api.exe','Qt6Core.dll','Qt6Gui.dll','Qt6Quick.dll','Qt6Qml.dll',
             'Qt6Multimedia.dll','Qt6DBus.dll','Qt6Network.dll','Qt6Widgets.dll',
@@ -192,17 +192,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node resonance/scripts/sync-release-version.mjs "$RELEASE_TAG"
+          node scripts/sync-release-version.mjs "$RELEASE_TAG"
           QT_PREFIX="$(brew --prefix qt@6)"
           export PATH="$QT_PREFIX/bin:$PATH"
-          cmake -S resonance -B resonance/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
             -DCMAKE_PREFIX_PATH="$QT_PREFIX;$(brew --prefix qcoro6);$(brew --prefix qtkeychain)" \
             -DSWIFTIFY_SIDECAR_SOURCE_DIR="$GITHUB_WORKSPACE/BSC---BetterSoundCloud/backend" \
             -DSWIFTIFY_CODESIGN_IDENTITY=-
-          cmake --build resonance/build --target resonance
-          test -f resonance/build/sidecar/local-api
+          cmake --build build --target resonance
+          test -f build/sidecar/local-api
           mkdir -p release-artifacts
-          ./resonance/packaging/macos/package-dmg.sh resonance/build/resonance.app release-artifacts "${RELEASE_TAG#v}" -
+          ./packaging/macos/package-dmg.sh build/resonance.app release-artifacts "${RELEASE_TAG#v}" -
           ZIP="release-artifacts/Resonance-${RELEASE_TAG#v}-macOS.zip"
           test -f "$ZIP"
           CHECK="$(mktemp -d)"
