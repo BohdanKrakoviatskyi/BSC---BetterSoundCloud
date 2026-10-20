@@ -33,7 +33,7 @@ function rewrite(relativePath, pattern, replacement) {
 
 // the number the app reports as its own: SWIFTIFY_VERSION comes from here
 rewrite('CMakeLists.txt',
-  /(project\(\s*Swiftify\s+VERSION\s+)\d+\.\d+\.\d+(?:[-+][\w.-]+)?/i,
+  /(project\(\s*Resonance\s+VERSION\s+)\d+\.\d+\.\d+(?:[-+][\w.-]+)?/i,
   `$1${version}`);
 
 // the rust core, and the same version in its lock file. \r? because the lock is
