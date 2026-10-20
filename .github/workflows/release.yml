@@ -29,6 +29,11 @@ on:
           - ubuntu-24.04
           - windows-latest
           - macos-latest
+      publish:
+        description: Publish the built artifacts to a GitHub release.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -490,7 +495,7 @@ jobs:
           echo "frameworks shipped: $(find "$BUNDLE/Frameworks" -maxdepth 1 -name '*.framework' | wc -l)"
 
       - name: Notarize DMG
-        if: runner.os == 'macOS' && steps.apple.outputs.notarize == 'true'
+        if: runner.os == 'macOS' && steps.apple.outputs.notarize == 'true' && (github.event_name == 'push' || inputs.publish)
         working-directory: resonance
         shell: bash
         env:
@@ -690,6 +695,7 @@ jobs:
 
       # ── publish ───────────────────────────────────────────────────────────
       - name: Publish this platform's assets to the release
+        if: github.event_name == 'push' || inputs.publish
         uses: softprops/action-gh-release@v2
         with:
           # every platform writes to the same tag, so the release is the union of
