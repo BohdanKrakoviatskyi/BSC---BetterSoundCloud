@@ -85,6 +85,13 @@ trap cleanup EXIT
 echo "==> Installing into $APPDIR/usr"
 cmake --install "$BUILD_DIR" --prefix "$APPDIR/usr" --config Release
 
+# The desktop entry uses the Resonance application id, while the shared source
+# icon files keep their Swiftify filenames. linuxdeploy expects the supplied
+# icon to match the desktop entry, so give the installed icon that name here.
+ICON_DIR="$APPDIR/usr/share/icons/hicolor/512x512/apps"
+mkdir -p "$ICON_DIR"
+cp "$ICON_DIR/swiftify.png" "$ICON_DIR/resonance.png"
+
 # The qml lives compiled into the binary. QML_SOURCES_PATHS still points the
 # scanner at the sources so it can see which Qt modules are used, but the
 # scanner will report the project's own module as missing — Swiftify is not a
