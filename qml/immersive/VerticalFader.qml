@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // one equalizer band (VerticalFader): a thin track filled from its middle, and
 // a white cap that glows in the accent. dragging moves the value by how far

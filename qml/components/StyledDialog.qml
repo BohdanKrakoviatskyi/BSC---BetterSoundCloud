@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Templates as T
-import Swiftify
+import Resonance
 
 // a material 3 dialog over a scrim: a headline, a line of text, anything else
 // the dialog needs, and its buttons right-aligned. Esc dismisses it.

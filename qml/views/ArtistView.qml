@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.Basic
-import Swiftify
+import Resonance
 
 // an artist (ArtistDetailView): top songs, then albums and singles
 Flickable {

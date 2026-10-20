@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // text in the app's face and colours. with `animateChange`, a new string slides
 // out and the next one in, like end4's StyledText.

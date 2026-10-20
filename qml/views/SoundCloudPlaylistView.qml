@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.Basic
-import Swiftify
+import Resonance
 
 // SoundCloud Playlist page: displays playlist capacity, duration, author, and aesthetic card grid layout
 Flickable {

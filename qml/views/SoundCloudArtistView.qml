@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.Basic
-import Swiftify
+import Resonance
 
 // SoundCloud artist page: banner, avatar, stats, bio, tracks, likes, playlists
 Flickable {

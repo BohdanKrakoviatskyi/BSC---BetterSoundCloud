@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // material 3 segmented buttons, drawn the way end4 draws its tab groups: a
 // pill track, and the choice as a filled pill that slides to the chosen

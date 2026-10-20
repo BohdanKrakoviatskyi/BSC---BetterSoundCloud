@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Templates as T
-import Swiftify
+import Resonance
 
 // a button that is a material shape rather than a rounded box: it morphs to
 // `morphTo` while `morphed`, can turn with the shared spin, and squishes

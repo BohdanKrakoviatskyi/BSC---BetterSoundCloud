@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.Basic
-import Swiftify
+import Resonance
 
 // Playing Next (QueuePanel): the current song, then what follows. clicking a
 // row jumps to it.

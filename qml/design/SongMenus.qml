@@ -1,7 +1,7 @@
 pragma Singleton
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // opens the one song options menu the window keeps, from any row or card.
 QtObject {

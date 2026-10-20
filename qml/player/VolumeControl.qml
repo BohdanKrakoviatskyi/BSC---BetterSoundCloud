@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // the speaker button that slides out into a volume pill. a second click
 // mutes; moving away folds it back. the sleep timer's fade locks the slider.

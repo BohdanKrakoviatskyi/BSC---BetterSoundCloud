@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Effects
-import Swiftify
+import Resonance
 
 // the macos unified toolbar as a material top app bar: back, the open
 // playlist's actions, a search field, and the playback menu. it has no

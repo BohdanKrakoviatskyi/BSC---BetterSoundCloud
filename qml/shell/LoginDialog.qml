@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // while the spotify login is open in the browser. the browser lands on
 // swiftify's local redirect address, and this closes by itself.

@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // a little burst of material shapes from a point: hearts for a favourite,
 // cookies for play, clovers for a pin, flowers for a playlist. they fly

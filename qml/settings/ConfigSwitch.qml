@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // a setting that is on or off: the whole row toggles it (end4's ConfigSwitch).
 RippleButton {

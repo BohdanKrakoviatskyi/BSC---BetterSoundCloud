@@ -3,7 +3,7 @@ import QtQuick
 import QtQuick.Dialogs
 import QtQuick.Effects
 import QtMultimedia
-import Swiftify
+import Resonance
 
 // the settings themselves (SwiftifySettingsView), one page per rail
 // destination: what the visualizers and the backdrop cost, the sleep fade and

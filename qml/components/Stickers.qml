@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // big, faint material shapes scattered behind something, after end4-pC's
 // desktop stickers but kept quiet: tonal, low in contrast, and partly cut off

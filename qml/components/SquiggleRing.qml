@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // a wavy ring that turns while music plays (material 3 expressive's wavy
 // indicators), drawn by one shader. with `progress` under 1 it is a wavy

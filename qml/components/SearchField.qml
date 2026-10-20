@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // a material 3 search bar: a full pill with a leading magnifier and a clear
 // button once there is something to clear.

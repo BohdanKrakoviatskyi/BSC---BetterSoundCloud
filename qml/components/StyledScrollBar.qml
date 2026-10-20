@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Templates as T
-import Swiftify
+import Resonance
 
 // a slim pill that shows while scrolling or hovered, then fades away.
 T.ScrollBar {

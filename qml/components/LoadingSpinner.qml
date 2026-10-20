@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // material 3 expressive's loading indicator: a shape that morphs through
 // the shape library with a spring, kicking round a quarter turn each time,

@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Effects
-import Swiftify
+import Resonance
 
 // the immersive lyrics (FullscreenLyrics): large bold lines, the sung one
 // bright and glowing in the cover's first colour, kept in the middle, the

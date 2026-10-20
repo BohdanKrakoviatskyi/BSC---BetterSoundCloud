@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Templates as T
-import Swiftify
+import Resonance
 
 // the material 3 switch: the thumb grows when on, and squeezes while held.
 T.Switch {

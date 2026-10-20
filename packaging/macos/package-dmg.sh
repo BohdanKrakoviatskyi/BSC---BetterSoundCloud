@@ -47,7 +47,7 @@ echo "==> Using macdeployqt at: $MACDEPLOYQT"
 echo "==> Packaging version: $VERSION"
 echo "==> Signing identity: $SIGNING_IDENTITY"
 
-STAGING_DIR="$(mktemp -d -t swiftify-deploy.XXXXXX)"
+STAGING_DIR="$(mktemp -d -t resonance-deploy.XXXXXX)"
 cleanup() {
     rm -rf "$STAGING_DIR"
 }

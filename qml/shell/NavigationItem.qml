@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Templates as T
-import Swiftify
+import Resonance
 
 // a navigation drawer row: material 3's pill indicator behind the selected
 // one, opening from the middle and going wavy under the pointer, its

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(Swiftify
+project(Resonance
     VERSION 0.2.6
     DESCRIPTION "A native Spotify client"
     LANGUAGES C CXX)
@@ -205,7 +205,7 @@ file(GLOB SWIFTIFY_SHADERS CONFIGURE_DEPENDS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR
 
 qt_add_library(swiftify_app STATIC)
 qt_add_qml_module(swiftify_app
-    URI Swiftify
+    URI Resonance
     VERSION 1.0
     SOURCES ${SWIFTIFY_SOURCES}
     QML_FILES ${SWIFTIFY_QML}
@@ -290,17 +290,17 @@ if(WIN32)
     target_link_libraries(swiftify_app PUBLIC Qt6::Widgets comctl32 dwmapi ole32 shell32 uuid)
 endif()
 
-qt_add_executable(swiftify src/main.cpp)
-target_link_libraries(swiftify PRIVATE swiftify_app swiftify_appplugin)
+qt_add_executable(resonance src/main.cpp)
+target_link_libraries(resonance PRIVATE swiftify_app swiftify_appplugin)
 if(SWIFTIFY_IS_LINUX)
-    target_link_libraries(swiftify PRIVATE Qt6::Widgets)
+    target_link_libraries(resonance PRIVATE Qt6::Widgets)
 endif()
 # a windowed app on windows, with no console window of its own
-set_target_properties(swiftify PROPERTIES WIN32_EXECUTABLE ON)
+set_target_properties(resonance PROPERTIES WIN32_EXECUTABLE ON)
 if(MINGW)
     # qt's WinMain shim reads msvcrt's __argc, which a mingw on ucrt (as
     # homebrew's is) lacks; mingw's own start-up calls main() just as well
-    set_target_properties(swiftify PROPERTIES qt_no_entrypoint ON)
+    set_target_properties(resonance PROPERTIES qt_no_entrypoint ON)
 endif()
 
 # --- the soundcloud sidecar (go) ---------------------------------------------
@@ -345,8 +345,8 @@ elseif(SWIFTIFY_SIDECAR_BUILD)
             DEPENDS ${SWIFTIFY_SIDECAR_SOURCES}
             WORKING_DIRECTORY ${SWIFTIFY_SIDECAR_SOURCE_DIR}
             COMMENT "Building the soundcloud sidecar")
-        add_custom_target(swiftify_sidecar DEPENDS ${SWIFTIFY_SIDECAR_FILE})
-        add_dependencies(swiftify swiftify_sidecar)
+        add_custom_target(resonance_sidecar DEPENDS ${SWIFTIFY_SIDECAR_FILE})
+        add_dependencies(resonance swiftify_sidecar)
     elseif(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/local-api/local-api)
         set(SWIFTIFY_SIDECAR_FILE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/local-api/local-api)
     else()
@@ -359,7 +359,7 @@ if(SWIFTIFY_SIDECAR_FILE)
         SWIFTIFY_SIDECAR_PATH="${SWIFTIFY_SIDECAR_FILE}")
     if(APPLE)
         # before the signing below, which seals whatever is already inside
-        add_custom_command(TARGET swiftify POST_BUILD
+        add_custom_command(TARGET resonance POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SWIFTIFY_SIDECAR_FILE}
                 $<TARGET_BUNDLE_DIR:swiftify>/Contents/MacOS/local-api
             COMMAND chmod +x $<TARGET_BUNDLE_DIR:swiftify>/Contents/MacOS/local-api
@@ -448,7 +448,7 @@ if(APPLE)
             PROPERTIES MACOSX_PACKAGE_LOCATION Resources/fonts)
         target_sources(swiftify PRIVATE ${SWIFTIFY_INTERFACE_FONT} ${SWIFTIFY_INTERFACE_FONT_LICENSE})
     endif()
-    set_target_properties(swiftify PROPERTIES
+    set_target_properties(resonance PROPERTIES
         MACOSX_BUNDLE ON
         MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/Info.plist.in
         MACOSX_BUNDLE_BUNDLE_NAME Resonance
@@ -464,7 +464,7 @@ if(APPLE)
     # requirement the same from build to build, so the keychain hands over
     # the stored logins without asking again after each one
     set(SWIFTIFY_CODESIGN_IDENTITY "-" CACHE STRING "codesign identity for the app bundle; - signs ad hoc")
-    add_custom_command(TARGET swiftify POST_BUILD
+    add_custom_command(TARGET resonance POST_BUILD
         COMMAND xattr -cr $<TARGET_BUNDLE_DIR:swiftify>
         COMMAND codesign --force --sign ${SWIFTIFY_CODESIGN_IDENTITY} $<TARGET_BUNDLE_DIR:swiftify>
         COMMENT "Signing the app bundle")
@@ -474,13 +474,13 @@ if(BUILD_TESTING)
     add_subdirectory(tests)
 endif()
 
-install(TARGETS swiftify
+install(TARGETS resonance
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     BUNDLE DESTINATION .)
 if(NOT APPLE AND NOT WIN32)
     # the desktop entry's name is the wayland app id (see main.cpp), which is
     # how hyprland and the tray match the window to its icon
-    install(FILES packaging/swiftify.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+    install(FILES packaging/resonance.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
     foreach(size 32 48 64 128 256 512)
         install(FILES packaging/icons/swiftify-${size}.png
             DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/${size}x${size}/apps

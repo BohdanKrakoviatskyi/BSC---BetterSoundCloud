@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // the immersive player (FullscreenPlayerView): the cover's colours poured over
 // the window, what is playing, one of lyrics, the queue, the sleep timer or

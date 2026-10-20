@@ -8,7 +8,7 @@ set -euo pipefail
 #   package-appimage.sh <build-dir> <output-dir> <version>
 #
 # The installed layout is what the app expects at run time: the binary and the
-# go sidecar in usr/bin, the fonts in usr/share/swiftify/fonts (Fonts.cpp looks
+# go sidecar in usr/bin, the fonts in usr/share/resonance/fonts (Fonts.cpp looks
 # beside the executable for them), and the desktop file and the icons where the
 # desktop environment finds them. linuxdeploy then pulls the Qt and system
 # libraries in and writes the AppImage.
@@ -76,7 +76,7 @@ if [ -z "${QMAKE:-}" ]; then
 fi
 export QMAKE
 
-APPDIR="$(mktemp -d -t swiftify-appimage.XXXXXX)"
+APPDIR="$(mktemp -d -t resonance-appimage.XXXXXX)"
 cleanup() {
     rm -rf "$APPDIR"
 }
@@ -103,8 +103,8 @@ export OUTPUT
 DEPLOY_STATUS=0
 linuxdeploy \
     --appdir "$APPDIR" \
-    --desktop-file "$APPDIR/usr/share/applications/swiftify.desktop" \
-    --icon-file "$APPDIR/usr/share/icons/hicolor/512x512/apps/swiftify.png" \
+    --desktop-file "$APPDIR/usr/share/applications/resonance.desktop" \
+    --icon-file "$APPDIR/usr/share/icons/hicolor/512x512/apps/resonance.png" \
     --plugin qt \
     --output appimage || DEPLOY_STATUS=$?
 echo "==> linuxdeploy exited $DEPLOY_STATUS"

@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // two soft, offset shadows in a cover's own colours behind its artwork
 // (ArtworkGlow.swift). sdf shadows: no layer, and nothing redraws while still.

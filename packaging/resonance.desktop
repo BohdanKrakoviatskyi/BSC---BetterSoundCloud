@@ -3,19 +3,19 @@ Type=Application
 Name=Swiftify
 GenericName=Music Player
 Comment=Play your Spotify library
-Exec=swiftify
-Icon=swiftify
+Exec=resonance
+Icon=resonance
 Terminal=false
 Categories=AudioVideo;Audio;Player;
 Keywords=spotify;music;player;lyrics;
-StartupWMClass=swiftify
+StartupWMClass=resonance
 SingleMainWindow=true
 Actions=Immersive;PlayPause;
 
 [Desktop Action Immersive]
 Name=Open Immersive Player
-Exec=swiftify --immersive
+Exec=resonance --immersive
 
 [Desktop Action PlayPause]
 Name=Play or Pause
-Exec=swiftify --play-pause
+Exec=resonance --play-pause

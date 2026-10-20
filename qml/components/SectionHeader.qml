@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // a shelf's heading: a symbol on a shape, the title drawn round, and a
 // squiggle running on to "See All". hovering the heading turns the shape.

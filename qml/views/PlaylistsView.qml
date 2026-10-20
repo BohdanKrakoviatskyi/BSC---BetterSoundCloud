@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.Basic
-import Swiftify
+import Resonance
 
 // My Playlists, or the pinned ones (PlaylistGridView / PinnedPlaylistsView):
 // an adaptive grid of 180-240 px tiles. `local`, it is Local Files: the

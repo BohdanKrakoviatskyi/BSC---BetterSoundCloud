@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // a symbol on a material shape (end4's MaterialShapeWrappedMaterialSymbol).
 // a new shape morphs in with a springy overshoot; hovered, it turns a little

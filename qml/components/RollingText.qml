@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // text whose characters roll when they change, one at a time, as swiftui's
 // numeric text transition does: a countdown moves only the digits that tick.

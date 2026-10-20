@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // ten seconds into a song from one particular soundtrack, a figure pops up
 // from the window's bottom-right corner, gives a thumbs up for five seconds,

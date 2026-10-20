@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // a clicked cover flying from its card to the hero of the page it opened
 // (UiState.launchHero): it follows the hero as the page settles in, springs

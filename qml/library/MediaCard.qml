@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Templates as T
-import Swiftify
+import Resonance
 
 // a shelf or grid card: artwork, a title of up to two lines and a subtitle.
 // pressing shrinks it slightly and dims it (MediaCardButtonStyle).

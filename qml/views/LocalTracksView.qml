@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // Local Tracks: every music file of the person's own, from the folders and
 // files they added (LocalFiles), with what each file's own tags say about it.

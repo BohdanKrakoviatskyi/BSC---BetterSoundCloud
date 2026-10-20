@@ -3,7 +3,7 @@ import QtQuick
 import QtQuick.Controls.Basic
 import QtMultimedia
 import Qt.labs.platform as Platform
-import Swiftify
+import Resonance
 
 // the main window: drawer, a content sheet with the top bar and the page, the
 // inspector beside it, and the player floating over the bottom.

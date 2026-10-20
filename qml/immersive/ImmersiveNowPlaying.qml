@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Effects
-import Swiftify
+import Resonance
 
 // the immersive player's left side (FullscreenNowPlaying): the cover with its
 // glow, inside the ring visualizer when that is on, then the song, the seek

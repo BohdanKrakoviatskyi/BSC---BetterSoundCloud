@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // the pages, one for each step of the library's back history
 // (Library.historyDepth). going on keeps the page left behind, hidden and

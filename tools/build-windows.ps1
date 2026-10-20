@@ -243,12 +243,12 @@ function Invoke-WindowsBuild {
         }
 
         Write-Host 'Building Swiftify...'
-        $appBuild = Join-Path $buildDirectory 'swiftify'
+        $appBuild = Join-Path $buildDirectory 'resonance'
         Invoke-Native $cmake (@('-S', $sourceRoot, '-B', $appBuild) + $commonOptions + @("-DRust_TOOLCHAIN=$rustToolchain", "-DRust_CARGO_TARGET=$rustTarget", "-DCMAKE_INSTALL_PREFIX=$($InstallPrefix.Replace('\', '/'))")) | Out-Host
         Invoke-Native $cmake @('--build', $appBuild, '--parallel', "$Jobs") | Out-Host
         Invoke-Native $cmake @('--install', $appBuild) | Out-Host
         $installBin = Join-Path $InstallPrefix 'bin'
-        $executable = Join-Path $installBin 'swiftify.exe'
+        $executable = Join-Path $installBin 'resonance.exe'
         Invoke-Native $deployQt @('--release', '--force', '--compiler-runtime', '--qmldir', (Join-Path $sourceRoot 'qml'), $executable) | Out-Host
         Copy-Item -Path "$dependencyPrefix\bin\*.dll" -Destination $installBin -Force
         if ($rustTarget -eq 'x86_64-pc-windows-gnu') {

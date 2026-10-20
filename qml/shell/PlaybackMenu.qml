@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // the macos playback menu, which on linux lives behind the top bar's overflow
 // button. labels follow the player's state, as the menu bar's did.

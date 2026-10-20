@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // the error banner (ErrorBanner in the swift app) as a material snackbar: an
 // error container with selectable text and a close button. it goes on its own

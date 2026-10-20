@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // a pill with a scalloped edge (wavy_pill.frag), for the buttons that play
 // things: its scallops deepen and start running round the edge while hovered.

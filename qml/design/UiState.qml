@@ -1,7 +1,7 @@
 pragma Singleton
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // what the window shows, as opposed to what the player and library hold:
 // the immersive player, and requests for dialogs and the catchphrase pill

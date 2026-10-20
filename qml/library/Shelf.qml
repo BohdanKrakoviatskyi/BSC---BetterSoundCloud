@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.Basic
-import Swiftify
+import Resonance
 
 // a titled horizontal row of cards (ResultShelf). it scrolls under the page
 // margins to the window's edges.
