@@ -43,7 +43,7 @@ A high-performance, native desktop music player built with Qt 6 (QML / C++) and 
 - **CMake** (3.24+) and **Ninja**
 - **Rust Toolchain** (stable, via [rustup](https://rustup.rs))
 - **Go** (1.22+ for the SoundCloud backend sidecar)
-- **C++20** compatible compiler (Clang / GCC / MSVC)
+- **C++20** compatible compiler (Clang on Linux, Apple Clang on macOS, MSVC on Windows)
 
 ---
 
@@ -87,18 +87,43 @@ To create a standalone, fully bundled macOS `.dmg` and `.zip`:
 
 ### Linux
 
-Install dependencies (example for Arch Linux):
+Build with Clang. GCC currently miscompiles the QCoro coroutines this codebase is
+built on: a GCC build compiles and links, then crashes at startup, so CMake stops
+a GCC configuration on Linux with an explanation.
+
+Fedora:
 
 ```bash
-sudo pacman -S --needed git qt6-base qt6-declarative qt6-shadertools qt6-multimedia \
-  qt6-wayland qtkeychain-qt6 qcoro libpulse alsa-lib openssl cmake ninja rust go pkgconf
+sudo dnf install git cmake ninja-build clang pkgconf-pkg-config \
+  qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qtshadertools-devel \
+  qt6-qtmultimedia-devel qt6-qtwayland-devel qt6-qtsvg-devel \
+  qcoro-qt6-devel qtkeychain-qt6-devel libsecret-devel \
+  pulseaudio-libs-devel alsa-lib-devel openssl-devel go rust cargo
 ```
 
-Build and install:
+Arch Linux:
+
+```bash
+sudo pacman -S --needed git clang cmake ninja pkgconf qt6-base qt6-declarative \
+  qt6-shadertools qt6-multimedia qt6-wayland qt6-svg qtkeychain-qt6 qcoro \
+  libpulse alsa-lib openssl rust go
+```
+
+The SoundCloud backend (`local-api`) is built from the BSC---BetterSoundCloud
+backend checkout that has to sit beside this one (`../BSC---BetterSoundCloud/backend`,
+the layout the release workflow uses). If the two directories are laid out
+differently, point CMake at the backend with
+`-DSWIFTIFY_SIDECAR_SOURCE_DIR=/path/to/backend`, or at an already built binary
+with `-DSWIFTIFY_SIDECAR_BINARY=/path/to/local-api`. Without it the app still runs,
+but SoundCloud shows as unavailable.
+
+Configure, build and install:
 
 ```bash
 cmake -B build -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_C_COMPILER=clang \
+  -DCMAKE_CXX_COMPILER=clang++ \
   -DCMAKE_INSTALL_PREFIX="$HOME/.local" \
   -DBUILD_TESTING=OFF
 
@@ -106,7 +131,18 @@ cmake --build build
 cmake --install build
 ```
 
-The app integrates with system MPRIS (media keys, `playerctl`, lock screen widgets) and system tray.
+`cmake --install` also writes the desktop entry and hicolor icons, so the app
+appears in the desktop's launcher. Run it as `swiftify` (with `$HOME/.local/bin`
+on `PATH`), or straight from the build tree with `./build/swiftify`. Building the
+tests (`-DBUILD_TESTING=ON`) additionally needs `qt6-qtbase-private-devel` on
+Fedora, for the QtGui private headers they read frames through.
+
+On Linux the app integrates with system MPRIS (media keys, `playerctl`, lock
+screen widgets), follows the default PulseAudio/PipeWire sink so unplugging
+headphones pauses playback, and uses a StatusNotifier tray icon where the desktop
+provides one (for example KDE, or GNOME with an AppIndicator extension). A single
+instance is kept per user; launching `swiftify --play-pause`, `--next`,
+`--previous` or `--immersive` forwards the command to the running copy.
 
 ---
 

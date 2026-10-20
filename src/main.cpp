@@ -19,7 +19,7 @@
 #include "theme/PlayerStyle.h"
 #include "theme/Theme.h"
 
-#ifdef SWIFTIFY_HAS_DBUS
+#if defined(SWIFTIFY_HAS_DBUS) && defined(Q_OS_LINUX)
 #include "system/dbus/Mpris.h"
 #include "system/dbus/SleepMonitor.h"
 #endif
@@ -285,7 +285,7 @@ int main(int argc, char *argv[])
     QObject::connect(&instance, &SingleInstance::commandReceived, &app, &AppController::handleCommand);
     instance.listen();
 
-#ifdef SWIFTIFY_HAS_DBUS
+#if defined(SWIFTIFY_HAS_DBUS) && defined(Q_OS_LINUX)
     Mpris mpris(&player);
     QObject::connect(&mpris, &Mpris::raiseRequested, &app, &AppController::raiseRequested);
     QObject::connect(&mpris, &Mpris::quitRequested, &app, &AppController::quit);
