@@ -346,7 +346,7 @@ elseif(SWIFTIFY_SIDECAR_BUILD)
             WORKING_DIRECTORY ${SWIFTIFY_SIDECAR_SOURCE_DIR}
             COMMENT "Building the soundcloud sidecar")
         add_custom_target(resonance_sidecar DEPENDS ${SWIFTIFY_SIDECAR_FILE})
-        add_dependencies(resonance swiftify_sidecar)
+        add_dependencies(resonance resonance_sidecar)
     elseif(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/local-api/local-api)
         set(SWIFTIFY_SIDECAR_FILE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/local-api/local-api)
     else()
@@ -361,8 +361,8 @@ if(SWIFTIFY_SIDECAR_FILE)
         # before the signing below, which seals whatever is already inside
         add_custom_command(TARGET resonance POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SWIFTIFY_SIDECAR_FILE}
-                $<TARGET_BUNDLE_DIR:swiftify>/Contents/MacOS/local-api
-            COMMAND chmod +x $<TARGET_BUNDLE_DIR:swiftify>/Contents/MacOS/local-api
+                $<TARGET_BUNDLE_DIR:resonance>/Contents/MacOS/local-api
+            COMMAND chmod +x $<TARGET_BUNDLE_DIR:resonance>/Contents/MacOS/local-api
             COMMENT "Placing the soundcloud sidecar in the app")
     else()
         install(PROGRAMS ${SWIFTIFY_SIDECAR_FILE} DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -438,15 +438,15 @@ if(APPLE)
         set(SWIFTIFY_ICON_FILES ${SWIFTIFY_ICNS})
     endif()
     set_source_files_properties(${SWIFTIFY_ICON_FILES} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
-    target_sources(swiftify PRIVATE ${SWIFTIFY_ICON_FILES})
+    target_sources(resonance PRIVATE ${SWIFTIFY_ICON_FILES})
     if(SWIFTIFY_ICON_FONT)
         set_source_files_properties(${SWIFTIFY_ICON_FONT} PROPERTIES MACOSX_PACKAGE_LOCATION Resources/fonts)
-        target_sources(swiftify PRIVATE ${SWIFTIFY_ICON_FONT})
+        target_sources(resonance PRIVATE ${SWIFTIFY_ICON_FONT})
     endif()
     if(SWIFTIFY_INTERFACE_FONT)
         set_source_files_properties(${SWIFTIFY_INTERFACE_FONT} ${SWIFTIFY_INTERFACE_FONT_LICENSE}
             PROPERTIES MACOSX_PACKAGE_LOCATION Resources/fonts)
-        target_sources(swiftify PRIVATE ${SWIFTIFY_INTERFACE_FONT} ${SWIFTIFY_INTERFACE_FONT_LICENSE})
+        target_sources(resonance PRIVATE ${SWIFTIFY_INTERFACE_FONT} ${SWIFTIFY_INTERFACE_FONT_LICENSE})
     endif()
     set_target_properties(resonance PROPERTIES
         MACOSX_BUNDLE ON
@@ -465,8 +465,8 @@ if(APPLE)
     # the stored logins without asking again after each one
     set(SWIFTIFY_CODESIGN_IDENTITY "-" CACHE STRING "codesign identity for the app bundle; - signs ad hoc")
     add_custom_command(TARGET resonance POST_BUILD
-        COMMAND xattr -cr $<TARGET_BUNDLE_DIR:swiftify>
-        COMMAND codesign --force --sign ${SWIFTIFY_CODESIGN_IDENTITY} $<TARGET_BUNDLE_DIR:swiftify>
+        COMMAND xattr -cr $<TARGET_BUNDLE_DIR:resonance>
+        COMMAND codesign --force --sign ${SWIFTIFY_CODESIGN_IDENTITY} $<TARGET_BUNDLE_DIR:resonance>
         COMMENT "Signing the app bundle")
 endif()
 

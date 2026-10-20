@@ -65,7 +65,7 @@
 #include <cstdlib>
 #endif
 
-Q_IMPORT_QML_PLUGIN(SwiftifyPlugin)
+Q_IMPORT_QML_PLUGIN(ResonancePlugin)
 
 using namespace swiftify;
 
