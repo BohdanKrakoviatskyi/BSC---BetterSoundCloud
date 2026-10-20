@@ -1,6 +1,6 @@
 # Patched librespot core
 
-`librespot-core` 0.8.0 is vendored so Swiftify can work around
+`librespot-core` 0.8.0 is vendored so Resonance can work around
 [librespot issue #1477](https://github.com/librespot-org/librespot/issues/1477).
 
 Spotify currently rejects the native iOS AP handshake with `TryAnotherAP`. Spoofing only that

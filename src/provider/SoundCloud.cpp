@@ -634,7 +634,7 @@ QCoro::Task<QString> SoundCloud::downloadProgressiveStream(const QString &url,
     }
 
     QNetworkRequest request((QUrl(url)));
-    request.setHeader(QNetworkRequest::UserAgentHeader, QByteArrayLiteral("Swiftify"));
+    request.setHeader(QNetworkRequest::UserAgentHeader, QByteArrayLiteral("Resonance"));
     request.setTransferTimeout(kStreamTransferTimeoutMs);
     std::unique_ptr<QNetworkReply> reply(m_network->get(request));
     co_await qCoro(reply.get()).waitForFinished();
@@ -674,7 +674,7 @@ QCoro::Task<QString> SoundCloud::downloadHlsStream(const QString &m3u8Url, const
 
     // ── step 1: fetch the M3U8 playlist ──────────────────────────────────────
     QNetworkRequest req((QUrl(m3u8Url)));
-    req.setHeader(QNetworkRequest::UserAgentHeader, QByteArrayLiteral("Swiftify"));
+    req.setHeader(QNetworkRequest::UserAgentHeader, QByteArrayLiteral("Resonance"));
     req.setTransferTimeout(30'000);
     std::unique_ptr<QNetworkReply> m3u8Reply(m_network->get(req));
     co_await qCoro(m3u8Reply.get()).waitForFinished();
@@ -736,7 +736,7 @@ QCoro::Task<QString> SoundCloud::downloadHlsStream(const QString &m3u8Url, const
 
     if (!initSegmentUrl.isEmpty()) {
         QNetworkRequest initReq((QUrl(initSegmentUrl)));
-        initReq.setHeader(QNetworkRequest::UserAgentHeader, QByteArrayLiteral("Swiftify"));
+        initReq.setHeader(QNetworkRequest::UserAgentHeader, QByteArrayLiteral("Resonance"));
         initReq.setTransferTimeout(20'000);
         std::unique_ptr<QNetworkReply> initReply(m_network->get(initReq));
         co_await qCoro(initReply.get()).waitForFinished();
@@ -751,7 +751,7 @@ QCoro::Task<QString> SoundCloud::downloadHlsStream(const QString &m3u8Url, const
 
     for (const QString &segmentUrl : std::as_const(segments)) {
         QNetworkRequest segReq((QUrl(segmentUrl)));
-        segReq.setHeader(QNetworkRequest::UserAgentHeader, QByteArrayLiteral("Swiftify"));
+        segReq.setHeader(QNetworkRequest::UserAgentHeader, QByteArrayLiteral("Resonance"));
         segReq.setTransferTimeout(20'000);
         std::unique_ptr<QNetworkReply> segReply(m_network->get(segReq));
         co_await qCoro(segReply.get()).waitForFinished();

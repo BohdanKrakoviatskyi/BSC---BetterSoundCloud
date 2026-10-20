@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ==============================================================================
-# Swiftify Linux AppImage packaging
+# Resonance Linux AppImage packaging
 #
 # Usage:
 #   package-appimage.sh <build-dir> <output-dir> <version>
@@ -94,7 +94,7 @@ cp "$ICON_DIR/swiftify.png" "$ICON_DIR/resonance.png"
 
 # The qml lives compiled into the binary. QML_SOURCES_PATHS still points the
 # scanner at the sources so it can see which Qt modules are used, but the
-# scanner will report the project's own module as missing — Swiftify is not a
+# scanner will report the project's own module as missing — Resonance is not a
 # deployable QML module, it is inside the executable. The platform styles
 # (QtQuick.Controls.Windows, .macOS, .iOS) are absent from a linux Qt for the
 # same obvious reason. None of that stops the AppImage being built correctly,

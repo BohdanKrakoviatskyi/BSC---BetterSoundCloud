@@ -33,8 +33,8 @@ T stored(const QSettings &store, const char *key, const T &fallback)
 
 Settings::Settings(QObject *parent)
     : QObject(parent)
-    , m_store(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("Swiftify"),
-              QStringLiteral("Swiftify"))
+    , m_store(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("Resonance"),
+              QStringLiteral("Resonance"))
 {
     load();
     if (!s_instance) {

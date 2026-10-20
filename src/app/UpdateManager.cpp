@@ -138,7 +138,7 @@ void UpdateManager::checkForUpdates()
 
     QNetworkRequest request{QUrl(QString::fromLatin1(kReleasesApiUrl))};
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
-    request.setRawHeader("User-Agent", "Swiftify-App");
+    request.setRawHeader("User-Agent", "Resonance-App");
     request.setRawHeader("Accept", "application/vnd.github.v3+json");
 
     m_checkReply = m_nam.get(request);
@@ -265,7 +265,7 @@ void UpdateManager::startDownload()
         downloadsDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
     }
 
-    const QString fileName = m_assetName.isEmpty() ? QStringLiteral("Swiftify-update") : m_assetName;
+    const QString fileName = m_assetName.isEmpty() ? QStringLiteral("Resonance-update") : m_assetName;
     const QString targetPath = downloadsDir + QDir::separator() + fileName;
 
     m_downloadFile = std::make_unique<QFile>(targetPath);
@@ -282,7 +282,7 @@ void UpdateManager::startDownload()
 
     QNetworkRequest request{QUrl(m_downloadUrl)};
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
-    request.setRawHeader("User-Agent", "Swiftify-Updater");
+    request.setRawHeader("User-Agent", "Resonance-Updater");
 
     m_downloadReply = m_nam.get(request);
 
@@ -353,16 +353,16 @@ void UpdateManager::installAndRelaunch()
         const QString appPath = QFileInfo(QCoreApplication::applicationDirPath() + QStringLiteral("/../../")).canonicalFilePath();
         QString targetApp = appPath;
         if (!targetApp.endsWith(QLatin1String(".app"))) {
-            targetApp = QStringLiteral("/Applications/Swiftify.app");
+            targetApp = QStringLiteral("/Applications/Resonance.app");
         }
 
         const QString script = QString(
             "sleep 1\n"
             "MNT=$(mktemp -d /tmp/swiftify_mnt.XXXXXX)\n"
             "hdiutil attach -nobrowse -mountpoint \"$MNT\" \"%1\"\n"
-            "if [ -d \"$MNT/Swiftify.app\" ]; then\n"
+            "if [ -d \"$MNT/Resonance.app\" ]; then\n"
             "    rm -rf \"%2\"\n"
-            "    cp -R \"$MNT/Swiftify.app\" \"%2\"\n"
+            "    cp -R \"$MNT/Resonance.app\" \"%2\"\n"
             "    xattr -cr \"%2\"\n"
             "fi\n"
             "hdiutil detach \"$MNT\" 2>/dev/null || true\n"

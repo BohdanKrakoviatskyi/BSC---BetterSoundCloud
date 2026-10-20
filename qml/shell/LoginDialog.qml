@@ -3,7 +3,7 @@ import QtQuick
 import Resonance
 
 // while the spotify login is open in the browser. the browser lands on
-// swiftify's local redirect address, and this closes by itself.
+// resonance's local redirect address, and this closes by itself.
 StyledDialog {
     id: root
 

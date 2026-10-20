@@ -170,7 +170,7 @@ Item {
                             sourceSize.height: root.iconSize * 2
                             fillMode: Image.PreserveAspectFit
                             visible: segment.modelData.symbol === "spotify"
-                            source: "qrc:/qt/qml/Swiftify/resources/spotify.svg"
+                            source: "qrc:/qt/qml/Resonance/resources/spotify.svg"
                             opacity: segment.selected ? 1.0 : 0.65
 
                             Behavior on opacity {
@@ -187,7 +187,7 @@ Item {
                             sourceSize.height: root.iconSize * 2
                             fillMode: Image.PreserveAspectFit
                             visible: segment.modelData.symbol === "soundcloud" || segment.modelData.symbol === "cloud"
-                            source: "qrc:/qt/qml/Swiftify/resources/soundcloud.svg"
+                            source: "qrc:/qt/qml/Resonance/resources/soundcloud.svg"
                             opacity: segment.selected ? 1.0 : 0.65
 
                             Behavior on opacity {

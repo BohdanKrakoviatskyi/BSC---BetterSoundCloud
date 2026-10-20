@@ -334,7 +334,7 @@ void WindowsIntegration::updateButtons()
         m_native->taskbar->ThumbBarUpdateButtons(handle, UINT(buttons.size()), buttons.data());
     }
     const Song song = m_player->currentSong();
-    const QString tooltip = m_player->hasSong() ? song.name + QStringLiteral(" — ") + song.artists : QStringLiteral("Swiftify");
+    const QString tooltip = m_player->hasSong() ? song.name + QStringLiteral(" — ") + song.artists : QStringLiteral("Resonance");
     m_native->taskbar->SetThumbnailTooltip(handle, reinterpret_cast<LPCWSTR>(tooltip.utf16()));
     updateProgress();
 }

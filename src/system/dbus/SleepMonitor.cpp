@@ -47,7 +47,7 @@ void SleepMonitor::updateInhibitor()
         return;
     }
     QDBusMessage call = QDBusMessage::createMethodCall(kService, kPath, kManager, QStringLiteral("Inhibit"));
-    call << QStringLiteral("sleep") << QStringLiteral("Swiftify") << QStringLiteral("Pausing playback before sleep")
+    call << QStringLiteral("sleep") << QStringLiteral("Resonance") << QStringLiteral("Pausing playback before sleep")
          << QStringLiteral("delay");
     const QDBusReply<QDBusUnixFileDescriptor> reply = QDBusConnection::systemBus().call(call);
     if (reply.isValid()) {

@@ -46,7 +46,7 @@ ApplicationWindow {
         target: Player
         function onPanelsChanged() { window.closeCrowdedPanels() }
     }
-    title: "Swiftify"
+    title: "Resonance"
     // on linux the app draws its whole frame. on macos the content runs under
     // a transparent title bar that keeps the traffic lights and nothing else.
     flags: App.macOS ? Qt.Window | Qt.ExpandedClientAreaHint | Qt.NoTitleBarBackgroundHint
@@ -809,7 +809,7 @@ ApplicationWindow {
         sourceComponent: Platform.SystemTrayIcon {
             objectName: "swiftifyTrayIcon"
             visible: true
-            icon.source: "qrc:/qt/qml/Swiftify/resources/swiftify-icon.png"
+            icon.source: "qrc:/qt/qml/Resonance/resources/swiftify-icon.png"
             tooltip: Player.hasSong ? Player.currentSong.name + " — " + Player.currentSong.artists : "Resonance"
             onActivated: (reason) => {
                 if (reason === Platform.SystemTrayIcon.Trigger || reason === Platform.SystemTrayIcon.DoubleClick) {

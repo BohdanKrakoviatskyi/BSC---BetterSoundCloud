@@ -43,7 +43,7 @@ Item {
 
             Image {
                 anchors.fill: parent
-                source: "qrc:/qt/qml/Swiftify/resources/swiftify-icon.png"
+                source: "qrc:/qt/qml/Resonance/resources/swiftify-icon.png"
                 sourceSize: Qt.size(128, 128)
                 smooth: true
             }

@@ -21,10 +21,10 @@ namespace swiftify {
 namespace {
 
 const QByteArray kCallbackPage =
-    "<!doctype html><meta charset=utf-8><title>Swiftify</title>"
+    "<!doctype html><meta charset=utf-8><title>Resonance</title>"
     "<style>body{font:16px system-ui,sans-serif;background:#141313;color:#e6e1e1;"
     "display:grid;place-items:center;height:100vh;margin:0}</style>"
-    "<p>You're signed in. You can close this tab and return to Swiftify.</p>";
+    "<p>You're signed in. You can close this tab and return to Resonance.</p>";
 
 QByteArray httpResponse(int status, const QByteArray &reason, const QByteArray &body)
 {
@@ -93,7 +93,7 @@ QUrl OAuthFlow::beginAuthorization(const QString &rawClientId, const QStringList
     stopListening();
     if (!m_server.listen(QHostAddress::LocalHost, kRedirectPort)) {
         throw SpotifyError(SpotifyError::Kind::OAuth,
-                           QStringLiteral("Swiftify needs port %1 for the Spotify login, but %2. Close whatever is using it and try again.")
+                           QStringLiteral("Resonance needs port %1 for the Spotify login, but %2. Close whatever is using it and try again.")
                                .arg(kRedirectPort)
                                .arg(m_server.errorString().toLower()));
     }

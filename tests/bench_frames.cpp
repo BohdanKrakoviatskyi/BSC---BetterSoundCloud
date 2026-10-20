@@ -193,7 +193,7 @@ void countItems(QQuickItem *item, const QString &owner, const QRectF &window, st
 
 const char *kShell = R"(
 import QtQuick
-import Swiftify
+import Resonance
 
 Item {
     id: root

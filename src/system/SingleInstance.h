@@ -6,9 +6,9 @@
 
 namespace swiftify {
 
-/// one swiftify per user. a second launch hands its command to the first and
+/// one resonance per user. a second launch hands its command to the first and
 /// exits: no command raises the window, and the others are for compositor
-/// key binds (`swiftify --immersive`, `swiftify --play-pause`).
+/// key binds (`resonance --immersive`, `resonance --play-pause`).
 class SingleInstance : public QObject {
     Q_OBJECT
 

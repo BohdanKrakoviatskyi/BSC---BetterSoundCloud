@@ -356,7 +356,7 @@ private slots:
     {
         Rig rig;
         QQmlComponent component(&rig.engine);
-        component.setData("import QtQuick\nimport Swiftify\n"
+        component.setData("import QtQuick\nimport Resonance\n"
                           "CollectionHero { width: 480; kind: 'PLAYLIST'; title: 'Ddd'; facts: '10 songs'\n"
                           "  actions: [TextButton { objectName: 'heroPlay'; text: 'Play'; symbol: 'play_arrow'; wavy: true; iconOnly: parent ? parent.compactActions : false },\n"
                           "            TextButton { objectName: 'heroShuffle'; text: 'Shuffle'; symbol: 'shuffle'; wavy: true; iconOnly: parent ? parent.compactActions : false }] }",
@@ -417,7 +417,7 @@ private slots:
         };
         for (const auto &[name, expected] : singletons) {
             QQmlComponent probe(&rig.engine);
-            probe.setData(QByteArrayLiteral("import QtQuick\nimport Swiftify\nQtObject { property QtObject seen: ") + name
+            probe.setData(QByteArrayLiteral("import QtQuick\nimport Resonance\nQtObject { property QtObject seen: ") + name
                               + QByteArrayLiteral(" }"),
                           QUrl());
             std::unique_ptr<QObject> object(probe.create());
@@ -475,7 +475,7 @@ private slots:
     {
         Rig rig;
         QQmlComponent component(&rig.engine);
-        component.setData("import QtQuick\nimport Swiftify\nItem {\n"
+        component.setData("import QtQuick\nimport Resonance\nItem {\n"
                           "    property alias editor: editor\n"
                           "    PlaylistEditor { id: editor }\n"
                           "}\n",
@@ -552,7 +552,7 @@ private slots:
         find(sidebar.get());
         QVERIFY(button);
         QVERIFY(button->isVisible());
-        auto *ui = rig.engine.singletonInstance<QObject *>("Swiftify", "UiState");
+        auto *ui = rig.engine.singletonInstance<QObject *>("Resonance", "UiState");
         QVERIFY(ui);
         QSignalSpy asked(ui, SIGNAL(settingsRequested()));
         QVERIFY(QMetaObject::invokeMethod(button, "clicked"));
@@ -580,7 +580,7 @@ private slots:
         rig.window->setColor(Qt::white);
         const auto draw = [&](const QString &item) {
             QQmlComponent component(&rig.engine);
-            component.setData(("import QtQuick\nimport Swiftify\nItem { width: 200; height: 200\n" + item + " }").toUtf8(), QUrl());
+            component.setData(("import QtQuick\nimport Resonance\nItem { width: 200; height: 200\n" + item + " }").toUtf8(), QUrl());
             std::unique_ptr<QObject> object(component.create());
             qobject_cast<QQuickItem *>(object.get())->setParentItem(rig.window->contentItem());
             Rig::settle();
@@ -623,7 +623,7 @@ private slots:
         rig.window->setColor(Qt::white);
         const auto draw = [&](const QString &item) {
             QQmlComponent component(&rig.engine);
-            component.setData(("import QtQuick\nimport Swiftify\nItem { width: 300; height: 60\n" + item + " }").toUtf8(), QUrl());
+            component.setData(("import QtQuick\nimport Resonance\nItem { width: 300; height: 60\n" + item + " }").toUtf8(), QUrl());
             std::unique_ptr<QObject> object(component.create());
             if (!object) {
                 qWarning() << component.errors();
@@ -687,7 +687,7 @@ private slots:
         rig.window->setColor(Qt::white);
         const auto draw = [&](const QString &item) {
             QQmlComponent component(&rig.engine);
-            component.setData(("import QtQuick\nimport Swiftify\nItem { width: 100; height: 100\n" + item + " }").toUtf8(), QUrl());
+            component.setData(("import QtQuick\nimport Resonance\nItem { width: 100; height: 100\n" + item + " }").toUtf8(), QUrl());
             std::unique_ptr<QObject> object(component.create());
             qobject_cast<QQuickItem *>(object.get())->setParentItem(rig.window->contentItem());
             Rig::settle();
@@ -747,7 +747,7 @@ private slots:
         struct Drawn { QImage frame; qreal centre; qreal waves; qreal thickness; qreal amplitude; };
         const auto draw = [&](bool squiggly, int size) {
             QQmlComponent component(&rig.engine);
-            component.setData(QStringLiteral("import QtQuick\nimport Swiftify\n"
+            component.setData(QStringLiteral("import QtQuick\nimport Resonance\n"
                                              "ArtworkImage { x: 20; y: 20; width: %2; height: %2; circular: true; "
                                              "squiggleColor: \"#00ff00\"; squiggly: %1 }")
                                   .arg(squiggly ? QStringLiteral("true") : QStringLiteral("false")).arg(size).toUtf8(), QUrl());
@@ -829,7 +829,7 @@ private slots:
         }
         Rig rig;
         QQmlComponent component(&rig.engine);
-        component.loadFromModule("Swiftify", "MacMenuBar");
+        component.loadFromModule("Resonance", "MacMenuBar");
         std::unique_ptr<QObject> menuBar(component.create());
         QVERIFY2(menuBar, qPrintable(component.errorString()));
         // file, edit, view, controls and window
@@ -890,7 +890,7 @@ private slots:
         // step of its 72 clockwise of straight up
         const auto draw = [&](int waves) {
             QQmlComponent component(&rig.engine);
-            component.setData(QStringLiteral("import QtQuick\nimport Swiftify\n"
+            component.setData(QStringLiteral("import QtQuick\nimport Resonance\n"
                                              "SpectrumView { x: 20; y: 20; width: 400; height: 400; kind: SpectrumView.Ring; "
                                              "active: true; cutWaves: %1; cutRadius: 122; cutAmplitude: 0 }")
                                   .arg(waves).toUtf8(), QUrl());
@@ -924,7 +924,7 @@ private slots:
         rig.engine.addImageProvider(QStringLiteral("art"), new RedArt);
         rig.window->setColor(Qt::transparent);
         QQmlComponent component(&rig.engine);
-        component.setData("import QtQuick\nimport Swiftify\n"
+        component.setData("import QtQuick\nimport Resonance\n"
                           "ArtworkImage { x: 10; y: 10; width: 60; height: 60; radius: 0; source: \"https://example.com/a.jpg\" }",
                           QUrl());
         std::unique_ptr<QObject> object(component.create());
@@ -978,7 +978,7 @@ private slots:
     static std::unique_ptr<QObject> segmentedControl(Rig &rig, const QByteArray &extra)
     {
         QQmlComponent component(&rig.engine);
-        component.setData("import QtQuick\nimport Swiftify\n"
+        component.setData("import QtQuick\nimport Resonance\n"
                           "Item { width: 400; height: 100\n"
                           "  property alias picker: picker\n"
                           "  SegmentedControl { id: picker; x: 20; y: 20; segmentWidth: 80; currentIndex: 1\n"
@@ -1119,7 +1119,7 @@ private slots:
     {
         Rig rig;
         QQmlComponent component(&rig.engine);
-        component.setData("import QtQuick\nimport Swiftify\n"
+        component.setData("import QtQuick\nimport Resonance\n"
                           "Flickable { width: 300; height: 200; contentHeight: 800\n"
                           "  property alias fader: fader\n"
                           "  VerticalFader { id: fader; x: 100; y: 30; height: 132; onMoved: (next) => value = next } }",
@@ -1153,7 +1153,7 @@ private slots:
         Rig rig;
         rig.engine.addImageProvider(QStringLiteral("art"), new RedArt);
         QQmlComponent component(&rig.engine);
-        component.setData("import QtQuick\nimport Swiftify\nItem {\n"
+        component.setData("import QtQuick\nimport Resonance\nItem {\n"
                           "  id: root; width: 800; height: 600\n"
                           "  property alias card: card\n"
                           "  property bool claimedWhileUnarmed\n"
@@ -1162,7 +1162,7 @@ private slots:
                           "  function launch() { UiState.launchHero(card.cover, card.source, false) }\n"
                           "  function flyHome() { UiState.launchReturn(Qt.rect(40, 40, 232, 232), card.cover, card.source, false) }\n"
                           "  function open(): Item {\n"
-                          "    return Qt.createQmlObject('import Swiftify; CollectionHero { width: 800 }', root)\n"
+                          "    return Qt.createQmlObject('import Resonance; CollectionHero { width: 800 }', root)\n"
                           "  }\n"
                           "  Component.onCompleted: claimedWhileUnarmed = UiState.claimHero(card)\n"
                           "}", QUrl());
@@ -1172,7 +1172,7 @@ private slots:
         // nothing was clicked, so a hero has nothing to take
         QVERIFY(!object->property("claimedWhileUnarmed").toBool());
 
-        QObject *state = rig.engine.singletonInstance<QObject *>("Swiftify", "UiState");
+        QObject *state = rig.engine.singletonInstance<QObject *>("Resonance", "UiState");
         QVERIFY(state);
         auto *cover = object->property("card").value<QObject *>()->property("cover").value<QQuickItem *>();
         QVERIFY(cover);
@@ -1226,7 +1226,7 @@ private slots:
     {
         Rig rig;
         QQmlComponent component(&rig.engine);
-        component.setData("import QtQuick\nimport Swiftify\nItem {\n"
+        component.setData("import QtQuick\nimport Resonance\nItem {\n"
                           "    property bool on: false\n"
                           "    property alias box: box\n"
                           "    Rectangle { id: box; width: 40; height: 40; Reveal.shown: parent.on }\n"
@@ -1268,7 +1268,7 @@ private slots:
         rig.settings.setReduceMotion(!performance);
         rig.settings.setPerformanceMode(performance);
         QQmlComponent component(&rig.engine);
-        component.setData("import QtQuick\nimport Swiftify\nItem {\n"
+        component.setData("import QtQuick\nimport Resonance\nItem {\n"
                           "    property bool on: false\n"
                           "    property alias box: box\n"
                           "    Rectangle { id: box; width: 40; height: 40; Reveal.shown: parent.on }\n"
@@ -1298,7 +1298,7 @@ private slots:
         Rig rig;
         rig.settings.setReduceMotion(true);
         QQmlComponent component(&rig.engine);
-        component.setData("import QtQuick\nimport Swiftify\nItem {\n"
+        component.setData("import QtQuick\nimport Resonance\nItem {\n"
                           "    readonly property real speed: UiState.spinSpeed\n"
                           "    Component.onCompleted: UiState.spinning = true\n"
                           "}\n",
@@ -1322,7 +1322,7 @@ private slots:
         rig.window->setColor(Qt::white);
         const auto draw = [&](const QString &shape, bool keeps) {
             QQmlComponent component(&rig.engine);
-            component.setData(QStringLiteral("import QtQuick\nimport Swiftify\nItem { width: 200; height: 200\n"
+            component.setData(QStringLiteral("import QtQuick\nimport Resonance\nItem { width: 200; height: 200\n"
                                              "MaterialShape { x: 20; y: 20; width: 160; height: 160; color: \"black\"; "
                                              "shape: \"%1\"; keepsShape: %2 } }")
                                   .arg(shape, keeps ? QStringLiteral("true") : QStringLiteral("false"))
@@ -1344,7 +1344,7 @@ private slots:
         QCOMPARE(kept, heart);
 
         QQmlComponent stickers(&rig.engine);
-        stickers.setData("import QtQuick\nimport Swiftify\nStickers { width: 400; height: 300; count: 4 }\n", QUrl());
+        stickers.setData("import QtQuick\nimport Resonance\nStickers { width: 400; height: 300; count: 4 }\n", QUrl());
         std::unique_ptr<QObject> scatter(stickers.create());
         QVERIFY2(scatter, qPrintable(stickers.errorString()));
         int shapes = 0;
@@ -1360,7 +1360,7 @@ private slots:
     {
         Rig rig;
         QQmlComponent component(&rig.engine);
-        component.setData("import QtQuick\nimport Swiftify\nItem {\n"
+        component.setData("import QtQuick\nimport Resonance\nItem {\n"
                           "    width: 400; height: 400\n"
                           "    property alias pill: pill\n"
                           "    property alias clip: clip\n"
@@ -1395,7 +1395,7 @@ private slots:
         rig.window->setColor(Qt::white);
         const auto draw = [&](qreal amplitude) {
             QQmlComponent line(&rig.engine);
-            line.setData(QStringLiteral("import QtQuick\nimport Swiftify\nWavyLine { x: 20; y: 20; width: 200; "
+            line.setData(QStringLiteral("import QtQuick\nimport Resonance\nWavyLine { x: 20; y: 20; width: 200; "
                                         "color: \"black\"; thickness: 2; amplitude: %1 }")
                              .arg(amplitude)
                              .toUtf8(),
@@ -1422,7 +1422,7 @@ private slots:
     {
         Rig rig;
         QQmlComponent component(&rig.engine);
-        component.setData("import QtQuick\nimport Swiftify\nDrift { active: true }\n", QUrl());
+        component.setData("import QtQuick\nimport Resonance\nDrift { active: true }\n", QUrl());
         std::unique_ptr<QObject> drift(component.create());
         QVERIFY2(drift, qPrintable(component.errorString()));
 
@@ -1454,7 +1454,7 @@ private slots:
         }
         rig.window->setColor(Qt::transparent);
         QQmlComponent component(&rig.engine);
-        component.setData("import QtQuick\nimport Swiftify\nItem { width: 300; height: 200\n"
+        component.setData("import QtQuick\nimport Resonance\nItem { width: 300; height: 200\n"
                           "    Rectangle { anchors.fill: parent; color: \"red\"\n"
                           "        layer.enabled: true\n"
                           "        layer.effect: ShaderEffect {\n"
@@ -1487,7 +1487,7 @@ private slots:
     void theShapeCatalogMatchesItsAtlas()
     {
         Rig rig;
-        QObject *shapes = rig.engine.singletonInstance<QObject *>("Swiftify", "Shapes");
+        QObject *shapes = rig.engine.singletonInstance<QObject *>("Resonance", "Shapes");
         QVERIFY(shapes);
         const QStringList names = shapes->property("names").toStringList();
         const QImage atlas(QStringLiteral(":/shapes/shape_atlas.png"));
@@ -1507,7 +1507,7 @@ private slots:
         // the shape's own unit square
         const auto draw = [&](const QString &shape, const QString &morphTo, qreal morph) {
             QQmlComponent component(&rig.engine);
-            component.setData(QStringLiteral("import QtQuick\nimport Swiftify\n"
+            component.setData(QStringLiteral("import QtQuick\nimport Resonance\n"
                                              "MaterialShape { x: 10; y: 10; width: 200; height: 200; color: \"white\"; "
                                              "shape: \"%1\"; morphTo: \"%2\"; morph: %3 }")
                                   .arg(shape, morphTo).arg(morph).toUtf8(), QUrl());
@@ -1560,7 +1560,7 @@ private slots:
         rig.window->setColor(Qt::transparent);
         const auto draw = [&](const QString &type) {
             QQmlComponent component(&rig.engine);
-            component.setData(QStringLiteral("import QtQuick\nimport QtQuick.Effects\nimport Swiftify\n"
+            component.setData(QStringLiteral("import QtQuick\nimport QtQuick.Effects\nimport Resonance\n"
                                              "%1 { x: 60; y: 60; width: 200; height: 200; %2 }")
                                   .arg(type, settings).toUtf8(), QUrl());
             std::unique_ptr<QObject> object(component.create());
@@ -1596,7 +1596,7 @@ private slots:
         }
         rig.window->setColor(Qt::transparent);
         QQmlComponent component(&rig.engine);
-        component.setData("import QtQuick\nimport Swiftify\n"
+        component.setData("import QtQuick\nimport Resonance\n"
                           "MaterialShape { x: 100; y: 100; width: 200; height: 200; color: \"white\"; "
                           "shape: \"square\"; spinAngle: 45 }",
                           QUrl());
@@ -1623,7 +1623,7 @@ private slots:
             QSKIP("no gpu to draw the button with");
         }
         QQmlComponent component(&rig.engine);
-        component.setData("import QtQuick\nimport Swiftify\n"
+        component.setData("import QtQuick\nimport Resonance\n"
                           "Rectangle { width: 200; height: 200; color: \"white\"\n"
                           "    IconButton { x: 80; y: 80; colBackgroundHover: \"#e0e0e0\" } }",
                           QUrl());
@@ -1654,7 +1654,7 @@ private slots:
         Rig rig;
         rig.playSomething();
         QQmlComponent component(&rig.engine);
-        component.setData("import QtQuick\nimport Swiftify\n"
+        component.setData("import QtQuick\nimport Resonance\n"
                           "ListView { width: 800; height: 400; model: Player.upNext\n"
                           "    header: Item { width: 800; height: 40 }\n"
                           "    delegate: SongRow { width: 800; songs: Player.upNext } }",
@@ -1727,7 +1727,7 @@ private slots:
     {
         Rig rig;
         QQmlComponent component(&rig.engine);
-        component.setData("import QtQuick\nimport Swiftify\n"
+        component.setData("import QtQuick\nimport Resonance\n"
                           "Item { width: 1000; height: 700\n"
                           "    property alias menu: menu\n"
                           "    StyledMenu { id: menu\n"
@@ -1809,12 +1809,12 @@ private slots:
         Rig rig;
         // the tray's menu is native, and the platform tests run on has none
         rig.settings.setTrayIcon(false);
-        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml/Swiftify/qml/Main.qml")));
+        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml/Resonance/qml/Main.qml")));
         std::unique_ptr<QObject> window(component.create());
         QVERIFY2(window, qPrintable(component.errorString()));
         Rig::settle();
         QQmlComponent asker(&rig.engine);
-        asker.setData("import QtQuick\nimport Swiftify\nQtObject {\n"
+        asker.setData("import QtQuick\nimport Resonance\nQtObject {\n"
                       "    function newPlaylist() { UiState.beginCreatePlaylist() }\n"
                       "    function newLocalPlaylist() { UiState.createLocalPlaylistRequested(null) }\n"
                       "    function editTrack(target: song) { UiState.editLocalTrackRequested(target) }\n"
@@ -1974,7 +1974,7 @@ private slots:
     {
         Rig rig;
         QQmlComponent component(&rig.engine);
-        component.setData("import QtQuick\nimport Swiftify\n"
+        component.setData("import QtQuick\nimport Resonance\n"
                           "Item { width: 400; height: 300\n"
                           "    property alias atAnchor: atAnchor\n"
                           "    property alias atPointer: atPointer\n"
@@ -2007,7 +2007,7 @@ private slots:
         Rig rig;
         rig.playSomething();
         QQmlComponent component(&rig.engine);
-        component.setData("import QtQuick\nimport Swiftify\n"
+        component.setData("import QtQuick\nimport Resonance\n"
                           "Item { width: 800; height: 60\n"
                           "    property alias row: row\n"
                           "    property song playing\n"
@@ -2082,7 +2082,7 @@ private slots:
     {
         Rig rig;
         QQmlComponent component(&rig.engine);
-        component.setData("import QtQuick\nimport Swiftify\n"
+        component.setData("import QtQuick\nimport Resonance\n"
                           "SpectrumView { kind: SpectrumView.Ring; active: true; width: 400; height: 400 }",
                           QUrl());
         std::unique_ptr<QObject> object(component.create());
@@ -2150,7 +2150,7 @@ private slots:
         // a red circle far bigger than the 100 px card it sits in, over its
         // top left corner, as a genre card's shape is over its top right
         QQmlComponent component(&rig.engine);
-        component.setData("import QtQuick\nimport Swiftify\n"
+        component.setData("import QtQuick\nimport Resonance\n"
                           "Item { x: 40; y: 40; width: 100; height: 100\n"
                           "  MaterialShape { x: -80; y: -80; width: 240; height: 240; shape: \"circle\"; color: \"red\";"
                           " parentClipRadius: 24 } }",
@@ -2181,7 +2181,7 @@ private slots:
         // a page filling a rounded sheet edge to edge, as a sticker does
         // at the sheet's corner, capped in blue
         QQmlComponent component(&rig.engine);
-        component.setData("import QtQuick\nimport Swiftify\n"
+        component.setData("import QtQuick\nimport Resonance\n"
                           "Item { x: 40; y: 40; width: 200; height: 120\n"
                           "  Rectangle { anchors.fill: parent; color: \"red\" }\n"
                           "  CornerCaps { anchors.fill: parent; radius: 24; color: \"blue\" } }",
@@ -2227,7 +2227,7 @@ private slots:
     {
         Rig rig;
         QQmlComponent component(&rig.engine);
-        component.setData("import QtQuick\nimport Swiftify\nItem { width: 600; height: 300\n"
+        component.setData("import QtQuick\nimport Resonance\nItem { width: 600; height: 300\n"
                           "  property alias first: first; property alias again: again; property alias other: other\n"
                           "  Stickers { id: first; anchors.fill: parent; key: \"home\" }\n"
                           "  Stickers { id: again; anchors.fill: parent; key: \"home\" }\n"
@@ -2256,7 +2256,7 @@ private slots:
     {
         Rig rig;
         QQmlComponent component(&rig.engine);
-        component.setData("import QtQuick\nimport Swiftify\nShapeBurst { x: 100; y: 100; kind: \"hearts\" }", QUrl());
+        component.setData("import QtQuick\nimport Resonance\nShapeBurst { x: 100; y: 100; kind: \"hearts\" }", QUrl());
         QPointer<QQuickItem> burst(qobject_cast<QQuickItem *>(component.create()));
         QVERIFY2(burst, qPrintable(component.errorString()));
         // as the window's host makes them, from qml, so it may destroy itself
@@ -2516,7 +2516,7 @@ private slots:
 
         // and its editor has no public switch
         QQmlComponent component(&rig.engine);
-        component.setData("import QtQuick\nimport Swiftify\nItem {\n"
+        component.setData("import QtQuick\nimport Resonance\nItem {\n"
                           "    property alias editor: editor\n"
                           "    PlaylistEditor { id: editor }\n"
                           "}\n",
@@ -2547,7 +2547,7 @@ private slots:
         Rig rig;
         rig.settings.setTrayIcon(false);
         rig.settings.setPerformanceMode(true);
-        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml/Swiftify/qml/Main.qml")));
+        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml/Resonance/qml/Main.qml")));
         std::unique_ptr<QObject> object(component.create());
         QVERIFY2(object, qPrintable(component.errorString()));
         auto *window = qobject_cast<QQuickWindow *>(object.get());
@@ -2578,7 +2578,7 @@ private slots:
     {
         Rig rig;
         QQmlComponent component(&rig.engine);
-        component.setData("import QtQuick\nimport Swiftify\n"
+        component.setData("import QtQuick\nimport Resonance\n"
                           "SectionHeader { title: 'Pinned Playlists'; symbol: 'push_pin'; showsSeeAll: true }", QUrl());
         std::unique_ptr<QObject> object(component.create());
         QVERIFY2(object, qPrintable(component.errorString()));
@@ -2626,7 +2626,7 @@ private slots:
         const Playlist playlist = rig.localFiles.createPlaylist(QStringLiteral("Mine"), {}, {}, {});
         rig.library.selectPlaylist(playlist);
         QQmlComponent component(&rig.engine);
-        component.setData("import QtQuick\nimport Swiftify\n"
+        component.setData("import QtQuick\nimport Resonance\n"
                           "Item { width: 355; height: 160\n"
                           "Window { id: host; visible: false }\n"
                           "Rectangle { id: page; anchors.fill: parent; color: 'green' }\n"

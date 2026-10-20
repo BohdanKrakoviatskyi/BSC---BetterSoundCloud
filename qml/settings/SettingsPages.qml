@@ -5,7 +5,7 @@ import QtQuick.Effects
 import QtMultimedia
 import Resonance
 
-// the settings themselves (SwiftifySettingsView), one page per rail
+// the settings themselves (SettingsPages), one page per rail
 // destination: what the visualizers and the backdrop cost, the sleep fade and
 // audio quality, the folders of music of the person's own, how the app fits
 // the desktop, how much it moves and draws, the
@@ -1049,7 +1049,7 @@ Item {
                             anchors.centerIn: parent
                             width: 46
                             height: 46
-                            source: "qrc:/qt/qml/Swiftify/resources/swiftify-icon.png"
+                            source: "qrc:/qt/qml/Resonance/resources/swiftify-icon.png"
                             sourceSize: Qt.size(96, 96)
                             smooth: true
                             mipmap: true

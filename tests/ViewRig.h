@@ -164,7 +164,7 @@ struct ViewRig {
     std::unique_ptr<QQuickItem> show(const QString &type)
     {
         QQmlComponent component(&engine);
-        component.loadFromModule("Swiftify", type);
+        component.loadFromModule("Resonance", type);
         std::unique_ptr<QObject> object(component.create());
         if (!object) {
             qWarning().noquote() << component.errorString();

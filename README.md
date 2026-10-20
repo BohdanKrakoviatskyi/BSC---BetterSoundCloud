@@ -74,13 +74,13 @@ cmake -B build -G Ninja \
   -DBUILD_TESTING=OFF
 
 # Build
-cmake --build build --target swiftify
+cmake --build build --target resonance
 ```
 
 To create a standalone, fully bundled macOS `.dmg` and `.zip`:
 
 ```bash
-./packaging/macos/package-dmg.sh build/swiftify.app release-artifacts 0.3.3 -
+./packaging/macos/package-dmg.sh build/Resonance.app release-artifacts 0.3.3 -
 ```
 
 ---
@@ -139,10 +139,10 @@ Resonance supports single-instance IPC. Launching a command while the player is 
 Example keybinding configuration for Hyprland (`hyprland.conf`):
 
 ```ini
-bind = SUPER SHIFT, M, exec, swiftify --immersive
-bind = , XF86AudioPlay, exec, swiftify --play-pause
-bind = , XF86AudioNext, exec, swiftify --next
-bind = , XF86AudioPrev, exec, swiftify --previous
+bind = SUPER SHIFT, M, exec, resonance --immersive
+bind = , XF86AudioPlay, exec, resonance --play-pause
+bind = , XF86AudioNext, exec, resonance --next
+bind = , XF86AudioPrev, exec, resonance --previous
 ```
 
 ---

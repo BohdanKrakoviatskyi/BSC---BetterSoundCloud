@@ -70,7 +70,7 @@ find_package(QCoro6 0.10 REQUIRED COMPONENTS Core Network)
 qcoro_enable_coroutines()
 
 qt_standard_project_setup(REQUIRES 6.9)
-# modules get their own folder so tooling finds them as <dir>/Swiftify/qmldir,
+# modules get their own folder so tooling finds them as <dir>/Resonance/qmldir,
 # clear of the executable (the same name on a case-insensitive disk).
 set(QT_QML_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml_modules)
 
@@ -370,7 +370,7 @@ if(SWIFTIFY_SIDECAR_FILE)
 endif()
 
 # on macos, an app bundle: its own name in the menu bar and the dock, its own
-# icon, and an identifier apart from the swift app's (com.addenator.Swiftify)
+# icon, and an identifier of its own (com.resonance.desktop)
 if(APPLE)
     set(SWIFTIFY_ICON_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/packaging/icons)
     # the swift app's icon composer icon, compiled as xcode compiles it: an

@@ -42,7 +42,7 @@ AudioDeviceMonitor::AudioDeviceMonitor(QObject *parent)
     if (!m_mainloop) {
         return;
     }
-    m_context = pa_context_new(pa_threaded_mainloop_get_api(m_mainloop), "Swiftify");
+    m_context = pa_context_new(pa_threaded_mainloop_get_api(m_mainloop), "Resonance");
     if (!m_context) {
         return;
     }

@@ -81,8 +81,8 @@ function Invoke-Native {
                 $build = $Arguments[1]
                 $prefix = $script:configurations[$build]
                 $project = Split-Path -Leaf $build
-                if ($project -eq 'swiftify') {
-                    New-FixtureFile "$prefix\bin\swiftify.exe"
+                if ($project -eq 'resonance') {
+                    New-FixtureFile "$prefix\bin\resonance.exe"
                 } else {
                     New-FixtureFile "$prefix\bin\$project.dll"
                 }
@@ -91,7 +91,7 @@ function Invoke-Native {
             }
         }
         'windeployqt.exe' {
-            Assert-True (Test-Path -LiteralPath $Arguments[-1]) 'Swiftify must be installed before deployment.'
+            Assert-True (Test-Path -LiteralPath $Arguments[-1]) 'Resonance must be installed before deployment.'
             New-FixtureFile (Join-Path (Split-Path -Parent $Arguments[-1]) 'libstdc++-6.dll') 'outdated deployment runtime'
         }
         default { throw "Unexpected command: $FilePath" }
@@ -114,7 +114,7 @@ try {
     Assert-True ((Find-QtKit '') -eq $qtPath) 'Qt discovery must respect QT_ROOT_DIR.'
     $parameters = @{ QtPath = $qtPath; MingwPath = $mingwPath; BuildRoot = $buildRoot; InstallPrefix = $installPrefix; Jobs = 2 }
     Invoke-WindowsBuild @parameters
-    Assert-True (Test-Path -LiteralPath "$installPrefix\bin\swiftify.exe") 'Swiftify was not installed.'
+    Assert-True (Test-Path -LiteralPath "$installPrefix\bin\resonance.exe") 'Resonance was not installed.'
     Assert-True (Test-Path -LiteralPath "$installPrefix\bin\qtkeychain.dll") 'QtKeychain runtime was not deployed.'
     Assert-True (Test-Path -LiteralPath "$installPrefix\bin\qcoro.dll") 'QCoro runtime was not deployed.'
     Assert-True ((Get-Content -LiteralPath "$installPrefix\bin\libstdc++-6.dll" -Raw).Trim() -eq 'selected compiler runtime') 'The selected compiler runtime must replace the deployment tool runtime.'

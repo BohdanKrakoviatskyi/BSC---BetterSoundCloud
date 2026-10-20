@@ -37,16 +37,16 @@ Mpris::Mpris(PlaybackController *player, QObject *parent)
 
     QDBusConnection bus = QDBusConnection::sessionBus();
     if (!bus.isConnected()) {
-        qCInfo(lcMpris) << "no session bus; media keys will not reach swiftify";
+        qCInfo(lcMpris) << "no session bus; media keys will not reach resonance";
         return;
     }
     if (!bus.registerObject(kObjectPath, this)) {
         qCWarning(lcMpris) << "could not register the media player object";
         return;
     }
-    // a second copy of swiftify would clash on the plain name.
-    m_registered = bus.registerService(QStringLiteral("org.mpris.MediaPlayer2.swiftify"))
-        || bus.registerService(QStringLiteral("org.mpris.MediaPlayer2.swiftify.instance%1").arg(QCoreApplication::applicationPid()));
+    // a second copy of resonance would clash on the plain name.
+    m_registered = bus.registerService(QStringLiteral("org.mpris.MediaPlayer2.resonance"))
+        || bus.registerService(QStringLiteral("org.mpris.MediaPlayer2.resonance.instance%1").arg(QCoreApplication::applicationPid()));
 
     connect(m_player, &PlaybackController::mediaStateChanged, this, &Mpris::update);
     connect(m_player, &PlaybackController::volumeChanged, this, &Mpris::update);

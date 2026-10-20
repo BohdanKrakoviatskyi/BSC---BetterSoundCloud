@@ -209,10 +209,10 @@ int main(int argc, char *argv[])
     startCompact(argv);
 #endif
     tuneSceneGraph();
-    QGuiApplication::setApplicationName(QStringLiteral("Swiftify"));
+    QGuiApplication::setApplicationName(QStringLiteral("Resonance"));
     QGuiApplication::setApplicationVersion(QStringLiteral(SWIFTIFY_VERSION));
     // the wayland app id, which hyprland window rules and the .desktop file match.
-    QGuiApplication::setDesktopFileName(QStringLiteral("swiftify"));
+    QGuiApplication::setDesktopFileName(QStringLiteral("resonance"));
     // the tray menu can fall back to widgets on linux
 #if defined(Q_OS_LINUX) || defined(Q_OS_WIN)
     QApplication application(argc, argv);
@@ -227,7 +227,7 @@ int main(int argc, char *argv[])
 #endif
 #ifndef Q_OS_MACOS
     // x11 shows this; wayland goes by the desktop entry, macos by the bundle
-    QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/qt/qml/Swiftify/resources/swiftify-icon.png")));
+    QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/qt/qml/Resonance/resources/swiftify-icon.png")));
 #endif
 
     SingleInstance instance;
@@ -321,7 +321,7 @@ int main(int argc, char *argv[])
     engine.addImageProvider(QStringLiteral("art"), new ArtworkImageProvider);
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &application,
                      [] { QCoreApplication::exit(EXIT_FAILURE); }, Qt::QueuedConnection);
-    engine.loadFromModule("Swiftify", "Main");
+    engine.loadFromModule("Resonance", "Main");
     // the first launch carries out its own command too, once the window exists
     if (const QString command = SingleInstance::commandFrom(QCoreApplication::arguments()); command != QLatin1StringView("raise")) {
         app.handleCommand(command);
