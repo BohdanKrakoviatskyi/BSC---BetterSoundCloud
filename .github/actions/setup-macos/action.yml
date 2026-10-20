@@ -1,0 +1,23 @@
+name: Set up macOS build tools
+runs:
+  using: composite
+  steps:
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+    - name: Install dependencies and select Xcode
+      shell: bash
+      run: |
+        set -euo pipefail
+        brew install cmake ninja qt@6 qcoro6 qtkeychain
+        XCODE_APP="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+        sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+        SDKROOT_PATH="$(xcrun --sdk macosx --show-sdk-path)"
+        echo "SDKROOT=$SDKROOT_PATH" >> "$GITHUB_ENV"
+        CLT_SDK=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+        if [ -e "$CLT_SDK" ]; then
+          CLT_SDK_REAL="$(cd "$CLT_SDK" && pwd -P)"
+          if [ "$CLT_SDK_REAL" != "$SDKROOT_PATH" ]; then
+            sudo mv "$CLT_SDK" "$CLT_SDK.runner"
+            sudo ln -s "$SDKROOT_PATH" "$CLT_SDK"
+          fi
+        fi

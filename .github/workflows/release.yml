@@ -1,75 +1,35 @@
-name: Publish desktop release
-
-# The shape of this workflow is the one the Tauri app's release workflow
-# (BSC---BetterSoundCloud/.github/workflows/release.yml) already proved:
-# one job with a platform matrix, a dispatch input that narrows the matrix to a
-# single platform, a version synced from the tag before anything is built, and
-# Apple signing that is used when the secrets are there and reported when they
-# are not. What differs is only the middle: there is no tauri-action to bundle
-# and publish for a cmake/qt app, so each platform builds and packages with its
-# own toolchain and publishes its own assets into the same release.
+name: Build and publish desktop apps
 
 on:
   push:
-    tags:
-      - 'v*'
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       tag:
-        description: Version tag to build and publish (for example, v0.3.4)
+        description: Release tag to build (for example, v0.2.7)
         required: true
         type: string
-      platform:
-        description: 'Runner to build. "all" builds every platform.'
-        required: false
-        default: 'all'
-        type: choice
-        options:
-          - all
-          - ubuntu-24.04
-          - windows-latest
-          - macos-latest
       publish:
-        description: Publish the built artifacts to a GitHub release.
+        description: Upload the finished packages to that GitHub release.
         required: false
-        default: false
+        default: true
         type: boolean
 
 permissions:
   contents: write
 
 jobs:
-  publish:
-    name: Publish (${{ matrix.platform }})
-    runs-on: ${{ matrix.platform }}
-    strategy:
-      fail-fast: false
-      # Each runner builds independently; publishing can happen concurrently.
-      max-parallel: 3
-      matrix:
-        # A platform picked in the dispatch input narrows the matrix to that one
-        # runner, so a single platform can be rebuilt after a failure without
-        # rebuilding the other two. An empty inputs.platform — a tag push, where
-        # there is no input at all — expands to the full list. The filter has to
-        # live here because the matrix is not available in a job-level if, and
-        # fromJSON is what turns the one-element string into an array.
-        platform: ${{ inputs.platform != '' && inputs.platform != 'all' && fromJSON(format('["{0}"]', inputs.platform)) || fromJSON('["ubuntu-24.04", "windows-latest", "macos-latest"]') }}
+  linux:
+    name: "Linux: build and package"
+    runs-on: ubuntu-24.04
     env:
-      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
-      - name: Check out the app
+      - name: Check out app
         uses: actions/checkout@v4
         with:
-          # The app goes into ./resonance rather than the workspace root, because
-          # cmake finds the soundcloud sidecar at ../BSC---BetterSoundCloud/backend
-          # (SWIFTIFY_SIDECAR_SOURCE_DIR): the two checkouts have to sit side by
-          # side for that default to resolve.
           path: resonance
-
-      # The go sidecar is one copy of the local-api that lives in the better
-      # soundcloud repository, not a copy vendored here: a release builds it
-      # from that source, exactly as a local build does.
-      - name: Check out the soundcloud sidecar source
+      - name: Check out sidecar source
         uses: actions/checkout@v4
         with:
           repository: BohdanKrakoviatskyi/BSC---BetterSoundCloud
@@ -77,670 +37,198 @@ jobs:
           path: BSC---BetterSoundCloud
           sparse-checkout: |
             backend
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-
-      - name: Sync version from the release tag
-        working-directory: resonance
-        shell: bash
-        # the tag is the version: every file that carries one is rewritten here,
-        # so the bundle, the core and the updater agree on what this build is
-        run: node scripts/sync-release-version.mjs "$RELEASE_TAG"
-
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: BSC---BetterSoundCloud/backend/go.mod
-          cache-dependency-path: BSC---BetterSoundCloud/backend/go.sum
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: resonance/spotify-core -> resonance/build/cargo
-
-      # ── build dependencies, per platform ───────────────────────────────────
-      - name: Install Linux build dependencies
-        if: runner.os == 'Linux'
-        shell: bash
-        # ubuntu 24.04, not 22.04: gcc 11 on the older image has an internal
-        # compiler error in build_special_member_call on a coroutine, which is
-        # what every method here returning QCoro::Task<void> compiles into. gcc
-        # 13 does not. libfuse2 is libfuse2t64 on 24.04, where the 64-bit time_t
-        # transition renamed it.
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends \
-            build-essential cmake ninja-build pkg-config file wget \
-            git ca-certificates clang-18 \
-            libgl1-mesa-dev libvulkan-dev libxkbcommon-dev \
-            libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-randr0 \
-            libxcb-render-util0 libxcb-shape0 \
-            libwayland-dev libdbus-1-dev libpulse-dev libasound2-dev \
-            libsecret-1-dev libsecret-1-0 libssl-dev \
-            libfuse2t64 patchelf
-          echo "QT_ROOT_DIR check: ${QT_ROOT_DIR:-not yet set}"
-
-      - name: Install Qt (Linux)
-        if: runner.os == 'Linux'
-        uses: jurplel/install-qt-action@v4
-        with:
-          # 6.9 is the oldest version CMakeLists.txt asks cmake for (REQUIRES 6.9), and
-          # the newest one Qt has actually published for windows: 6.11 and later
-          # are listed by aqt but their Updates.xml is not there yet, and 6.12
-          # makes qcoro 0.11 fail on a missing QML private module.
-          # QtMultimedia and QtShaderTools are not part of the base install,
-          # though the app's find_package asks for both.
-          version: '6.9.*'
-          host: linux
-          target: desktop
-          arch: linux_gcc_64
-          modules: 'qtmultimedia qtshadertools'
-          cache: true
-
-      - name: Build QCoro (Linux)
-        if: runner.os == 'Linux'
-        shell: bash
-        # not in the Qt release and not packaged for ubuntu 22.04.
-        # install-qt-action exports QT_ROOT_DIR, not Qt6_DIR
-        run: |
-          set -euo pipefail
-          echo "Using Qt at $QT_ROOT_DIR"
-
-          # QCoro turns QtWebSockets and QtTest support on by default, and its
-          # tests are built whenever BUILD_TESTING is set — which install-qt's
-          # own configure steps set. The app links QCoro Core and Network only,
-          # so all three are switched off: each one either wants a Qt module the
-          # app never uses or a test binary the release has no use for.
-          # v0.14.0 is qtkeychain's newest tag — 0.15.0 does not exist.
-          git clone --depth 1 --branch v0.11.0 \
-            https://github.com/danvratil/qcoro.git "$RUNNER_TEMP/qcoro"
-          cmake -S "$RUNNER_TEMP/qcoro" -B "$RUNNER_TEMP/qcoro/build" -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_TESTING=OFF \
-            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
-            -DQCORO_WITH_QTWEBSOCKETS=OFF -DQCORO_WITH_QTTEST=OFF \
-            -DQCORO_BUILD_TESTING=OFF -DQCORO_BUILD_EXAMPLES=OFF \
-            -DQCORO_ENABLE_COMPAT_METHOD_TESTS=OFF
-          cmake --build "$RUNNER_TEMP/qcoro/build"
-          sudo cmake --install "$RUNNER_TEMP/qcoro/build"
-
-          git clone --depth 1 --branch v0.14.0 \
-            https://github.com/frankosterfeld/qtkeychain.git "$RUNNER_TEMP/qtkeychain"
-          cmake -S "$RUNNER_TEMP/qtkeychain" -B "$RUNNER_TEMP/qtkeychain/build" -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
-            -DBUILD_WITH_QT6=ON -DBUILD_TEST_APPLICATION=OFF \
-            -DLIBSECRET_SUPPORT=ON
-          cmake --build "$RUNNER_TEMP/qtkeychain/build"
-          sudo cmake --install "$RUNNER_TEMP/qtkeychain/build"
-          # ldconfig rebuilds the loader cache so the freshly installed
-          # /usr/local/lib is searched. Without it the library is on disk and
-          # findable by path, but ld.so has no entry for it, and the packaging
-          # step — which resolves dependencies the way the loader does — reports
-          # "Could not find dependency: libqt6keychain.so.1" and stops.
-          sudo ldconfig
-
-      - name: Install macOS build dependencies
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          set -euo pipefail
-          brew install cmake ninja qt@6 qcoro6 qtkeychain
-          # One toolchain instead of two halves. The runner's default selection
-          # is the standalone Command Line Tools, and its SDK is newer than the
-          # linker that has to read it — the .tbd files list arm64e.x1, which
-          # the linker reports as an unknown architecture. Selecting Xcode pairs
-          # its ld with its own SDK, and SDKROOT pins cmake to that same one.
-          XCODE_APP="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
-          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
-          SDKROOT_PATH="$(xcrun --sdk macosx --show-sdk-path)"
-          echo "SDKROOT=$SDKROOT_PATH" >> "$GITHUB_ENV"
-          echo "using $XCODE_APP at $SDKROOT_PATH"
-
-          # Homebrew's Qt carries the sdk it was built against into every link
-          # line: an -L and an -rpath at <sdk>/usr/lib, with an explicit
-          # -lSystem -lc -lm beside them. That sdk on this image is the standalone
-          # Command Line Tools one, so ld reads its .tbd files — and dies on them
-          # looking up libraries that -isysroot already names. Repointing that
-          # path at the sdk this build uses makes those entries resolve to the
-          # same libraries the sysroot does.
-          CLT_SDK=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
-          if [ -e "$CLT_SDK" ]; then
-            CLT_SDK_REAL="$(cd "$CLT_SDK" && pwd -P)"
-            if [ "$CLT_SDK_REAL" != "$SDKROOT_PATH" ]; then
-              sudo mv "$CLT_SDK" "$CLT_SDK.runner"
-              sudo ln -s "$SDKROOT_PATH" "$CLT_SDK"
-              echo "repointed $CLT_SDK at $SDKROOT_PATH"
-            fi
-          fi
-
-      # The MSVC build environment, before anything runs cmake. The runner image
-      # ships a MinGW toolchain, and cmake's default compiler search found that
-      # first: qcoro and qtkeychain were then built with g++ against msvc Qt and
-      # linked with mingw's ld, which cannot resolve Qt's __imp__ imports at all.
-      # This puts the Visual Studio compiler and its environment first.
-      - name: Set up MSVC (Windows)
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Install Qt (Windows)
-        if: runner.os == 'Windows'
-        uses: jurplel/install-qt-action@v4
-        with:
-          # 6.9 for the same reason as on linux, and it is the newest Qt windows has
-          # actually published: 6.10.3 works too and is the alternative if
-          # something in 6.9 misbehaves. qtshadertools and qtmultimedia are
-          # asked for by the app's find_package and are not in the base install.
-          version: '6.9.*'
-          host: windows
-          target: desktop
-          arch: win64_msvc2022_64
-          modules: 'qtmultimedia qtshadertools'
-          cache: true
-
-      - name: Install Ninja (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        # both cmake calls below ask for the Ninja generator, and the runner
-        # image does not ship it
-        run: choco install ninja --no-progress -y
-
-      - name: Build QCoro and QtKeychain (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        # Neither qcoro nor qtkeychain is a vcpkg port (the ports the previous
-        # commit named do not exist), so both are built the way the linux job
-        # builds them, from source, against the Qt install-qt-action laid down,
-        # and installed into C:\qcoro-install, which the app's cmake is pointed at.
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $qt = $env:QT_ROOT_DIR
-          if (-not $qt) { $qt = $env:Qt6_DIR }
-          if (-not $qt) { throw 'QT_ROOT_DIR is not set; install-qt-action ran?' }
-          "QT_ROOT_DIR is $qt"
-
-          $env:PATH = "$qt/bin;$env:PATH"
-
-          # the url comes first: git clone takes <repository> [directory], and getting
-          # that backwards made cmake point at a directory git never created
-          # QCoro's own tests and examples are on by default and want QtTest, which the
-          # app never uses. A release builds none of it, so the test tree and the
-          # QtTest and WebSockets support are switched off.
-          git clone --depth 1 --branch v0.11.0 https://github.com/danvratil/qcoro.git qcoro
-          cmake -S qcoro -B qcoro\build -G Ninja `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_PREFIX_PATH="$qt" `
-            -DCMAKE_INSTALL_PREFIX="C:\qcoro-install" `
-            -DQCORO_WITH_QTWEBSOCKETS=OFF -DQCORO_WITH_QTTEST=OFF `
-            -DQCORO_BUILD_TESTING=OFF -DQCORO_BUILD_EXAMPLES=OFF `
-            -DQCORO_ENABLE_COMPAT_METHOD_TESTS=OFF
-          cmake --build qcoro\build
-          cmake --install qcoro\build
-
-          # qtkeychain is built static here. It is the one library the app links outside
-          # Qt, and Qt's documentation is explicit that windeployqt does not
-          # account for third-party libraries: it resolves qt6keychain.dll
-          # against the Qt installation, where it is not, and abandons the whole
-          # deployment. --ignore-library-errors did not prevent that, so rather
-          # than lean on a flag whose behaviour varies by version, the app is
-          # given no such dll to resolve: no import, nothing to fail on, nothing
-          # extra to ship. qcoro already builds static libs, so this is the last
-          # non-Qt dependency.
-          git clone --depth 1 --branch v0.14.0 https://github.com/frankosterfeld/qtkeychain.git qtkeychain
-          cmake -S qtkeychain -B qtkeychain\build -G Ninja `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_PREFIX_PATH="$qt;C:\qcoro-install" `
-            -DCMAKE_INSTALL_PREFIX="C:\qcoro-install" `
-            -DBUILD_WITH_QT6=ON -DBUILD_TEST_APPLICATION=OFF `
-            -DBUILD_SHARED_LIBS=OFF `
-            -DLIBSECRET_SUPPORT=OFF
-          cmake --build qtkeychain\build
-          cmake --install qtkeychain\build
-
-          "QCORO_PREFIX=C:\qcoro-install" >> $env:GITHUB_ENV
-
-      
-
-      # ── Apple signing, used when the secrets are there ─────────────────────
-      - name: Check for Apple signing secrets
-        id: apple
-        if: runner.os == 'macOS'
-        shell: bash
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-        run: |
-          if [ -n "$APPLE_CERTIFICATE" ]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-            echo "identity=$APPLE_SIGNING_IDENTITY" >> "$GITHUB_OUTPUT"
-            if [ -n "$APPLE_ID" ]; then
-              echo "notarize=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "notarize=false" >> "$GITHUB_OUTPUT"
-            fi
-          else
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            # Ad-hoc signing. The identity must not be empty: cmake passes it to
-            # codesign, and codesign with no identity at all fails the build.
-            echo "identity=-" >> "$GITHUB_OUTPUT"
-            echo "notarize=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Import Apple Developer certificate
-        if: steps.apple.outputs.enabled == 'true'
-        shell: bash
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
-        run: |
-          set -euo pipefail
-          KEYCHAIN="$RUNNER_TEMP/build.keychain"
-          security create-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN"
-          security unlock-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
-          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
-            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: \
-            -s -k "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          security list-keychain -d user -s "$KEYCHAIN" login.keychain-db
-          rm -f "$RUNNER_TEMP/cert.p12"
-
-      # ── build ─────────────────────────────────────────────────────────────
-      - name: Build (macOS)
-        if: runner.os == 'macOS'
-        working-directory: resonance
-        shell: bash
-        env:
-          SIGNING_IDENTITY: ${{ steps.apple.outputs.identity }}
-        run: |
-          set -euo pipefail
-          QT_PREFIX="$(brew --prefix qt@6)"
-          QCORO_PREFIX="$(brew --prefix qcoro6)"
-          KEYCHAIN_PREFIX="$(brew --prefix qtkeychain)"
-          export PATH="$QT_PREFIX/bin:$PATH"
-
-          cmake -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_TESTING=OFF \
-            -DCMAKE_PREFIX_PATH="$QT_PREFIX;$QCORO_PREFIX;$KEYCHAIN_PREFIX" \
-            -DSWIFTIFY_SIDECAR_SOURCE_DIR="$PWD/../BSC---BetterSoundCloud/backend" \
-            -DSWIFTIFY_CODESIGN_IDENTITY="$SIGNING_IDENTITY"
-
-          cmake --build build --target resonance
-
-      - name: Build (Linux)
-        if: runner.os == 'Linux'
+      - name: Set up build tools
+        uses: ./.github/actions/setup-linux
+      - name: Build and package
         working-directory: resonance
         shell: bash
         run: |
           set -euo pipefail
-          # qcoro and qtkeychain were installed into /usr/local, which cmake
-          # searches by default
-          # clang, not gcc: gcc's coroutine support is still experimental and
-          # it dies with an internal compiler error in build_special_member_call
-          # on every method here returning QCoro::Task<void> — on 11.4 and on
-          # 13 alike, so moving to a newer gcc is not the answer. The mac build
-          # has always been clang, and it is the compiler this codebase is
-          # developed against.
-          cmake -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_TESTING=OFF \
-            -DCMAKE_C_COMPILER=clang-18 \
-            -DCMAKE_CXX_COMPILER=clang++-18 \
+          node scripts/sync-release-version.mjs "$RELEASE_TAG"
+          export PATH="$QT_ROOT_DIR/bin:$PATH"
+          export LD_LIBRARY_PATH="/usr/local/lib:/usr/local/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+            -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 \
             -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
             -DSWIFTIFY_SIDECAR_SOURCE_DIR="$PWD/../BSC---BetterSoundCloud/backend"
           cmake --build build
+          test -f build/sidecar/local-api
+          mkdir -p release-artifacts
+          ./packaging/linux/package-appimage.sh build release-artifacts "${RELEASE_TAG#v}"
+          APPIMAGE="$(find release-artifacts -maxdepth 1 -name 'Resonance-*-Linux*.AppImage' -print -quit)"
+          test -n "$APPIMAGE"
+          APPIMAGE_EXTRACT_AND_RUN=1 "$APPIMAGE" --appimage-extract > /dev/null
+          for entry in usr/bin/resonance usr/bin/local-api usr/share/applications/resonance.desktop; do
+            test -e "squashfs-root/$entry"
+          done
+          for library in 'libQt6Core.so*' 'libQt6Quick.so*' 'libQt6Multimedia.so*' libqxcb.so 'libqt6keychain.so*'; do
+            find squashfs-root -name "$library" -print -quit | grep -q .
+          done
+          rm -rf squashfs-root
+      - name: Upload to GitHub Release
+        if: github.event_name == 'push' || inputs.publish
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
+          name: Resonance ${{ env.RELEASE_TAG }}
+          files: resonance/release-artifacts/*
 
-      - name: Build (Windows)
-        if: runner.os == 'Windows'
+  windows:
+    name: "Windows: build and package"
+    runs-on: windows-latest
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - name: Check out app
+        uses: actions/checkout@v4
+        with:
+          path: resonance
+      - name: Check out sidecar source
+        uses: actions/checkout@v4
+        with:
+          repository: BohdanKrakoviatskyi/BSC---BetterSoundCloud
+          ref: feature/soundcloud-backend
+          path: BSC---BetterSoundCloud
+          sparse-checkout: |
+            backend
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: BSC---BetterSoundCloud/backend/go.mod
+      - name: Set up build tools
+        uses: ./.github/actions/setup-windows
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: resonance/spotify-core -> resonance/build/cargo/spotify-core_d7008
+      - name: Build and package
         working-directory: resonance
         shell: pwsh
         run: |
-          # qcoro and qtkeychain are installed into C:\qcoro-install and
-          # brought in via CMAKE_PREFIX_PATH
+          $ErrorActionPreference = 'Stop'
+          node scripts/sync-release-version.mjs $env:RELEASE_TAG
           cmake -B build -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
             -DBUILD_TESTING=OFF `
             -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR;C:\qcoro-install" `
             -DSWIFTIFY_SIDECAR_SOURCE_DIR="$PWD/../BSC---BetterSoundCloud/backend"
           cmake --build build
+          $sidecar = 'build/sidecar/local-api.exe'
+          if (-not (Test-Path $sidecar)) { throw "sidecar missing: $sidecar" }
 
-      - name: Check the soundcloud sidecar was built in
-        shell: bash
-        working-directory: resonance
-        # a missing sidecar is silent at run time — the app just says the service
-        # is missing — so a release fails here instead of shipping without it
-        run: |
-          set -euo pipefail
-          # the go tool writes local-api.exe on windows and local-api elsewhere
-          if ! ls build/sidecar/local-api* > /dev/null 2>&1; then
-            echo "::error::the soundcloud sidecar was not built; check the go source at ../BSC---BetterSoundCloud/backend"
-            exit 1
-          fi
-          ls -l build/sidecar/local-api*
-
-      # ── package ───────────────────────────────────────────────────────────
-      - name: Package DMG and zip (macOS)
-        if: runner.os == 'macOS'
-        working-directory: resonance
-        shell: bash
-        env:
-          SIGNING_IDENTITY: ${{ steps.apple.outputs.identity }}
-        run: |
-          set -euo pipefail
-          export PATH="$(brew --prefix qt@6)/bin:$PATH"
-          mkdir -p release-artifacts
-          ./packaging/macos/package-dmg.sh \
-            build/resonance.app release-artifacts "${RELEASE_TAG#v}" "$SIGNING_IDENTITY"
-
-          # Self-containment check on what was actually shipped. It has to be the
-          # archive, not build/resonance.app: macdeployqt ran inside
-          # package-dmg.sh on a staging copy of the bundle, and that copy is
-          # deleted again when the script returns. The zip is the same bundle
-          # without a filesystem image wrapped round it.
-          VERSION="${RELEASE_TAG#v}"
-          ZIP="release-artifacts/Resonance-${VERSION}-macOS.zip"
-          if [ ! -f "$ZIP" ]; then
-            echo "::error::the packaging script produced no zip at $ZIP"
-            exit 1
-          fi
-          CHECK="$(mktemp -d)"
-          ditto -x -k "$ZIP" "$CHECK"
-          BUNDLE="$CHECK/Resonance.app/Contents"
-          REQUIRED=(
-            "MacOS/resonance"
-            "MacOS/local-api"
-            "Frameworks/QtCore.framework/Versions/A/QtCore"
-            "Frameworks/QtQuick.framework/Versions/A/QtQuick"
-            "Frameworks/QtMultimedia.framework/Versions/A/QtMultimedia"
-            # libqcocoa, not libqxcb: qxcb is the x11 plugin, which is what linux
-            # needs and macOS never does
-            "PlugIns/platforms/libqcocoa.dylib"
-          )
-          MISSING=()
-          for entry in "${REQUIRED[@]}"; do
-            [ -e "$BUNDLE/$entry" ] || MISSING+=("$entry")
-          done
-          if [ ${#MISSING[@]} -gt 0 ]; then
-            echo "::error::the shipped bundle is missing: ${MISSING[*]}"
-            echo "what it does contain:"
-            find "$BUNDLE" -maxdepth 2 | head -20
-            exit 1
-          fi
-          echo "bundle is self-contained: ${#REQUIRED[@]} required entries present"
-          # An absolute path to a dylib would only resolve on the build machine.
-          # Homebrew's qt, qcoro and qtkeychain all live under /opt/homebrew, so
-          # this is what a bundle that was never run through macdeployqt looks
-          # like — and macos builds green while the bundle is still unpacked.
-          if otool -L "$BUNDLE/MacOS/resonance" | grep -qE '(/opt/homebrew|/usr/local)'; then
-            echo "::error::the shipped app links against build-machine paths:"
-            otool -L "$BUNDLE/MacOS/resonance" | grep -E '(/opt/homebrew|/usr/local)'
-            exit 1
-          fi
-          echo "no build-machine library paths in the linked libraries"
-          echo "frameworks shipped: $(find "$BUNDLE/Frameworks" -maxdepth 1 -name '*.framework' | wc -l)"
-
-      - name: Notarize DMG
-        if: runner.os == 'macOS' && steps.apple.outputs.notarize == 'true' && (github.event_name == 'push' || inputs.publish)
-        working-directory: resonance
-        shell: bash
-        env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          set -euo pipefail
-          VERSION="${RELEASE_TAG#v}"
-          DMG="release-artifacts/Resonance-${VERSION}-macOS.dmg"
-          xcrun notarytool submit "$DMG" \
-            --apple-id "$APPLE_ID" \
-            --password "$APPLE_PASSWORD" \
-            --team-id "$APPLE_TEAM_ID" \
-            --wait
-          xcrun stapler staple "$DMG"
-
-      - name: Package AppImage (Linux)
-        if: runner.os == 'Linux'
-        working-directory: resonance
-        shell: bash
-        run: |
-          set -euo pipefail
-          export QMAKE="$QT_ROOT_DIR/bin/qmake6"
-          VERSION="${RELEASE_TAG#v}"
-          # The same loader cache as a belt to the ldconfig above: qcoro and
-          # qtkeychain install into /usr/local/lib, which on debian may be
-          # lib/x86_64-linux-gnu instead. Both are named explicitly so the
-          # packaging tool can resolve them without consulting the cache.
-          export LD_LIBRARY_PATH="/usr/local/lib:/usr/local/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
-          echo "non-Qt libraries on disk:"
-          find /usr/local/lib -name 'libqt6keychain*' -o -name 'libQCoro*' 2>/dev/null | sort
-          mkdir -p release-artifacts
-          ./packaging/linux/package-appimage.sh build release-artifacts "$VERSION"
-
-          # Self-containment check on the finished AppImage. Extracting it and
-          # looking inside is the closest a runner gets to starting it: an
-          # AppImage that cannot find its own libraries shows up here as a
-          # missing runtime, a missing platform plugin or a missing binary.
-          APPIMAGE="$(find release-artifacts -maxdepth 1 -name '*-Linux*.AppImage' -print -quit)"
-          if [ -z "$APPIMAGE" ]; then
-            echo "::error::no AppImage was produced"
-            exit 1
-          fi
-          echo "unpacking $APPIMAGE"
-          APPIMAGE_EXTRACT_AND_RUN=1 "$APPIMAGE" --appimage-extract > /dev/null
-          ROOT="squashfs-root"
-          # Globs rather than exact paths: linuxdeploy chooses between
-          # usr/lib and usr/lib/<triple> for the deployed libraries, and the
-          # app and the sidecar are what must be exactly where they are.
-          MISSING=()
-          for entry in usr/bin/resonance usr/bin/local-api \
-                        usr/share/applications/resonance.desktop; do
-            [ -e "$ROOT/$entry" ] || MISSING+=("$entry")
-          done
-          for pattern in "libQt6Core.so*" "libQt6Quick.so*" "libQt6Multimedia.so*" \
-                         "libqxcb.so" "libqt6keychain.so*"; do
-            found=$(find "$ROOT" -name "$pattern" -print -quit 2>/dev/null)
-            [ -n "$found" ] || MISSING+=("$pattern")
-          done
-          if [ ${#MISSING[@]} -gt 0 ]; then
-            echo "::error::the AppImage is missing: ${MISSING[*]}"
-            find "$ROOT" -maxdepth 3 -type d | head -20
-            exit 1
-          fi
-          echo "AppImage is self-contained"
-          echo "size: $(du -h "$APPIMAGE" | cut -f1), unpacked: $(du -sh "$ROOT" | cut -f1)"
-          echo "qt libraries deployed: $(find "$ROOT" -name 'libQt6*.so*' | wc -l)"
-          echo "platform plugins: $(find "$ROOT" -path '*platforms*' -name '*.so' | wc -l)"
-
-      - name: Package zip (Windows)
-        if: runner.os == 'Windows'
-        working-directory: resonance
-        shell: pwsh
-        # The archive has to be self-contained: the qml is compiled into the exe,
-        # so what Qt needs on top of that is its dlls, the platform plugin, the
-        # image-format plugins the artwork loader relies on, and the two
-        # libraries the app links outside Qt. A release missing any of them
-        # unpacks and then fails to start — which is what the last windows build
-        # produced — so the list is checked before the archive is made. Only the
-        # zip is published: the updater downloads the first asset it finds with a
-        # matching extension, and a bare resonance.exe beside it would be pickable
-        # and unusable.
-        run: |
           $version = $env:RELEASE_TAG -replace '^v', ''
           $staging = Join-Path $env:RUNNER_TEMP 'pkg'
-          New-Item -ItemType Directory -Force -Path $staging | Out-Null
-          New-Item -ItemType Directory -Force -Path release-artifacts | Out-Null
-
-          Copy-Item 'build/resonance.exe' $staging
-
-          # Both dependencies are built static, so there is normally nothing here. The
-          # copy is kept as a guard: if a future change puts a dll back, it has
-          # to travel with the app, and windeployqt will not carry it.
-          $deps = 'C:\qcoro-install\bin'
-          if (Test-Path $deps) {
-              $extra = @(Get-ChildItem $deps -Filter '*.dll' -ErrorAction SilentlyContinue)
-              if ($extra.Count) {
-                  "shipping $($extra.Count) non-Qt dll(s) alongside the app"
-                  Copy-Item $extra.FullName $staging
-              }
-          }
-
-          # --ignore-library-errors: qt's documentation states outright that
-          # third-party libraries "are not taken into account by windeployqt".
-          # Left to itself it resolves qt6keychain.dll against the Qt
-          # installation, where it is not, and gives up: exit code 1, and a
-          # release carrying an exe, one dll and no Qt at all. The flag is the
-          # documented way to say "carry on without that one", so Qt's own
-          # deployment completes and the dlls windeployqt will not carry stay
-          # staged above, where the app finds them beside the exe.
-          # --qmldir: the qml is compiled into the exe, so windeployqt cannot see what
-          # it imports. Without this it deploys nothing that only qml asks for —
-          # QtMultimedia is exactly that, and its absence is a build that starts
-          # and then cannot play anything.
-          & "$env:QT_ROOT_DIR/bin/windeployqt.exe" --release `
-            --qmldir (Join-Path $PWD 'qml') `
-            --no-translations --no-system-d3d-compiler `
-            --ignore-library-errors `
-            (Join-Path $staging 'resonance.exe')
-
-          # the go sidecar sits beside the binary the app looks next to itself,
-          # named the way the app asks for it on windows (SidecarClient)
-          $sidecar = Join-Path $PWD 'build/sidecar/local-api.exe'
-          if (-not (Test-Path $sidecar)) { throw "the go sidecar is missing at $sidecar" }
-          Copy-Item $sidecar $staging
-
-          # self-containment check, before anything is published
-          # Deliberately not listed: platforms/qminimal.dll (a fallback used only when
-          # qwindows is absent), imageformats/qpng.dll (png has been built into
-          # QtGui since 6.2), and tls/qtls_backends.dll (that plugin is for
-          # openssl; on windows QtNetwork uses schannel, which needs no plugin).
-          # windeployqt itself deploys none of them, so demanding them would be
-          # demanding a different package than the one being built.
+          New-Item -ItemType Directory -Force $staging, release-artifacts | Out-Null
+          Copy-Item 'build/resonance.exe', $sidecar $staging
+          & "$env:QT_ROOT_DIR/bin/windeployqt.exe" --release --qmldir (Join-Path $PWD 'qml') --no-translations --no-system-d3d-compiler --ignore-library-errors (Join-Path $staging 'resonance.exe')
           $required = @(
-            'resonance.exe',
-            'local-api.exe',
-            'Qt6Core.dll',
-            'Qt6Gui.dll',
-            'Qt6Quick.dll',
-            'Qt6Qml.dll',
-            'Qt6Multimedia.dll',
-            'Qt6DBus.dll',
-            'Qt6Network.dll',
-            'Qt6Widgets.dll',
-            'platforms/qwindows.dll',
-            'iconengines/qsvgicon.dll',
-            'imageformats/qjpeg.dll',
-            'imageformats/qsvg.dll'
+            'resonance.exe','local-api.exe','Qt6Core.dll','Qt6Gui.dll','Qt6Quick.dll','Qt6Qml.dll',
+            'Qt6Multimedia.dll','Qt6DBus.dll','Qt6Network.dll','Qt6Widgets.dll',
+            'platforms/qwindows.dll','iconengines/qsvgicon.dll','imageformats/qjpeg.dll','imageformats/qsvg.dll'
           )
-          $missing = @($required | Where-Object {
-              -not (Test-Path (Join-Path $staging $_))
-          })
-          if ($missing) {
-            "windeployqt left these out: $($missing -join ', ')"
-            'staging actually contains:'
-            Get-ChildItem $staging -Recurse -Name | Sort-Object | ForEach-Object { "  $_" }
-            throw "the windows package is not self-contained ($($missing.Count) of $($required.Count) missing)"
-          }
-          "package is self-contained: $($required.Count) required entries present"
-          "{0:n1} MB staged" -f ((Get-ChildItem $staging -Recurse -File |
-              Measure-Object -Property Length -Sum).Sum / 1MB)
-          Get-ChildItem $staging -Name | Sort-Object | Select-Object -First 12
-
-          # The stronger check, and the one that generalises: every dll the exe
-          # imports must either be in the package or be a dll windows itself
-          # provides. A hardcoded list only proves what somebody thought of;
-          # this proves the loader will find everything that was asked for.
+          $missing = @($required | Where-Object { -not (Test-Path (Join-Path $staging $_)) })
+          if ($missing) { throw "Windows package misses: $($missing -join ', ')" }
           $systemDir = Join-Path $env:SystemRoot 'System32'
           $imports = & dumpbin /dependents (Join-Path $staging 'resonance.exe') |
-              Select-String -Pattern '^\s+\S+\.dll\s*$' |
-              ForEach-Object { $_.Line.Trim().ToLower() } |
-              Sort-Object -Unique
-          if (-not $imports) { throw 'dumpbin reported no imports at all; the check itself is broken' }
-          # api-ms-win-* and ext-ms-win-* are API sets: virtual names the loader
-          # resolves through its schema. There is no such file on disk, so
-          # looking for one in System32 finds nothing and reports a false
-          # failure. The universal crt arrives with windows itself.
-          $resolvedByWindows = @($imports | Where-Object {
-              $_ -like 'api-ms-win-*' -or $_ -like 'ext-ms-win-*' -or
-              $_ -in @('ucrtbase.dll', 'vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll')
+            Select-String -Pattern '^\s+\S+\.dll\s*$' |
+            ForEach-Object { $_.Line.Trim().ToLower() } | Sort-Object -Unique
+          $windowsDlls = @($imports | Where-Object {
+            $_ -like 'api-ms-win-*' -or $_ -like 'ext-ms-win-*' -or
+            $_ -in @('ucrtbase.dll','vcruntime140.dll','vcruntime140_1.dll','msvcp140.dll')
           })
-          $unresolved = @($imports | Where-Object {
-              $_ -notin $resolvedByWindows -and
-              -not (Test-Path (Join-Path $staging $_)) -and
-              -not (Test-Path (Join-Path $systemDir $_))
+          $missingDlls = @($imports | Where-Object {
+            $_ -notin $windowsDlls -and -not (Test-Path (Join-Path $staging $_)) -and
+            -not (Test-Path (Join-Path $systemDir $_))
           })
-          "$($imports.Count) imports: $($resolvedByWindows.Count) resolved by windows itself, $($imports.Count - $unresolved.Count - $resolvedByWindows.Count) shipped with the app"
-          if ($unresolved) {
-              "not in the package and not a windows library: $($unresolved -join ', ')"
-              throw 'the exe imports libraries the package does not carry'
-          }
-
-          Compress-Archive -Path (Join-Path $staging '*') `
-            -DestinationPath "release-artifacts/Resonance-${version}-Windows.zip"
-          Get-ChildItem release-artifacts | Select-Object Name, Length
-
-      # ── publish ───────────────────────────────────────────────────────────
-      - name: Publish this platform's assets to the release
+          if ($missingDlls) { throw "Windows package misses DLLs: $($missingDlls -join ', ')" }
+          Compress-Archive -Path (Join-Path $staging '*') -DestinationPath "release-artifacts/Resonance-${version}-Windows.zip"
+      - name: Upload to GitHub Release
         if: github.event_name == 'push' || inputs.publish
         uses: softprops/action-gh-release@v2
         with:
-          # every platform writes to the same tag, so the release is the union of
-          # what the three runners produced. Re-running a single platform appends
-          # to it rather than starting over.
           tag_name: ${{ env.RELEASE_TAG }}
-          # a tag created here points at the commit that was built, not at the
-          # default branch: a dispatch with a brand new tag used to leave the tag
-          # pointing somewhere the sources never were
           target_commitish: ${{ github.sha }}
           name: Resonance ${{ env.RELEASE_TAG }}
-          body: |
-            ## Resonance ${{ env.RELEASE_TAG }}
-
-            ### Downloads
-
-            | Platform | File |
-            |----------|------|
-            | 🍎 macOS | `Resonance-*-macOS.dmg` |
-            | 🪟 Windows | `Resonance-*-Windows.zip` |
-            | 🐧 Linux | `Resonance-*-Linux.AppImage` |
-
-            > [!NOTE]
-            > **macOS**: the app is signed ad hoc unless the Apple secrets are set; if Gatekeeper
-            > blocks it, right-click → Open, or run `xattr -cr Resonance.app`.
-            > **Linux**: `chmod +x Resonance-*.AppImage` before running it.
-            > **Windows**: extract the zip and run `resonance.exe`.
-          draft: false
-          prerelease: false
-          # the updater reads the latest release, so a draft would be invisible
-          # to it; asset names carry the platform, which is what it matches on
           files: resonance/release-artifacts/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Report signing mode
-        # Windows defaults to PowerShell, where this bash is spelled out
+  macos:
+    name: "macOS: build and package"
+    runs-on: macos-latest
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - name: Check out app
+        uses: actions/checkout@v4
+        with:
+          path: resonance
+      - name: Check out sidecar source
+        uses: actions/checkout@v4
+        with:
+          repository: BohdanKrakoviatskyi/BSC---BetterSoundCloud
+          ref: feature/soundcloud-backend
+          path: BSC---BetterSoundCloud
+          sparse-checkout: |
+            backend
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: BSC---BetterSoundCloud/backend/go.mod
+      - name: Set up build tools
+        uses: ./.github/actions/setup-macos
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: resonance/spotify-core -> resonance/build/cargo/spotify-core_7143b
+      - name: Build and package
+        working-directory: resonance
         shell: bash
-        env:
-          APPLE_SIGNED: ${{ steps.apple.outputs.enabled == 'true' }}
-          APPLE_NOTARIZED: ${{ steps.apple.outputs.notarize == 'true' }}
         run: |
-          if [ "$RUNNER_OS" = "macOS" ]; then
-            if [ "$APPLE_SIGNED" = "true" ] && [ "$APPLE_NOTARIZED" = "true" ]; then
-              echo "macOS build: Apple Developer signed and notarised"
-            elif [ "$APPLE_SIGNED" = "true" ]; then
-              echo "::warning::macOS build is signed but NOT notarised; Gatekeeper still blocks it on first launch. Set APPLE_ID, APPLE_PASSWORD and APPLE_TEAM_ID."
-            else
-              echo "::warning::macOS build is ad-hoc signed and NOT notarised. Set APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY, APPLE_KEYCHAIN_PASSWORD to sign it."
-            fi
-          else
-            echo "$RUNNER_OS build: platform code signing is not configured; the installer is unsigned."
+          set -euo pipefail
+          node scripts/sync-release-version.mjs "$RELEASE_TAG"
+          QT_PREFIX="$(brew --prefix qt@6)"
+          export PATH="$QT_PREFIX/bin:$PATH"
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+            -DCMAKE_PREFIX_PATH="$QT_PREFIX;$(brew --prefix qcoro6);$(brew --prefix qtkeychain)" \
+            -DSWIFTIFY_SIDECAR_SOURCE_DIR="$PWD/../BSC---BetterSoundCloud/backend" \
+            -DSWIFTIFY_CODESIGN_IDENTITY=-
+          cmake --build build --target resonance
+          test -f build/sidecar/local-api
+          mkdir -p release-artifacts
+          ./packaging/macos/package-dmg.sh build/resonance.app release-artifacts "${RELEASE_TAG#v}" -
+          ZIP="release-artifacts/Resonance-${RELEASE_TAG#v}-macOS.zip"
+          test -f "$ZIP"
+          CHECK="$(mktemp -d)"
+          ditto -x -k "$ZIP" "$CHECK"
+          BUNDLE="$CHECK/Resonance.app/Contents"
+          for entry in MacOS/resonance MacOS/local-api Frameworks/QtCore.framework/Versions/A/QtCore Frameworks/QtQuick.framework/Versions/A/QtQuick Frameworks/QtMultimedia.framework/Versions/A/QtMultimedia PlugIns/platforms/libqcocoa.dylib; do
+            test -e "$BUNDLE/$entry"
+          done
+          if otool -L "$BUNDLE/MacOS/resonance" | grep -qE '(/opt/homebrew|/usr/local)'; then
+            echo 'App bundle still links against libraries from the build machine'
+            exit 1
           fi
+      - name: Upload to GitHub Release
+        if: github.event_name == 'push' || inputs.publish
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
+          name: Resonance ${{ env.RELEASE_TAG }}
+          files: resonance/release-artifacts/*

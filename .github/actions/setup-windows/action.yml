@@ -1,0 +1,41 @@
+name: Set up Windows build tools
+runs:
+  using: composite
+  steps:
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+    - name: Set up MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v4
+      with:
+        version: '6.9.*'
+        host: windows
+        target: desktop
+        arch: win64_msvc2022_64
+        modules: qtmultimedia qtshadertools
+        cache: true
+    - name: Install Ninja
+      shell: pwsh
+      run: choco install ninja --no-progress -y
+    - name: Build dependencies
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $qt = $env:QT_ROOT_DIR
+        if (-not $qt) { $qt = $env:Qt6_DIR }
+        if (-not $qt) { throw 'Qt was not installed' }
+        $env:PATH = "$qt/bin;$env:PATH"
+        git clone --depth 1 --branch v0.11.0 https://github.com/danvratil/qcoro.git qcoro
+        cmake -S qcoro -B qcoro\build -G Ninja -DCMAKE_BUILD_TYPE=Release `
+          -DCMAKE_PREFIX_PATH="$qt" -DCMAKE_INSTALL_PREFIX="C:\qcoro-install" `
+          -DQCORO_WITH_QTWEBSOCKETS=OFF -DQCORO_WITH_QTTEST=OFF `
+          -DQCORO_BUILD_TESTING=OFF -DQCORO_BUILD_EXAMPLES=OFF -DQCORO_ENABLE_COMPAT_METHOD_TESTS=OFF
+        cmake --build qcoro\build
+        cmake --install qcoro\build
+        git clone --depth 1 --branch v0.14.0 https://github.com/frankosterfeld/qtkeychain.git qtkeychain
+        cmake -S qtkeychain -B qtkeychain\build -G Ninja -DCMAKE_BUILD_TYPE=Release `
+          -DCMAKE_PREFIX_PATH="$qt;C:\qcoro-install" -DCMAKE_INSTALL_PREFIX="C:\qcoro-install" `
+          -DBUILD_WITH_QT6=ON -DBUILD_TEST_APPLICATION=OFF -DBUILD_SHARED_LIBS=OFF -DLIBSECRET_SUPPORT=OFF
+        cmake --build qtkeychain\build
+        cmake --install qtkeychain\build

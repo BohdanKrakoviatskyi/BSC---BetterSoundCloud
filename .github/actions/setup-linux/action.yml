@@ -1,0 +1,43 @@
+name: Set up Linux build tools
+runs:
+  using: composite
+  steps:
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+    - name: Install system dependencies
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install --yes --no-install-recommends \
+          build-essential cmake ninja-build pkg-config file wget git ca-certificates clang-18 \
+          libgl1-mesa-dev libvulkan-dev libxkbcommon-dev libxcb-cursor0 libxcb-icccm4 \
+          libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libwayland-dev \
+          libdbus-1-dev libpulse-dev libasound2-dev libsecret-1-dev libsecret-1-0 libssl-dev \
+          libfuse2t64 patchelf
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v4
+      with:
+        version: '6.9.*'
+        host: linux
+        target: desktop
+        arch: linux_gcc_64
+        modules: qtmultimedia qtshadertools
+        cache: true
+    - name: Build dependencies
+      shell: bash
+      run: |
+        set -euo pipefail
+        git clone --depth 1 --branch v0.11.0 https://github.com/danvratil/qcoro.git "$RUNNER_TEMP/qcoro"
+        cmake -S "$RUNNER_TEMP/qcoro" -B "$RUNNER_TEMP/qcoro/build" -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
+          -DBUILD_TESTING=OFF -DQCORO_WITH_QTWEBSOCKETS=OFF -DQCORO_WITH_QTTEST=OFF \
+          -DQCORO_BUILD_TESTING=OFF -DQCORO_BUILD_EXAMPLES=OFF -DQCORO_ENABLE_COMPAT_METHOD_TESTS=OFF
+        cmake --build "$RUNNER_TEMP/qcoro/build"
+        sudo cmake --install "$RUNNER_TEMP/qcoro/build"
+        git clone --depth 1 --branch v0.14.0 https://github.com/frankosterfeld/qtkeychain.git "$RUNNER_TEMP/qtkeychain"
+        cmake -S "$RUNNER_TEMP/qtkeychain" -B "$RUNNER_TEMP/qtkeychain/build" -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
+          -DBUILD_WITH_QT6=ON -DBUILD_TEST_APPLICATION=OFF -DLIBSECRET_SUPPORT=ON
+        cmake --build "$RUNNER_TEMP/qtkeychain/build"
+        sudo cmake --install "$RUNNER_TEMP/qtkeychain/build"
+        sudo ldconfig
