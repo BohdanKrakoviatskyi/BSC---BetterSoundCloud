@@ -363,11 +363,13 @@ fn duration_ms(format: &mut dyn FormatReader) -> u64 {
     let params = track.codec_params.clone();
     if let (Some(frames), Some(rate)) = (params.n_frames, params.sample_rate)
         && rate > 0
+        && frames > 0
     {
         return frames * 1000 / u64::from(rate);
     }
-    // nothing in the header says (a variable rate mp3 without one): count
-    // the packets, which reads the file without decoding it
+    // nothing in the header says how long it runs: a variable rate mp3
+    // without a xing header, or an HLS fMP4 whose mvhd says 0. count the
+    // packets, which reads the file without decoding it
     let Some(time_base) = params
         .time_base
         .or_else(|| params.sample_rate.map(|rate| TimeBase::new(1, rate)))

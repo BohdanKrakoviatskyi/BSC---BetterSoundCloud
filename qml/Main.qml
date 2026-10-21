@@ -16,11 +16,7 @@ ApplicationWindow {
                                          || bgPathLower.endsWith(".avi") || bgPathLower.endsWith(".m4v")
     readonly property bool isCustomBgGif: bgPathLower.endsWith(".gif")
     readonly property bool isCustomBgStatic: Settings.customBackgroundPath.length > 0 && !isCustomBgVideo && !isCustomBgGif
-    readonly property url customBgUrl: {
-        const p = Settings.customBackgroundPath
-        if (p.length === 0) return ""
-        return (p.startsWith("file://") || p.startsWith("qrc:/")) ? p : ("file://" + p)
-    }
+    readonly property url customBgUrl: Settings.customBackgroundUrl
 
     property real sidebarWidth: 232
     readonly property real effectiveSidebarWidth: Math.max(132, Math.min(sidebarWidth, width * 0.28))

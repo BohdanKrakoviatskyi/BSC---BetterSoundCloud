@@ -219,7 +219,7 @@ Item {
                                     Image {
                                         id: previewImg
                                         anchors.fill: parent
-                                        source: bgCard.modelData.startsWith("file://") ? bgCard.modelData : ("file://" + bgCard.modelData)
+                                        source: Settings.backgroundUrl(bgCard.modelData)
                                         fillMode: Image.PreserveAspectCrop
                                         asynchronous: true
                                         visible: !bgCard.isVideo && !bgCard.isGif
@@ -228,7 +228,7 @@ Item {
                                     AnimatedImage {
                                         id: previewGif
                                         anchors.fill: parent
-                                        source: bgCard.modelData.startsWith("file://") ? bgCard.modelData : ("file://" + bgCard.modelData)
+                                        source: Settings.backgroundUrl(bgCard.modelData)
                                         fillMode: Image.PreserveAspectCrop
                                         asynchronous: true
                                         visible: bgCard.isGif
@@ -244,7 +244,7 @@ Item {
 
                                             MediaPlayer {
                                                 id: cardVideoPlayer
-                                                source: bgCard.modelData.startsWith("file://") ? bgCard.modelData : ("file://" + bgCard.modelData)
+                                                source: Settings.backgroundUrl(bgCard.modelData)
                                                 loops: MediaPlayer.Infinite
                                                 videoOutput: cardVideoOutput
                                                 audioOutput: AudioOutput { muted: true; volume: 0 }
