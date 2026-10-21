@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.Basic
-import Swiftify
+import Resonance
 
 // the navigation drawer (MusicSidebar): destinations, the two playlist groups
 // and the account. the list of every playlist is virtualized, so a library of

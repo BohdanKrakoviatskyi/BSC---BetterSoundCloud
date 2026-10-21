@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Templates as T
-import Swiftify
+import Resonance
 
 // a song in the immersive queue (FullscreenQueueRow): its cover, name and
 // artists, and a speaker beside the one playing. the others play on click.

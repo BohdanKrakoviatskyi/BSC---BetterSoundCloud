@@ -11,7 +11,7 @@
 
 #include <cmath>
 
-namespace swiftify {
+namespace resonance {
 
 namespace {
 
@@ -337,4 +337,4 @@ MaterialScheme::Roles MaterialScheme::interpolate(const Roles &from, const Roles
     return roles;
 }
 
-} // namespace swiftify
+} // namespace resonance

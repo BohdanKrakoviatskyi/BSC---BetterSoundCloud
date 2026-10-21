@@ -15,7 +15,7 @@
 class QQmlEngine;
 class QJSEngine;
 
-namespace swiftify {
+namespace resonance {
 
 class Settings;
 
@@ -38,10 +38,10 @@ class LocalLibrary : public QObject {
 
     /// what was added: folders, searched all the way down, and single files
     Q_PROPERTY(QStringList sources READ sources NOTIFY sourcesChanged FINAL)
-    Q_PROPERTY(swiftify::SongListModel *songs READ songs CONSTANT FINAL)
+    Q_PROPERTY(resonance::SongListModel *songs READ songs CONSTANT FINAL)
     Q_PROPERTY(bool scanning READ isScanning NOTIFY scanningChanged FINAL)
     /// the playlists made here, newest first
-    Q_PROPERTY(swiftify::PlaylistListModel *playlists READ playlists CONSTANT FINAL)
+    Q_PROPERTY(resonance::PlaylistListModel *playlists READ playlists CONSTANT FINAL)
     /// tracks are being copied into a playlist
     Q_PROPERTY(bool copying READ isCopying NOTIFY copyingChanged FINAL)
 
@@ -237,4 +237,4 @@ private:
     bool m_rescanQueued = false;
 };
 
-} // namespace swiftify
+} // namespace resonance

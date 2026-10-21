@@ -4,7 +4,7 @@
 
 #include <algorithm>
 
-namespace swiftify::color {
+namespace resonance::color {
 
 /// end4's ColorUtils.mix: `amount` of `a`, the rest of `b`, alpha included.
 inline QColor mix(const QColor &a, const QColor &b, qreal amount)
@@ -29,4 +29,4 @@ inline qreal luminance709(const QColor &color)
     return 0.2126 * color.redF() + 0.7152 * color.greenF() + 0.0722 * color.blueF();
 }
 
-} // namespace swiftify::color
+} // namespace resonance::color

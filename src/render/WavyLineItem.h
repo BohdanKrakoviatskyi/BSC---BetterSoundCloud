@@ -5,7 +5,7 @@
 #include <QQuickItem>
 #include <QtQml/qqmlregistration.h>
 
-namespace swiftify {
+namespace resonance {
 
 class AmbientClock;
 
@@ -76,4 +76,4 @@ private:
     QPointer<AmbientClock> m_followed;
 };
 
-} // namespace swiftify
+} // namespace resonance

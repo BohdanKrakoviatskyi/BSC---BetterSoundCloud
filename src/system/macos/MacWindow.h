@@ -2,7 +2,7 @@
 
 class QWindow;
 
-namespace swiftify::macos {
+namespace resonance::macos {
 
 /// takes away what is left of a title bar the content already runs under
 /// (Qt::ExpandedClientAreaHint, Qt::NoTitleBarBackgroundHint): the title text
@@ -12,7 +12,7 @@ void styleTitleBar(QWindow *window);
 
 /// keeps two drawables in the window's metal layer rather than the system's
 /// three. each is the window's whole size in pixels, 16 MB for a retina
-/// window the size of the main one, and the frames swiftify draws are cheap
+/// window the size of the main one, and the frames resonance draws are cheap
 /// enough that a third, queued behind, buys nothing visible.
 /// false if the window has no metal layer yet
 bool limitDrawables(QWindow *window);
@@ -26,4 +26,4 @@ bool limitDrawables(QWindow *window);
 /// false if the window has no view or frame to report for yet
 bool holdColorSpace(QWindow *window);
 
-} // namespace swiftify::macos
+} // namespace resonance::macos

@@ -5,7 +5,7 @@
 
 #include <algorithm>
 
-using namespace swiftify;
+using namespace resonance;
 
 class PaletteTest : public QObject {
     Q_OBJECT

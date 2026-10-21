@@ -3,7 +3,7 @@
 #include <QDir>
 #include <QLocalSocket>
 
-namespace swiftify {
+namespace resonance {
 
 QString SingleInstance::commandFrom(const QStringList &arguments)
 {
@@ -33,7 +33,7 @@ SingleInstance::SingleInstance(QObject *parent)
 
 QString SingleInstance::serverName()
 {
-    return QStringLiteral("swiftify-") + QDir::home().dirName();
+    return QStringLiteral("resonance-") + QDir::home().dirName();
 }
 
 bool SingleInstance::forwardToRunningInstance(const QStringList &arguments)
@@ -57,4 +57,4 @@ void SingleInstance::listen()
     m_server.listen(serverName());
 }
 
-} // namespace swiftify
+} // namespace resonance

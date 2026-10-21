@@ -70,7 +70,7 @@ impl SharedSpectrum {
         let worker_enabled = Arc::clone(&enabled);
         let worker_generation = Arc::clone(&generation);
         thread::Builder::new()
-            .name("swiftify-spectrum".to_owned())
+            .name("resonance-spectrum".to_owned())
             .spawn(move || {
                 let mut analyzer = SpectrumAnalyzer::new();
                 let mut analyzer_generation = 0;

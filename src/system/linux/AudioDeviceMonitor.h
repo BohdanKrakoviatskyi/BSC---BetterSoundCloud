@@ -11,7 +11,7 @@ struct pa_server_info;
 struct pa_sink_info;
 struct pa_threaded_mainloop;
 
-namespace swiftify {
+namespace resonance {
 
 /// watches pulseaudio (pipewire-pulse) for the output going away or arriving.
 ///
@@ -61,4 +61,4 @@ private:
     QDateTime m_defaultChangedAt;
 };
 
-} // namespace swiftify
+} // namespace resonance

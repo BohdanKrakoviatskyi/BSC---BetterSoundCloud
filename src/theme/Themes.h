@@ -7,7 +7,7 @@
 #include <QString>
 #include <QtQml/qqmlregistration.h>
 
-namespace swiftify {
+namespace resonance {
 
 /// a colour theme as the settings show it: its name and a few of its colours
 /// in the current light or dark, for the swatch
@@ -80,4 +80,4 @@ MaterialScheme::Roles roles(const Variant &variant, bool dark);
 qreal contrast(const QColor &a, const QColor &b);
 
 } // namespace themes
-} // namespace swiftify
+} // namespace resonance

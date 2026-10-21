@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Effects
-import Swiftify
+import Resonance
 
 // the floating player (FloatingPlayerBar): transport, what is playing with its
 // seek line, and lyrics, queue and volume. its colours follow the cover.

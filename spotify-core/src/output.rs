@@ -221,7 +221,7 @@ impl LocalOutput {
         let (opened, opening) = mpsc::sync_channel(1);
         let filled = Arc::clone(&shared);
         thread::Builder::new()
-            .name("swiftify-local-output".to_owned())
+            .name("resonance-local-output".to_owned())
             .spawn(move || {
                 let Some((stream, rate)) = open_stereo_stream(move |out| filled.fill(out)) else {
                     let _ = opened.send(None);

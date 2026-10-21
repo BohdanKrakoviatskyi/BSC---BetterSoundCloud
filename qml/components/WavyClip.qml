@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // what it holds, cut to a rounded rectangle whose edge turns to running
 // scallops (rounded_image.frag) while `wavy`, springing in and out. at rest

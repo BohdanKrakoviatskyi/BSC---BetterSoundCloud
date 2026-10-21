@@ -19,9 +19,9 @@
 
 #include <functional>
 
-namespace swiftify {
+namespace resonance {
 
-Q_LOGGING_CATEGORY(lcTheme, "swiftify.theme")
+Q_LOGGING_CATEGORY(lcTheme, "resonance.theme")
 
 namespace {
 
@@ -288,7 +288,7 @@ QList<ThemeOption> Theme::themeOptions(bool dark) const
                           QStringLiteral("Desktop"),
 #endif
                           desktop ? *desktop : rolesFromSeed(QColor::fromRgba(kAccent), dark, true)));
-    options.append(option(QStringLiteral("builtin"), QStringLiteral("Swiftify"), rolesFromSeed(QColor::fromRgba(kAccent), dark, true)));
+    options.append(option(QStringLiteral("builtin"), QStringLiteral("Resonance"), rolesFromSeed(QColor::fromRgba(kAccent), dark, true)));
     for (const themes::Family &family : themes::families()) {
         options.append(option(family.id, family.name, themes::roles(dark ? family.dark : family.light, dark)));
     }
@@ -316,4 +316,4 @@ void Theme::watchSchemeFile()
     }
 }
 
-} // namespace swiftify
+} // namespace resonance

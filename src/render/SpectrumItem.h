@@ -10,7 +10,7 @@
 #include <QVariantAnimation>
 #include <QtQml/qqmlregistration.h>
 
-namespace swiftify {
+namespace resonance {
 
 /// every visualizer in the app (SpectrumLayerRenderer + SpectrumBarsLayer):
 /// bars with their glow in one draw, and the halo or wave behind them as one
@@ -172,4 +172,4 @@ private:
     bool m_configured = false;
 };
 
-} // namespace swiftify
+} // namespace resonance

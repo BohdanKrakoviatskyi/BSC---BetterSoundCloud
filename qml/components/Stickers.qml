@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // big, faint material shapes scattered behind something, after end4-pC's
 // desktop stickers but kept quiet: tonal, low in contrast, and partly cut off
@@ -12,7 +12,7 @@ Item {
     id: root
 
     /// what the layout is drawn from: a page's or a collection's name
-    property string key: "swiftify"
+    property string key: "resonance"
     property int count: 4
     property real minimumSize: 70
     property real maximumSize: 200

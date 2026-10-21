@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // one colour theme in the settings: a little window in its colours, with a
 // page, two lines of text and its three accents, and its name beneath. the

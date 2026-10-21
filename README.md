@@ -60,8 +60,8 @@ source "$HOME/.cargo/env"
 Configure and build:
 
 ```bash
-git clone https://github.com/BohdanKrakoviatskyi/BSC---BetterSoundCloud.git
-cd BSC---BetterSoundCloud
+git clone https://github.com/BohdanKrakoviatskyi/BSC---BetterSoundCloud.git Resonance
+cd Resonance
 
 # Configure CMake
 QT_PREFIX="$(brew --prefix qt@6)"
@@ -74,13 +74,13 @@ cmake -B build -G Ninja \
   -DBUILD_TESTING=OFF
 
 # Build
-cmake --build build --target swiftify
+cmake --build build --target resonance
 ```
 
 To create a standalone, fully bundled macOS `.dmg` and `.zip`:
 
 ```bash
-./packaging/macos/package-dmg.sh build/swiftify.app release-artifacts 0.3.3 -
+./packaging/macos/package-dmg.sh build/resonance.app release-artifacts 0.3.3 -
 ```
 
 ---
@@ -109,13 +109,11 @@ sudo pacman -S --needed git clang cmake ninja pkgconf qt6-base qt6-declarative \
   libpulse alsa-lib openssl rust go
 ```
 
-The SoundCloud backend (`local-api`) is built from the BSC---BetterSoundCloud
-backend checkout that has to sit beside this one (`../BSC---BetterSoundCloud/backend`,
-the layout the release workflow uses). If the two directories are laid out
-differently, point CMake at the backend with
-`-DSWIFTIFY_SIDECAR_SOURCE_DIR=/path/to/backend`, or at an already built binary
-with `-DSWIFTIFY_SIDECAR_BINARY=/path/to/local-api`. Without it the app still runs,
-but SoundCloud shows as unavailable.
+The SoundCloud backend (`local-api`) is included under `backend/` and built by
+CMake by default. Go 1.22 or newer is required; Go may download the backend's
+module dependency on the first build. To use an existing binary instead, set
+`-DRESONANCE_SIDECAR_BINARY=/path/to/local-api`. To build without SoundCloud,
+explicitly set `-DRESONANCE_SIDECAR_BUILD=OFF`.
 
 Configure, build and install:
 
@@ -132,8 +130,8 @@ cmake --install build
 ```
 
 `cmake --install` also writes the desktop entry and hicolor icons, so the app
-appears in the desktop's launcher. Run it as `swiftify` (with `$HOME/.local/bin`
-on `PATH`), or straight from the build tree with `./build/swiftify`. Building the
+appears in the desktop's launcher. Run it as `resonance` (with `$HOME/.local/bin`
+on `PATH`), or straight from the build tree with `./build/resonance`. Building the
 tests (`-DBUILD_TESTING=ON`) additionally needs `qt6-qtbase-private-devel` on
 Fedora, for the QtGui private headers they read frames through.
 
@@ -141,7 +139,7 @@ On Linux the app integrates with system MPRIS (media keys, `playerctl`, lock
 screen widgets), follows the default PulseAudio/PipeWire sink so unplugging
 headphones pauses playback, and uses a StatusNotifier tray icon where the desktop
 provides one (for example KDE, or GNOME with an AppIndicator extension). A single
-instance is kept per user; launching `swiftify --play-pause`, `--next`,
+instance is kept per user; launching `resonance --play-pause`, `--next`,
 `--previous` or `--immersive` forwards the command to the running copy.
 
 ---
@@ -175,10 +173,10 @@ Resonance supports single-instance IPC. Launching a command while the player is 
 Example keybinding configuration for Hyprland (`hyprland.conf`):
 
 ```ini
-bind = SUPER SHIFT, M, exec, swiftify --immersive
-bind = , XF86AudioPlay, exec, swiftify --play-pause
-bind = , XF86AudioNext, exec, swiftify --next
-bind = , XF86AudioPrev, exec, swiftify --previous
+bind = SUPER SHIFT, M, exec, resonance --immersive
+bind = , XF86AudioPlay, exec, resonance --play-pause
+bind = , XF86AudioNext, exec, resonance --next
+bind = , XF86AudioPrev, exec, resonance --previous
 ```
 
 ---

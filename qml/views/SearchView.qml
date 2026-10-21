@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.Basic
-import Swiftify
+import Resonance
 
 // Search (GlobalSearchView): categories and history when empty, results after.
 Flickable {

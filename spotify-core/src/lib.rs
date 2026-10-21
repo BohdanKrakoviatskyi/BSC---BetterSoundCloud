@@ -188,7 +188,7 @@ impl PlaybackTimeline {
 }
 
 /// what a play request that a newer one replaced ends with
-/// (SWIFTIFY_CORE_SUPERSEDED in the c header). never shown: the front end has
+/// (RESONANCE_CORE_SUPERSEDED in the c header). never shown: the front end has
 /// withdrawn it already, or asks again for the song it still wants.
 pub const SUPERSEDED: &str = "the request was replaced by a newer one";
 
@@ -1213,7 +1213,7 @@ impl SpotifyCore {
         };
         let timeline = Arc::clone(&self.timeline);
         std::thread::Builder::new()
-            .name("swiftify-local-end".to_owned())
+            .name("resonance-local-end".to_owned())
             .spawn(move || {
                 while !cancel.load(Ordering::Relaxed) && !sink.empty() {
                     std::thread::sleep(Duration::from_millis(200));

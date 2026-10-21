@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // Author's tracks page: loaded gradually with infinite scroll pagination (20 at a time)
 SongListPage {

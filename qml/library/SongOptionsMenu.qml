@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // SongOptionsContent: save, go to album or artist, queue, and add to
 // or remove from a playlist. one instance per window, opened at the pointer.

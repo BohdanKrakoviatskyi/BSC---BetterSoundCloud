@@ -2,7 +2,7 @@
 
 #include <QQmlEngine>
 
-namespace swiftify {
+namespace resonance {
 
 namespace {
 ErrorCenter *s_instance = nullptr;
@@ -54,4 +54,4 @@ void ErrorCenter::clear()
     emit messageChanged();
 }
 
-} // namespace swiftify
+} // namespace resonance

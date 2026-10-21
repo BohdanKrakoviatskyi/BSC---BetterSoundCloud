@@ -1,6 +1,6 @@
 #include "motion/FrameTicker.h"
 
-namespace swiftify {
+namespace resonance {
 
 FrameTicker *FrameTicker::instance()
 {
@@ -48,4 +48,4 @@ void FrameTicker::update()
     }
 }
 
-} // namespace swiftify
+} // namespace resonance

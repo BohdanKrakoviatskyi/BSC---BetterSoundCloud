@@ -7,7 +7,7 @@
 #include <memory>
 #include <utility>
 
-namespace swiftify {
+namespace resonance {
 
 /// set when the work holding it has been withdrawn. checked after every await,
 /// the way swift code calls Task.checkCancellation().
@@ -67,4 +67,4 @@ void detach(QCoro::Task<T> &&task)
     [[maybe_unused]] auto discarded = std::move(task);
 }
 
-} // namespace swiftify
+} // namespace resonance

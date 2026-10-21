@@ -16,7 +16,7 @@
 class QQmlEngine;
 class QJSEngine;
 
-namespace swiftify {
+namespace resonance {
 
 class ErrorCenter;
 class Settings;
@@ -112,7 +112,7 @@ public:
     bool operator==(const SoundCloudTrackDetails &) const = default;
 };
 
-/// soundcloud, through the go sidecar the better soundcloud app also runs.
+/// soundcloud, through the go sidecar the SoundCloud app also runs.
 /// the app connects with two things the person pastes in: its own client id,
 /// which signs a stream url, and the access token of their session, which the
 /// sidecar keeps (and verifies against /me) rather than the app.
@@ -137,12 +137,12 @@ class SoundCloud : public QObject {
     Q_PROPERTY(bool available READ available NOTIFY availableChanged FINAL)
 
     // Artist Profile and related models
-    Q_PROPERTY(swiftify::SoundCloudArtistProfile currentArtist READ currentArtist NOTIFY currentArtistChanged FINAL)
-    Q_PROPERTY(swiftify::SongListModel *artistTracks READ artistTracks CONSTANT FINAL)
-    Q_PROPERTY(swiftify::SongListModel *artistLikes READ artistLikes CONSTANT FINAL)
-    Q_PROPERTY(swiftify::PlaylistListModel *artistPlaylists READ artistPlaylists CONSTANT FINAL)
+    Q_PROPERTY(resonance::SoundCloudArtistProfile currentArtist READ currentArtist NOTIFY currentArtistChanged FINAL)
+    Q_PROPERTY(resonance::SongListModel *artistTracks READ artistTracks CONSTANT FINAL)
+    Q_PROPERTY(resonance::SongListModel *artistLikes READ artistLikes CONSTANT FINAL)
+    Q_PROPERTY(resonance::PlaylistListModel *artistPlaylists READ artistPlaylists CONSTANT FINAL)
     Q_PROPERTY(bool loadingArtist READ loadingArtist NOTIFY loadingArtistChanged FINAL)
-    Q_PROPERTY(QString artistError READ artistError NOTIFY artistErrorChanged FINAL)
+
 
     // Tracks and likes pagination
     Q_PROPERTY(bool hasMoreArtistTracks READ hasMoreArtistTracks NOTIFY hasMoreArtistTracksChanged FINAL)
@@ -153,10 +153,10 @@ class SoundCloud : public QObject {
     Q_PROPERTY(bool loadingMoreArtistLikes READ loadingMoreArtistLikes NOTIFY loadingMoreArtistLikesChanged FINAL)
 
     // Track details and related tracks
-    Q_PROPERTY(swiftify::SoundCloudTrackDetails currentTrackDetails READ currentTrackDetails NOTIFY currentTrackDetailsChanged FINAL)
-    Q_PROPERTY(swiftify::SongListModel *relatedTracks READ relatedTracks CONSTANT FINAL)
+    Q_PROPERTY(resonance::SoundCloudTrackDetails currentTrackDetails READ currentTrackDetails NOTIFY currentTrackDetailsChanged FINAL)
+    Q_PROPERTY(resonance::SongListModel *relatedTracks READ relatedTracks CONSTANT FINAL)
     Q_PROPERTY(bool loadingTrackDetails READ loadingTrackDetails NOTIFY loadingTrackDetailsChanged FINAL)
-    Q_PROPERTY(QString trackDetailsError READ trackDetailsError NOTIFY trackDetailsErrorChanged FINAL)
+
 
 public:
     SoundCloud(SidecarClient *sidecar, Settings *settings, QNetworkAccessManager *network,
@@ -181,12 +181,12 @@ public:
     SongListModel *artistLikes() const { return m_artistLikes; }
     PlaylistListModel *artistPlaylists() const { return m_artistPlaylists; }
     bool loadingArtist() const { return m_loadingArtist; }
-    QString artistError() const { return m_artistError; }
+
 
     SoundCloudTrackDetails currentTrackDetails() const { return m_currentTrackDetails; }
     SongListModel *relatedTracks() const { return m_relatedTracks; }
     bool loadingTrackDetails() const { return m_loadingTrackDetails; }
-    QString trackDetailsError() const { return m_trackDetailsError; }
+
 
     /// connects with the two things that are pasted in: the client id goes to
     /// the sidecar's settings, the token is verified against /me and kept
@@ -210,8 +210,8 @@ public:
     Q_INVOKABLE void loadMoreArtistTracks();
 
     Q_INVOKABLE void openArtist(const QString &userIdOrUsername);
-    Q_INVOKABLE void openArtistFromSong(const swiftify::Song &song);
-    Q_INVOKABLE void openTrackDetails(const swiftify::Song &song);
+    Q_INVOKABLE void openArtistFromSong(const resonance::Song &song);
+    Q_INVOKABLE void openTrackDetails(const resonance::Song &song);
 
     /// the person's liked tracks, newest first
     QCoro::Task<QList<Song>> likedSongs();
@@ -233,7 +233,7 @@ public:
     /// a track that is only a preview, one that is not streamable at all
     QCoro::Task<QString> streamPath(const Song &song);
 
-    /// lyrics for the track through the sidecar (Deezer + LRCLIB matching, same as BetterSoundCloud)
+    /// lyrics for the track through the sidecar (Deezer + LRCLIB matching, same as Resonance)
     QCoro::Task<std::optional<Lyrics>> lyrics(const Song &song);
 
 signals:
@@ -245,7 +245,7 @@ signals:
 
     void currentArtistChanged();
     void loadingArtistChanged();
-    void artistErrorChanged();
+
 
     void hasMoreLikedSongsChanged();
     void loadingMoreLikesChanged();
@@ -256,7 +256,7 @@ signals:
 
     void currentTrackDetailsChanged();
     void loadingTrackDetailsChanged();
-    void trackDetailsErrorChanged();
+
 
 private:
     QCoro::Task<QJsonObject> call(QString method, QJsonObject params = {});
@@ -269,6 +269,12 @@ private:
     void report(const QString &message);
     QString streamCacheDirectory() const;
     QCoro::Task<> runConnect(QString clientId, QString token, quint64 generation);
+    QCoro::Task<> refreshStatusTask();
+    QCoro::Task<> logOutTask();
+    QCoro::Task<> loadMoreLikedSongsTask();
+    QCoro::Task<> loadMoreArtistLikesTask();
+    QCoro::Task<> loadMoreArtistTracksTask();
+    QCoro::Task<> openArtistFromSongTask(Song song);
     void pruneStreamCache(const QString &keeping);
     /// download and cache an HLS stream by fetching the M3U8 and every segment
     QCoro::Task<QString> downloadHlsStream(const QString &m3u8Url, const QString &uri);
@@ -297,7 +303,7 @@ private:
     SongListModel *m_artistLikes = nullptr;
     PlaylistListModel *m_artistPlaylists = nullptr;
     bool m_loadingArtist = false;
-    QString m_artistError;
+
     quint64 m_artistGeneration = 0;
     qint64 m_artistTracksUserId = 0;
     QString m_artistTracksNextHref;
@@ -315,8 +321,8 @@ private:
     SoundCloudTrackDetails m_currentTrackDetails;
     SongListModel *m_relatedTracks = nullptr;
     bool m_loadingTrackDetails = false;
-    QString m_trackDetailsError;
+
     quint64 m_trackDetailsGeneration = 0;
 };
 
-} // namespace swiftify
+} // namespace resonance

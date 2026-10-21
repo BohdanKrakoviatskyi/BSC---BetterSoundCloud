@@ -5,7 +5,7 @@
 #include <exception>
 #include <utility>
 
-namespace swiftify {
+namespace resonance {
 
 /// a failure the user may be shown. the message is already user-facing, worded
 /// as the swift app words it.
@@ -67,4 +67,4 @@ struct Cancelled : std::exception {
     const char *what() const noexcept override { return "cancelled"; }
 };
 
-} // namespace swiftify
+} // namespace resonance

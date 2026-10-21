@@ -14,7 +14,7 @@
 class QQmlEngine;
 class QJSEngine;
 
-namespace swiftify {
+namespace resonance {
 
 class UpdateManager : public QObject {
     Q_OBJECT
@@ -22,7 +22,7 @@ class UpdateManager : public QObject {
     QML_SINGLETON
 
     Q_PROPERTY(Status status READ status NOTIFY statusChanged FINAL)
-    Q_PROPERTY(bool updateAvailable READ updateAvailable NOTIFY updateAvailableChanged FINAL)
+
     Q_PROPERTY(QString currentVersion READ currentVersion CONSTANT FINAL)
     Q_PROPERTY(QString latestVersion READ latestVersion NOTIFY releaseInfoChanged FINAL)
     Q_PROPERTY(QString releaseTitle READ releaseTitle NOTIFY releaseInfoChanged FINAL)
@@ -35,7 +35,7 @@ class UpdateManager : public QObject {
     Q_PROPERTY(qint64 downloadedBytes READ downloadedBytes NOTIFY downloadProgressChanged FINAL)
     Q_PROPERTY(QString statusMessage READ statusMessage NOTIFY statusChanged FINAL)
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY errorChanged FINAL)
-    Q_PROPERTY(QString downloadedFilePath READ downloadedFilePath NOTIFY downloadedFilePathChanged FINAL)
+
 
 public:
     enum class Status {
@@ -57,7 +57,7 @@ public:
     static UpdateManager *create(QQmlEngine *engine, QJSEngine *scriptEngine);
 
     Status status() const { return m_status; }
-    bool updateAvailable() const { return m_updateAvailable; }
+
     QString currentVersion() const;
     QString latestVersion() const { return m_latestVersion; }
     QString releaseTitle() const { return m_releaseTitle; }
@@ -70,7 +70,7 @@ public:
     qint64 downloadedBytes() const { return m_downloadedBytes; }
     QString statusMessage() const { return m_statusMessage; }
     QString errorMessage() const { return m_errorMessage; }
-    QString downloadedFilePath() const { return m_downloadedFilePath; }
+
 
     Q_INVOKABLE void checkForUpdates();
     Q_INVOKABLE void startDownload();
@@ -80,11 +80,11 @@ public:
 
 signals:
     void statusChanged();
-    void updateAvailableChanged();
+
     void releaseInfoChanged();
     void downloadProgressChanged();
     void errorChanged();
-    void downloadedFilePathChanged();
+
 
 private:
     void setStatus(Status s, const QString &message = QString());
@@ -96,7 +96,7 @@ private:
     std::unique_ptr<QFile> m_downloadFile;
 
     Status m_status = Status::Idle;
-    bool m_updateAvailable = false;
+
     QString m_latestVersion;
     QString m_releaseTitle;
     QString m_releaseNotes;
@@ -111,4 +111,4 @@ private:
     QString m_downloadedFilePath;
 };
 
-} // namespace swiftify
+} // namespace resonance

@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // cover art: decoded at about the size shown, clipped by a shader rather
 // than a layer, over a gradient placeholder until it arrives. with

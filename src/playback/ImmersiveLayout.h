@@ -5,7 +5,7 @@
 
 #include <algorithm>
 
-namespace swiftify {
+namespace resonance {
 
 /// sizes the immersive player from its window (ImmersivePlayerLayout.swift).
 /// the spectrum's room is set aside before the artwork is sized, so a short
@@ -26,7 +26,7 @@ class ImmersiveLayout : public QObject {
     Q_PROPERTY(qreal spectrumSpacing READ spectrumSpacing NOTIFY changed FINAL)
     Q_PROPERTY(qreal contentHeight READ contentHeight NOTIFY changed FINAL)
     Q_PROPERTY(qreal artworkSize READ artworkSize NOTIFY changed FINAL)
-    Q_PROPERTY(bool compactSpacing READ usesCompactSpacing NOTIFY changed FINAL)
+
     Q_PROPERTY(qreal contentSpacing READ contentSpacing NOTIFY changed FINAL)
     Q_PROPERTY(qreal titleHeight READ titleHeight NOTIFY changed FINAL)
     Q_PROPERTY(qreal titleFontSize READ titleFontSize NOTIFY changed FINAL)
@@ -66,4 +66,4 @@ private:
     bool m_circular = false;
 };
 
-} // namespace swiftify
+} // namespace resonance

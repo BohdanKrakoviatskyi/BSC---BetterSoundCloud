@@ -1,0 +1,21 @@
+[Desktop Entry]
+Type=Application
+Name=Resonance
+GenericName=Music Player
+Comment=Play your Spotify library
+Exec=resonance
+Icon=resonance
+Terminal=false
+Categories=AudioVideo;Audio;Player;
+Keywords=spotify;music;player;lyrics;
+StartupWMClass=resonance
+SingleMainWindow=true
+Actions=Immersive;PlayPause;
+
+[Desktop Action Immersive]
+Name=Open Immersive Player
+Exec=resonance --immersive
+
+[Desktop Action PlayPause]
+Name=Play or Pause
+Exec=resonance --play-pause

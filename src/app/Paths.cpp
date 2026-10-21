@@ -3,7 +3,7 @@
 #include <QDir>
 #include <QStandardPaths>
 
-namespace swiftify::paths {
+namespace resonance::paths {
 
 namespace {
 
@@ -15,16 +15,26 @@ QString ensured(const QString &path)
 
 } // namespace
 
+QString appDirectory(const QString &base)
+{
+    const QString current = base + QStringLiteral("/Resonance");
+    const QString legacy = base + QStringLiteral("/Swiftify");
+    if (!QDir(current).exists() && QDir(legacy).exists()) {
+        if (!QDir().rename(legacy, current)) {
+            return legacy;
+        }
+    }
+    return ensured(current);
+}
+
 QString dataDirectory()
 {
-    return ensured(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-                   + QStringLiteral("/Swiftify"));
+    return appDirectory(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation));
 }
 
 QString cacheDirectory()
 {
-    return ensured(QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation)
-                   + QStringLiteral("/Swiftify"));
+    return appDirectory(QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation));
 }
 
-} // namespace swiftify::paths
+} // namespace resonance::paths

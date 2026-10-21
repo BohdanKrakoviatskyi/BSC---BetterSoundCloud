@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Dialogs
-import Swiftify
+import Resonance
 
 // a new playlist, or the open one's details (PlaylistEditorSheet): a cover
 // from the carousel, either a photo framed in the cropper or one of ten

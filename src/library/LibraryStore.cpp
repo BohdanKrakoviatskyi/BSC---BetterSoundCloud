@@ -17,9 +17,9 @@
 #include <algorithm>
 #include <chrono>
 
-namespace swiftify {
+namespace resonance {
 
-Q_LOGGING_CATEGORY(lcLibrary, "swiftify.library")
+Q_LOGGING_CATEGORY(lcLibrary, "resonance.library")
 
 namespace {
 
@@ -1755,7 +1755,6 @@ QCoro::Task<> LibraryStore::runSave(bool isNew, QString name, QString descriptio
         co_return;
     }
     const auto finish = [this](bool ok) {
-        setLoading(m_savingPlaylist, false);
         emit playlistSaveFinished(ok);
     };
     if (!m_session->hasFullLibraryAccess()) {
@@ -1776,7 +1775,7 @@ QCoro::Task<> LibraryStore::runSave(bool isNew, QString name, QString descriptio
         co_return;
     }
 
-    setLoading(m_savingPlaylist, true);
+
     Playlist target;
     try {
         if (isNew) {
@@ -1916,7 +1915,7 @@ void LibraryStore::reset()
     m_sortOrder = SortOrder::Playlist;
 
     m_loadingPlaylists = m_loadingSongs = m_loadingHome = m_loadingSavedSongs = false;
-    m_searching = m_loadingArtist = m_savingPlaylist = false;
+    m_searching = m_loadingArtist = false;
     emit loadingChanged();
     emit destinationChanged();
     emit selectedPlaylistChanged();
@@ -1925,4 +1924,4 @@ void LibraryStore::reset()
     emit playlistViewChanged();
 }
 
-} // namespace swiftify
+} // namespace resonance

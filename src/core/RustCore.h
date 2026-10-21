@@ -7,13 +7,13 @@
 
 #include <memory>
 
-struct SwiftifyCore;
+struct ResonanceCore;
 
-namespace swiftify {
+namespace resonance {
 
 class CoreRequest;
 
-/// spotify-core through its c abi (spotify-core/include/swiftify_core.h).
+/// spotify-core through its c abi (spotify-core/include/resonance_core.h).
 class RustCore : public PlaybackCore {
     Q_OBJECT
 
@@ -64,7 +64,7 @@ private:
     template <typename Start>
     QCoro::Task<QString> request(Start start);
 
-    SwiftifyCore *m_core = nullptr;
+    ResonanceCore *m_core = nullptr;
     std::unique_ptr<QSocketNotifier> m_notifier;
     QHash<quint64, std::shared_ptr<CoreRequest>> m_pending;
     quint64 m_nextRequestId = 0;
@@ -75,4 +75,4 @@ private:
     qint64 m_cacheBytes = 0;
 };
 
-} // namespace swiftify
+} // namespace resonance

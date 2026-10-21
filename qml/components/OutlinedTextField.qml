@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // a material outlined text field, with its label as the placeholder.
 Rectangle {

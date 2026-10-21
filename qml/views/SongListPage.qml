@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.Basic
-import Swiftify
+import Resonance
 
 // a collection page: a header, then its songs as list rows, with room for a
 // loading or empty state in between.

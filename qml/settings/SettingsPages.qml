@@ -3,9 +3,9 @@ import QtQuick
 import QtQuick.Dialogs
 import QtQuick.Effects
 import QtMultimedia
-import Swiftify
+import Resonance
 
-// the settings themselves (SwiftifySettingsView), one page per rail
+// the settings themselves (ResonanceSettingsView), one page per rail
 // destination: what the visualizers and the backdrop cost, the sleep fade and
 // audio quality, the folders of music of the person's own, how the app fits
 // the desktop, how much it moves and draws, the
@@ -1049,7 +1049,7 @@ Item {
                             anchors.centerIn: parent
                             width: 46
                             height: 46
-                            source: "qrc:/qt/qml/Swiftify/resources/swiftify-icon.png"
+                            source: "qrc:/qt/qml__LEGACY_RESONANCE_IGNORE__resources/resonance-icon.png"
                             sourceSize: Qt.size(96, 96)
                             smooth: true
                             mipmap: true
@@ -1221,7 +1221,7 @@ Item {
                                     if (Updater.status === Updater.Error) {
                                         return Updater.errorMessage;
                                     }
-                                    return "Релизы GitHub: BohdanKrakoviatskyi/BSC---BetterSoundCloud";
+                                    return "Релизы GitHub: Resonance";
                                 }
                                 font.pixelSize: Appearance.fontSize.smaller
                                 color: Appearance.colors.onSurfaceVariant

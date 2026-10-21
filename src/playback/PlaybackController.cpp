@@ -19,9 +19,9 @@
 #include <iterator>
 #include <utility>
 
-namespace swiftify {
+namespace resonance {
 
-Q_LOGGING_CATEGORY(lcPlayer, "swiftify.player")
+Q_LOGGING_CATEGORY(lcPlayer, "resonance.player")
 
 namespace {
 
@@ -44,7 +44,6 @@ PlaybackController::PlaybackController(PlaybackCore *core, SpotifySession *sessi
     , m_settings(settings)
     , m_errors(errors)
     , m_upNext(new SongListModel(this))
-    , m_previouslyPlayed(new SongListModel(this))
     , m_lyricsModel(new LyricsModel(this))
 {
     if (!s_instance) {
@@ -339,7 +338,6 @@ void PlaybackController::refreshSongDetails(const QList<Song> &fresh)
 void PlaybackController::queueDidChange()
 {
     m_upNext->setSongs(upNextSongs());
-    m_previouslyPlayed->setSongs(previouslyPlayedSongs());
     emit queueChanged();
     preloadNextTrack();
 }
@@ -411,7 +409,7 @@ void PlaybackController::playLoadingTest()
 {
     Song song;
     song.name = QStringLiteral("Loading Test");
-    song.artists = QStringLiteral("Swiftify");
+    song.artists = QStringLiteral("Resonance");
     song.albumName = QStringLiteral("Debugging");
     song.uri = QString::fromLatin1(kLoadingTestUri);
     song.durationMs = 180'000;
@@ -1377,4 +1375,4 @@ void PlaybackController::reset()
     syncMediaSession();
 }
 
-} // namespace swiftify
+} // namespace resonance

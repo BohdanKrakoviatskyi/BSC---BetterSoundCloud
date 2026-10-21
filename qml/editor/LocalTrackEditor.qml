@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Dialogs
-import Swiftify
+import Resonance
 
 // what a music file of one's own says about itself, written into the file:
 // its cover (a photo framed in the cropper, or none), title, artists, album,

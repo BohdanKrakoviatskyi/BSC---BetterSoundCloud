@@ -24,14 +24,14 @@
 #include <QStandardPaths>
 #include <QTimer>
 
-#include <algorithm>
+
 #include <utility>
 
 #include <QCoroNetworkReply>
 
-Q_LOGGING_CATEGORY(lcSoundCloud, "swiftify.soundcloud")
+Q_LOGGING_CATEGORY(lcSoundCloud, "resonance.soundcloud")
 
-namespace swiftify {
+namespace resonance {
 
 namespace {
 
@@ -264,20 +264,25 @@ void SoundCloud::applyStatus(const QJsonObject &status)
 
 void SoundCloud::refreshStatus()
 {
-    detach([this]() -> QCoro::Task<> {
-        const QJsonObject status = co_await call(QStringLiteral("auth.status"));
-        if (!status.contains(QStringLiteral("error"))) {
-            applyStatus(status);
+    detach(refreshStatusTask());
+}
+
+/// Capturing coroutine lambdas keep their captures in the closure, which dies
+/// as soon as detach receives the task and before this sidecar request resumes.
+QCoro::Task<> SoundCloud::refreshStatusTask()
+{
+    const QJsonObject status = co_await call(QStringLiteral("auth.status"));
+    if (!status.contains(QStringLiteral("error"))) {
+        applyStatus(status);
+    }
+    if (m_settings != nullptr && m_settings->soundcloudClientId().isEmpty()) {
+        const QJsonObject settingsResp = co_await call(QStringLiteral("settings.get"));
+        const QString id = settingsResp.value(QStringLiteral("clientId")).toString();
+        if (!id.isEmpty()) {
+            m_settings->setSoundcloudClientId(id);
+            emit clientIdChanged();
         }
-        if (m_settings != nullptr && m_settings->soundcloudClientId().isEmpty()) {
-            const QJsonObject settingsResp = co_await call(QStringLiteral("settings.get"));
-            const QString id = settingsResp.value(QStringLiteral("clientId")).toString();
-            if (!id.isEmpty()) {
-                m_settings->setSoundcloudClientId(id);
-                emit clientIdChanged();
-            }
-        }
-    }());
+    }
 }
 
 QCoro::Task<> SoundCloud::runConnect(QString clientId, QString token, quint64 generation)
@@ -334,12 +339,15 @@ void SoundCloud::logOut()
 {
     ++m_connectGeneration;
     setBusy(true);
-    detach([this]() -> QCoro::Task<> {
-        const QJsonObject status = co_await call(QStringLiteral("auth.logout"));
-        setBusy(false);
-        applyStatus(status.contains(QStringLiteral("error")) ? QJsonObject {} : status);
-        setStatusMessage(QStringLiteral("SoundCloud disconnected."));
-    }());
+    detach(logOutTask());
+}
+
+QCoro::Task<> SoundCloud::logOutTask()
+{
+    const QJsonObject status = co_await call(QStringLiteral("auth.logout"));
+    setBusy(false);
+    applyStatus(status.contains(QStringLiteral("error")) ? QJsonObject {} : status);
+    setStatusMessage(QStringLiteral("SoundCloud disconnected."));
 }
 
 Song SoundCloud::songFromCard(const QJsonObject &card)
@@ -423,33 +431,36 @@ void SoundCloud::loadMoreLikedSongs()
     if (m_loadingMoreLikes || !m_hasMoreLikedSongs || m_likedSongsNextHref.isEmpty() || m_sidecar == nullptr) {
         return;
     }
-    detach([this]() -> QCoro::Task<> {
-        m_loadingMoreLikes = true;
-        emit loadingMoreLikesChanged();
+    detach(loadMoreLikedSongsTask());
+}
 
-        QJsonObject params {
-            { QStringLiteral("userId"), m_userId.toLongLong() },
-            { QStringLiteral("limit"), 20 },
-            { QStringLiteral("next"), m_likedSongsNextHref },
-        };
-        SidecarClient::Response response = co_await m_sidecar->call(QStringLiteral("user.likes"), params);
-        if (response.ok()) {
-            const QJsonObject obj = response.result;
-            const QList<Song> newSongs = songsFromCards(obj.value(QStringLiteral("tracks")).toArray());
-            m_likedSongsNextHref = obj.value(QStringLiteral("nextHref")).toString();
-            m_hasMoreLikedSongs = !m_likedSongsNextHref.isEmpty();
-            emit hasMoreLikedSongsChanged();
+QCoro::Task<> SoundCloud::loadMoreLikedSongsTask()
+{
+    m_loadingMoreLikes = true;
+    emit loadingMoreLikesChanged();
 
-            if (!newSongs.isEmpty() && LibraryStore::instance() != nullptr) {
-                LibraryStore::instance()->savedSongs()->appendSongs(newSongs);
-                for (const Song &s : newSongs) {
-                    LibraryStore::instance()->recordSavedUri(s.uri);
-                }
+    QJsonObject params {
+        { QStringLiteral("userId"), m_userId.toLongLong() },
+        { QStringLiteral("limit"), 20 },
+        { QStringLiteral("next"), m_likedSongsNextHref },
+    };
+    SidecarClient::Response response = co_await m_sidecar->call(QStringLiteral("user.likes"), params);
+    if (response.ok()) {
+        const QJsonObject obj = response.result;
+        const QList<Song> newSongs = songsFromCards(obj.value(QStringLiteral("tracks")).toArray());
+        m_likedSongsNextHref = obj.value(QStringLiteral("nextHref")).toString();
+        m_hasMoreLikedSongs = !m_likedSongsNextHref.isEmpty();
+        emit hasMoreLikedSongsChanged();
+
+        if (!newSongs.isEmpty() && LibraryStore::instance() != nullptr) {
+            LibraryStore::instance()->savedSongs()->appendSongs(newSongs);
+            for (const Song &s : newSongs) {
+                LibraryStore::instance()->recordSavedUri(s.uri);
             }
         }
-        m_loadingMoreLikes = false;
-        emit loadingMoreLikesChanged();
-    }());
+    }
+    m_loadingMoreLikes = false;
+    emit loadingMoreLikesChanged();
 }
 
 QCoro::Task<QList<Playlist>> SoundCloud::playlists()
@@ -634,7 +645,7 @@ QCoro::Task<QString> SoundCloud::downloadProgressiveStream(const QString &url,
     }
 
     QNetworkRequest request((QUrl(url)));
-    request.setHeader(QNetworkRequest::UserAgentHeader, QByteArrayLiteral("Swiftify"));
+    request.setHeader(QNetworkRequest::UserAgentHeader, QByteArrayLiteral("Resonance"));
     request.setTransferTimeout(kStreamTransferTimeoutMs);
     std::unique_ptr<QNetworkReply> reply(m_network->get(request));
     co_await qCoro(reply.get()).waitForFinished();
@@ -674,7 +685,7 @@ QCoro::Task<QString> SoundCloud::downloadHlsStream(const QString &m3u8Url, const
 
     // ── step 1: fetch the M3U8 playlist ──────────────────────────────────────
     QNetworkRequest req((QUrl(m3u8Url)));
-    req.setHeader(QNetworkRequest::UserAgentHeader, QByteArrayLiteral("Swiftify"));
+    req.setHeader(QNetworkRequest::UserAgentHeader, QByteArrayLiteral("Resonance"));
     req.setTransferTimeout(30'000);
     std::unique_ptr<QNetworkReply> m3u8Reply(m_network->get(req));
     co_await qCoro(m3u8Reply.get()).waitForFinished();
@@ -736,7 +747,7 @@ QCoro::Task<QString> SoundCloud::downloadHlsStream(const QString &m3u8Url, const
 
     if (!initSegmentUrl.isEmpty()) {
         QNetworkRequest initReq((QUrl(initSegmentUrl)));
-        initReq.setHeader(QNetworkRequest::UserAgentHeader, QByteArrayLiteral("Swiftify"));
+        initReq.setHeader(QNetworkRequest::UserAgentHeader, QByteArrayLiteral("Resonance"));
         initReq.setTransferTimeout(20'000);
         std::unique_ptr<QNetworkReply> initReply(m_network->get(initReq));
         co_await qCoro(initReply.get()).waitForFinished();
@@ -751,7 +762,7 @@ QCoro::Task<QString> SoundCloud::downloadHlsStream(const QString &m3u8Url, const
 
     for (const QString &segmentUrl : std::as_const(segments)) {
         QNetworkRequest segReq((QUrl(segmentUrl)));
-        segReq.setHeader(QNetworkRequest::UserAgentHeader, QByteArrayLiteral("Swiftify"));
+        segReq.setHeader(QNetworkRequest::UserAgentHeader, QByteArrayLiteral("Resonance"));
         segReq.setTransferTimeout(20'000);
         std::unique_ptr<QNetworkReply> segReply(m_network->get(segReq));
         co_await qCoro(segReply.get()).waitForFinished();
@@ -947,30 +958,33 @@ void SoundCloud::loadMoreArtistLikes()
     if (m_loadingMoreArtistLikes || !m_hasMoreArtistLikes || m_artistLikesNextHref.isEmpty() || m_sidecar == nullptr || m_artistLikesUserId <= 0) {
         return;
     }
-    detach([this]() -> QCoro::Task<> {
-        m_loadingMoreArtistLikes = true;
-        emit loadingMoreArtistLikesChanged();
+    detach(loadMoreArtistLikesTask());
+}
 
-        QJsonObject params {
-            { QStringLiteral("userId"), m_artistLikesUserId },
-            { QStringLiteral("limit"), 20 },
-            { QStringLiteral("next"), m_artistLikesNextHref },
-        };
-        SidecarClient::Response response = co_await m_sidecar->call(QStringLiteral("user.likes"), params);
-        if (response.ok()) {
-            const QJsonObject obj = response.result;
-            const QList<Song> newSongs = songsFromCards(obj.value(QStringLiteral("tracks")).toArray());
-            m_artistLikesNextHref = obj.value(QStringLiteral("nextHref")).toString();
-            m_hasMoreArtistLikes = !m_artistLikesNextHref.isEmpty();
-            emit hasMoreArtistLikesChanged();
+QCoro::Task<> SoundCloud::loadMoreArtistLikesTask()
+{
+    m_loadingMoreArtistLikes = true;
+    emit loadingMoreArtistLikesChanged();
 
-            if (!newSongs.isEmpty()) {
-                m_artistLikes->appendSongs(newSongs);
-            }
+    QJsonObject params {
+        { QStringLiteral("userId"), m_artistLikesUserId },
+        { QStringLiteral("limit"), 20 },
+        { QStringLiteral("next"), m_artistLikesNextHref },
+    };
+    SidecarClient::Response response = co_await m_sidecar->call(QStringLiteral("user.likes"), params);
+    if (response.ok()) {
+        const QJsonObject obj = response.result;
+        const QList<Song> newSongs = songsFromCards(obj.value(QStringLiteral("tracks")).toArray());
+        m_artistLikesNextHref = obj.value(QStringLiteral("nextHref")).toString();
+        m_hasMoreArtistLikes = !m_artistLikesNextHref.isEmpty();
+        emit hasMoreArtistLikesChanged();
+
+        if (!newSongs.isEmpty()) {
+            m_artistLikes->appendSongs(newSongs);
         }
-        m_loadingMoreArtistLikes = false;
-        emit loadingMoreArtistLikesChanged();
-    }());
+    }
+    m_loadingMoreArtistLikes = false;
+    emit loadingMoreArtistLikesChanged();
 }
 
 void SoundCloud::loadMoreArtistTracks()
@@ -978,31 +992,34 @@ void SoundCloud::loadMoreArtistTracks()
     if (m_loadingMoreArtistTracks || !m_hasMoreArtistTracks || m_artistTracksNextHref.isEmpty() || m_sidecar == nullptr || m_artistTracksUserId <= 0) {
         return;
     }
-    detach([this]() -> QCoro::Task<> {
-        m_loadingMoreArtistTracks = true;
-        emit loadingMoreArtistTracksChanged();
+    detach(loadMoreArtistTracksTask());
+}
 
-        QJsonObject params {
-            { QStringLiteral("userId"), m_artistTracksUserId },
-            { QStringLiteral("paginated"), true },
-            { QStringLiteral("limit"), 20 },
-            { QStringLiteral("next"), m_artistTracksNextHref },
-        };
-        SidecarClient::Response response = co_await m_sidecar->call(QStringLiteral("user.tracks"), params);
-        if (response.ok()) {
-            const QJsonObject obj = response.result;
-            const QList<Song> newSongs = songsFromCards(obj.value(QStringLiteral("tracks")).toArray());
-            m_artistTracksNextHref = obj.value(QStringLiteral("nextHref")).toString();
-            m_hasMoreArtistTracks = !m_artistTracksNextHref.isEmpty();
-            emit hasMoreArtistTracksChanged();
+QCoro::Task<> SoundCloud::loadMoreArtistTracksTask()
+{
+    m_loadingMoreArtistTracks = true;
+    emit loadingMoreArtistTracksChanged();
 
-            if (!newSongs.isEmpty()) {
-                m_artistTracks->appendSongs(newSongs);
-            }
+    QJsonObject params {
+        { QStringLiteral("userId"), m_artistTracksUserId },
+        { QStringLiteral("paginated"), true },
+        { QStringLiteral("limit"), 20 },
+        { QStringLiteral("next"), m_artistTracksNextHref },
+    };
+    SidecarClient::Response response = co_await m_sidecar->call(QStringLiteral("user.tracks"), params);
+    if (response.ok()) {
+        const QJsonObject obj = response.result;
+        const QList<Song> newSongs = songsFromCards(obj.value(QStringLiteral("tracks")).toArray());
+        m_artistTracksNextHref = obj.value(QStringLiteral("nextHref")).toString();
+        m_hasMoreArtistTracks = !m_artistTracksNextHref.isEmpty();
+        emit hasMoreArtistTracksChanged();
+
+        if (!newSongs.isEmpty()) {
+            m_artistTracks->appendSongs(newSongs);
         }
-        m_loadingMoreArtistTracks = false;
-        emit loadingMoreArtistTracksChanged();
-    }());
+    }
+    m_loadingMoreArtistTracks = false;
+    emit loadingMoreArtistTracksChanged();
 }
 
 QCoro::Task<SoundCloudTrackDetails> SoundCloud::fetchTrackDetails(qint64 trackId)
@@ -1093,9 +1110,7 @@ QCoro::Task<Artist> SoundCloud::artistFromSong(const Song &song)
 QCoro::Task<> SoundCloud::loadArtistData(qint64 userId, quint64 generation)
 {
     m_loadingArtist = true;
-    m_artistError.clear();
     emit loadingArtistChanged();
-    emit artistErrorChanged();
 
     m_artistTracks->clear();
     m_artistLikes->clear();
@@ -1125,9 +1140,7 @@ QCoro::Task<> SoundCloud::loadArtistData(qint64 userId, quint64 generation)
 QCoro::Task<> SoundCloud::loadTrackDetailsData(Song song, quint64 generation)
 {
     m_loadingTrackDetails = true;
-    m_trackDetailsError.clear();
     emit loadingTrackDetailsChanged();
-    emit trackDetailsErrorChanged();
 
     m_relatedTracks->clear();
 
@@ -1137,9 +1150,7 @@ QCoro::Task<> SoundCloud::loadTrackDetailsData(Song song, quint64 generation)
     }
     if (trackId <= 0) {
         m_loadingTrackDetails = false;
-        m_trackDetailsError = QStringLiteral("Invalid track ID");
         emit loadingTrackDetailsChanged();
-        emit trackDetailsErrorChanged();
         co_return;
     }
 
@@ -1171,19 +1182,22 @@ void SoundCloud::openArtist(const QString &userIdOrUsername)
     }
 }
 
-void SoundCloud::openArtistFromSong(const swiftify::Song &song)
+void SoundCloud::openArtistFromSong(const resonance::Song &song)
 {
-    detach([this, song]() -> QCoro::Task<> {
-        Artist artist = co_await artistFromSong(song);
-        if (artist.isValid()) {
-            openArtist(artist.id);
-        }
-    }());
+    detach(openArtistFromSongTask(song));
 }
 
-void SoundCloud::openTrackDetails(const swiftify::Song &song)
+QCoro::Task<> SoundCloud::openArtistFromSongTask(Song song)
+{
+    Artist artist = co_await artistFromSong(song);
+    if (artist.isValid()) {
+        openArtist(artist.id);
+    }
+}
+
+void SoundCloud::openTrackDetails(const resonance::Song &song)
 {
     detach(loadTrackDetailsData(song, ++m_trackDetailsGeneration));
 }
 
-} // namespace swiftify
+} // namespace resonance

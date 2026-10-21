@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // a card's artwork (InteractiveMediaArtwork): on hover it lifts a little, its
 // shadow deepens and a round badge fades in. the playing item gets an outline.

@@ -4,7 +4,7 @@
 
 #include <cmath>
 
-namespace swiftify::themes {
+namespace resonance::themes {
 
 namespace {
 
@@ -254,4 +254,4 @@ MaterialScheme::Roles roles(const Variant &variant, bool dark)
     return roles;
 }
 
-} // namespace swiftify::themes
+} // namespace resonance::themes

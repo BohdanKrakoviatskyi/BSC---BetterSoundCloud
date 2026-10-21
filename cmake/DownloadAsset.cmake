@@ -1,4 +1,4 @@
-function(swiftify_download_asset url destination sha256)
+function(resonance_download_asset url destination sha256)
     if(EXISTS "${destination}")
         file(SHA256 "${destination}" actual_hash)
         if(actual_hash STREQUAL sha256)
@@ -15,11 +15,11 @@ function(swiftify_download_asset url destination sha256)
     list(GET download_status 1 download_message)
 
     if(download_result AND WIN32)
-        find_program(SWIFTIFY_CURL_EXECUTABLE NAMES curl.exe
+        find_program(RESONANCE_CURL_EXECUTABLE NAMES curl.exe
             HINTS "$ENV{SystemRoot}/System32")
-        if(SWIFTIFY_CURL_EXECUTABLE)
+        if(RESONANCE_CURL_EXECUTABLE)
             execute_process(
-                COMMAND "${SWIFTIFY_CURL_EXECUTABLE}" --fail --location --silent --show-error
+                COMMAND "${RESONANCE_CURL_EXECUTABLE}" --fail --location --silent --show-error
                     --output "${temporary}" "${url}"
                 RESULT_VARIABLE download_result
                 ERROR_VARIABLE download_message)

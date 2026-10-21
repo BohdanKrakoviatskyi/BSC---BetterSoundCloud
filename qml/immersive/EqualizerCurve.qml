@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // the equalizer's response (EqualizerCurve): each band as a gaussian bump,
 // summed, so the line reads as what the ear gets rather than as ten points.

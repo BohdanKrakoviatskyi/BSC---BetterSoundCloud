@@ -15,7 +15,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace swiftify::covers {
+namespace resonance::covers {
 
 namespace {
 
@@ -418,4 +418,4 @@ QRectF centredSquare(QSizeF size)
     return {(size.width() - edge) / 2, (size.height() - edge) / 2, edge, edge};
 }
 
-} // namespace swiftify::covers
+} // namespace resonance::covers

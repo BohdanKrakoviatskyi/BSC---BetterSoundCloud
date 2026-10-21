@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Dialogs
-import Swiftify
+import Resonance
 
 // the system's own pickers for music to add to Local Files: a folder,
 // searched all the way down, or a few files. given a playlist made here,

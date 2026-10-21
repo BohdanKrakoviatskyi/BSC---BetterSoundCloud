@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // Playing Next in the immersive player (FullscreenQueue): the playing song,
 // then the rest. when the queue steps on, the rows follow one after another

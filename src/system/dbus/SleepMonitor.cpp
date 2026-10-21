@@ -7,9 +7,9 @@
 #include <QDBusReply>
 #include <QLoggingCategory>
 
-namespace swiftify {
+namespace resonance {
 
-Q_LOGGING_CATEGORY(lcSleep, "swiftify.sleep")
+Q_LOGGING_CATEGORY(lcSleep, "resonance.sleep")
 
 namespace {
 const QString kService = QStringLiteral("org.freedesktop.login1");
@@ -47,7 +47,7 @@ void SleepMonitor::updateInhibitor()
         return;
     }
     QDBusMessage call = QDBusMessage::createMethodCall(kService, kPath, kManager, QStringLiteral("Inhibit"));
-    call << QStringLiteral("sleep") << QStringLiteral("Swiftify") << QStringLiteral("Pausing playback before sleep")
+    call << QStringLiteral("sleep") << QStringLiteral("Resonance") << QStringLiteral("Pausing playback before sleep")
          << QStringLiteral("delay");
     const QDBusReply<QDBusUnixFileDescriptor> reply = QDBusConnection::systemBus().call(call);
     if (reply.isValid()) {
@@ -65,4 +65,4 @@ void SleepMonitor::prepareForSleep(bool sleeping)
     }
 }
 
-} // namespace swiftify
+} // namespace resonance

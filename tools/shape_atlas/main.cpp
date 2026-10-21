@@ -24,7 +24,7 @@
 #include <memory>
 #include <vector>
 
-using namespace swiftify::shapeatlas;
+using namespace resonance::shapeatlas;
 
 namespace {
 

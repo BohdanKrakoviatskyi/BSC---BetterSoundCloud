@@ -11,7 +11,7 @@
 #include <chrono>
 #include <utility>
 
-namespace swiftify {
+namespace resonance {
 
 namespace {
 
@@ -20,18 +20,21 @@ namespace {
 QString dataDirectory()
 {
     const QString base = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    const QString swiftifyDir = base + QStringLiteral("/soundcloud");
-    if (!QFileInfo::exists(swiftifyDir + QStringLiteral("/auth.json"))) {
-        const QString resonanceDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/Resonance");
-        if (QFileInfo::exists(resonanceDir + QStringLiteral("/auth.json"))) {
-            return resonanceDir;
-        }
-        const QString bscDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/BetterSoundCloud");
-        if (QFileInfo::exists(bscDir + QStringLiteral("/auth.json"))) {
-            return bscDir;
-        }
+    const QString appDir = base + QStringLiteral("/soundcloud");
+    if (QFileInfo::exists(appDir + QStringLiteral("/auth.json"))) {
+        return appDir;
     }
-    return swiftifyDir;
+    const QString genericDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+        + QStringLiteral("/Resonance");
+    if (QFileInfo::exists(genericDir + QStringLiteral("/auth.json"))) {
+        return genericDir;
+    }
+    const QString legacyDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+        + QStringLiteral("/BetterSoundCloud");
+    if (QFileInfo::exists(legacyDir + QStringLiteral("/auth.json"))) {
+        return legacyDir;
+    }
+    return appDir;
 }
 
 constexpr int kStartTimeoutMs = 5000;
@@ -129,7 +132,7 @@ SidecarClient::~SidecarClient()
 
 QString SidecarClient::binaryPath() const
 {
-    const QString override = qEnvironmentVariable("SWIFTIFY_SIDECAR");
+    const QString override = qEnvironmentVariable("RESONANCE_SIDECAR");
     if (!override.isEmpty()) {
         return override;
     }
@@ -145,8 +148,8 @@ QString SidecarClient::binaryPath() const
         executableDirectory.filePath(QStringLiteral("local-api")),
         executableDirectory.filePath(QStringLiteral("../Resources/local-api")),
         executableDirectory.filePath(QStringLiteral("../Frameworks/local-api")),
-#ifdef SWIFTIFY_SIDECAR_PATH
-        QStringLiteral(SWIFTIFY_SIDECAR_PATH),
+#ifdef RESONANCE_SIDECAR_PATH
+        QStringLiteral(RESONANCE_SIDECAR_PATH),
 #endif
     };
     for (const QString &candidate : candidates) {
@@ -314,4 +317,4 @@ void SidecarClient::deliver(const QByteArray &line)
     call->complete(std::move(response));
 }
 
-} // namespace swiftify
+} // namespace resonance

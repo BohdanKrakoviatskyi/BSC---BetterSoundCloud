@@ -1,5 +1,5 @@
 # Builds the checkout this file sits in: run `makepkg -si` from this folder.
-pkgname=swiftify
+pkgname=resonance
 pkgver=0.2.6
 pkgrel=1
 pkgdesc='A Spotify player for Wayland, in Material 3 after end4'

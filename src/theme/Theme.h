@@ -12,21 +12,21 @@
 class QQmlEngine;
 class QJSEngine;
 
-namespace swiftify {
+namespace resonance {
 
 class Settings;
 
 /// the app chrome's colours. with the "system" source it follows the scheme
 /// Matugen generates from the wallpaper, live; otherwise, or when no
 /// such file exists, or another source is chosen, it builds one from the
-/// swiftify accent or from one of the rice themes (Themes.h), light or dark as
+/// resonance accent or from one of the rice themes (Themes.h), light or dark as
 /// the theme mode says.
 class Theme : public QObject {
     Q_OBJECT
     QML_ELEMENT
     QML_SINGLETON
 
-    Q_PROPERTY(swiftify::MaterialScheme *colors READ colors CONSTANT FINAL)
+    Q_PROPERTY(resonance::MaterialScheme *colors READ colors CONSTANT FINAL)
     Q_PROPERTY(bool dark READ dark NOTIFY schemeChanged FINAL)
     Q_PROPERTY(bool usingSystemScheme READ usingSystemScheme NOTIFY schemeChanged FINAL)
     Q_PROPERTY(QString systemSchemePath READ systemSchemePath NOTIFY schemeChanged FINAL)
@@ -34,7 +34,7 @@ class Theme : public QObject {
     Q_PROPERTY(QString monoFontFamily READ monoFontFamily CONSTANT FINAL)
 
 public:
-    /// swiftify's accent, #ff3d8a (MusicStyle.accent)
+    /// resonance's accent, #ff3d8a (MusicStyle.accent)
     static constexpr QRgb kAccent = 0xffff3d8a;
 
     explicit Theme(Settings *settings, QObject *parent = nullptr);
@@ -57,7 +57,7 @@ public:
 
     /// every colour source the settings offer, as swatches in light or dark:
     /// Matugen's scheme, the app's own, then the rice themes
-    Q_INVOKABLE QList<swiftify::ThemeOption> themeOptions(bool dark) const;
+    Q_INVOKABLE QList<resonance::ThemeOption> themeOptions(bool dark) const;
     Q_INVOKABLE void refreshSystemScheme();
 
     Q_INVOKABLE static QColor mix(const QColor &a, const QColor &b, qreal amountOfA);
@@ -84,4 +84,4 @@ private:
     QStringList m_schemeDirectories;
 };
 
-} // namespace swiftify
+} // namespace resonance

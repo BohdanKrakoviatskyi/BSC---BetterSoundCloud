@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // while the saved login is checked (SpotifyStartupLoadingView)
 Item {
@@ -43,7 +43,7 @@ Item {
 
             Image {
                 anchors.fill: parent
-                source: "qrc:/qt/qml/Swiftify/resources/swiftify-icon.png"
+                source: "qrc:/qt/qml__LEGACY_RESONANCE_IGNORE__resources/resonance-icon.png"
                 sourceSize: Qt.size(128, 128)
                 smooth: true
             }

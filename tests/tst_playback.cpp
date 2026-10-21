@@ -13,8 +13,8 @@
 #include <QTemporaryDir>
 #include <QTest>
 
-using namespace swiftify;
-using swiftify::testing::FakeCore;
+using namespace resonance;
+using resonance::testing::FakeCore;
 
 namespace {
 
@@ -49,7 +49,7 @@ class PlaybackTest : public QObject {
 private:
     struct Rig {
         QTemporaryDir directory;
-        Settings settings {directory.filePath(QStringLiteral("swiftify.conf"))};
+        Settings settings {directory.filePath(QStringLiteral("resonance.conf"))};
         ErrorCenter errors {nullptr};
         MemoryCredentialStore credentials;
         QNetworkAccessManager network;
@@ -148,7 +148,7 @@ private slots:
         // something other than a song, a reconnect for a download, replaced
         // the request in the core before it made any sound
         rig.settle();
-        rig.core.take(QStringLiteral("playFile"))->fail(QString::fromLatin1(SWIFTIFY_CORE_SUPERSEDED));
+        rig.core.take(QStringLiteral("playFile"))->fail(QString::fromLatin1(RESONANCE_CORE_SUPERSEDED));
         rig.settle();
         QVERIFY(rig.player.isLoading());
         QVERIFY(rig.errors.message().isEmpty());

@@ -19,11 +19,11 @@
 #include "theme/PlayerStyle.h"
 #include "theme/Theme.h"
 
-#if defined(SWIFTIFY_HAS_DBUS) && defined(Q_OS_LINUX)
+#if defined(RESONANCE_HAS_DBUS) && defined(Q_OS_LINUX)
 #include "system/dbus/Mpris.h"
 #include "system/dbus/SleepMonitor.h"
 #endif
-#ifdef SWIFTIFY_DESKTOP_INTEGRATION
+#ifdef RESONANCE_DESKTOP_INTEGRATION
 #include "system/linux/AudioDeviceMonitor.h"
 #endif
 #ifdef Q_OS_MACOS
@@ -65,9 +65,9 @@
 #include <cstdlib>
 #endif
 
-Q_IMPORT_QML_PLUGIN(SwiftifyPlugin)
+Q_IMPORT_QML_PLUGIN(ResonancePlugin)
 
-using namespace swiftify;
+using namespace resonance;
 
 namespace {
 
@@ -209,10 +209,10 @@ int main(int argc, char *argv[])
     startCompact(argv);
 #endif
     tuneSceneGraph();
-    QGuiApplication::setApplicationName(QStringLiteral("Swiftify"));
-    QGuiApplication::setApplicationVersion(QStringLiteral(SWIFTIFY_VERSION));
+    QGuiApplication::setApplicationName(QStringLiteral("Resonance"));
+    QGuiApplication::setApplicationVersion(QStringLiteral(RESONANCE_VERSION));
     // the wayland app id, which hyprland window rules and the .desktop file match.
-    QGuiApplication::setDesktopFileName(QStringLiteral("swiftify"));
+    QGuiApplication::setDesktopFileName(QStringLiteral("resonance"));
     // the tray menu can fall back to widgets on linux
 #if defined(Q_OS_LINUX) || defined(Q_OS_WIN)
     QApplication application(argc, argv);
@@ -227,7 +227,7 @@ int main(int argc, char *argv[])
 #endif
 #ifndef Q_OS_MACOS
     // x11 shows this; wayland goes by the desktop entry, macos by the bundle
-    QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/qt/qml/Swiftify/resources/swiftify-icon.png")));
+    QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/qt/qml/Resonance/resources/resonance-icon.png")));
 #endif
 
     SingleInstance instance;
@@ -239,7 +239,7 @@ int main(int argc, char *argv[])
     application.installEventFilter(&windowTuner);
 #endif
 
-    // the plain style: every control swiftify shows is drawn by its own components.
+    // the plain style: every control Resonance shows is drawn by its own components.
     QQuickStyle::setStyle(QStringLiteral("Basic"));
     fonts::loadIconFont();
     fonts::loadInterfaceFont();
@@ -272,12 +272,7 @@ int main(int argc, char *argv[])
     SoundCloud soundcloud(&sidecar, &settings, &network, &errors);
     library.attachSoundCloud(&soundcloud);
     player.attachSoundCloud(&soundcloud);
-    // TEMPORARY: disabled to get past a crash on start-up. The debugger puts it in
-    // SoundCloud::applyStatus, entered with a `this` of 5 — the object is fine when the
-    // coroutine is created (0x1d060fd090) and corrupt by the time it wakes. Removing the
-    // call removes the frame that carries the bad value. The window opens and the rest of
-    // the app works; SoundCloud reads as signed out until the real fault is fixed.
-    // soundcloud.refreshStatus();
+    soundcloud.refreshStatus();
     // a song whose tags were edited shows as it is now wherever it is queued
     QObject::connect(&localFiles, &LocalLibrary::scanned, &player,
                      [&] { player.refreshSongDetails(localFiles.allSongs()); });
@@ -290,7 +285,7 @@ int main(int argc, char *argv[])
     QObject::connect(&instance, &SingleInstance::commandReceived, &app, &AppController::handleCommand);
     instance.listen();
 
-#if defined(SWIFTIFY_HAS_DBUS) && defined(Q_OS_LINUX)
+#if defined(RESONANCE_HAS_DBUS) && defined(Q_OS_LINUX)
     Mpris mpris(&player);
     QObject::connect(&mpris, &Mpris::raiseRequested, &app, &AppController::raiseRequested);
     QObject::connect(&mpris, &Mpris::quitRequested, &app, &AppController::quit);
@@ -300,7 +295,7 @@ int main(int argc, char *argv[])
     // the media keys, headphone buttons and control centre's now playing
     NowPlaying nowPlaying(&player, &artwork);
 #endif
-#ifdef SWIFTIFY_DESKTOP_INTEGRATION
+#ifdef RESONANCE_DESKTOP_INTEGRATION
     AudioDeviceMonitor devices;
     QObject::connect(&devices, &AudioDeviceMonitor::outputLost, &player, &PlaybackController::invalidateAudioOutput);
     QObject::connect(&devices, &AudioDeviceMonitor::outputArrived, &mpris, &Mpris::noteOutputArrived);
@@ -321,7 +316,7 @@ int main(int argc, char *argv[])
     engine.addImageProvider(QStringLiteral("art"), new ArtworkImageProvider);
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &application,
                      [] { QCoreApplication::exit(EXIT_FAILURE); }, Qt::QueuedConnection);
-    engine.loadFromModule("Swiftify", "Main");
+    engine.loadFromModule("Resonance", "Main");
     // the first launch carries out its own command too, once the window exists
     if (const QString command = SingleInstance::commandFrom(QCoreApplication::arguments()); command != QLatin1StringView("raise")) {
         app.handleCommand(command);

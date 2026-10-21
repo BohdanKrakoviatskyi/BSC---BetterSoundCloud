@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // the play button wherever music starts: a soft five-bump cookie while
 // paused that springs into a nine-scallop one, turning, while music plays.

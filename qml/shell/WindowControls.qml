@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // minimise, maximise and close, for compositors that do not draw their own,
 // each on a shape of its own as the top bar's other buttons are

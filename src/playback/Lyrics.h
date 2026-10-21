@@ -6,7 +6,7 @@
 
 #include <optional>
 
-namespace swiftify {
+namespace resonance {
 
 struct LyricLine {
     quint32 startTimeMs = 0;
@@ -64,4 +64,4 @@ private:
     QList<LyricLine> m_lines;
 };
 
-} // namespace swiftify
+} // namespace resonance

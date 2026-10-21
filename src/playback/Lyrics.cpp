@@ -11,7 +11,7 @@
 
 #include <algorithm>
 
-namespace swiftify {
+namespace resonance {
 
 std::optional<Lyrics> Lyrics::fromLrc(const QString &text)
 {
@@ -192,4 +192,4 @@ void LyricsModel::setLines(const QList<LyricLine> &lines)
     emit countChanged();
 }
 
-} // namespace swiftify
+} // namespace resonance

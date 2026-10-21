@@ -21,8 +21,8 @@
 #include <algorithm>
 #include <utility>
 
-using namespace swiftify;
-using swiftify::testing::FakeCore;
+using namespace resonance;
+using resonance::testing::FakeCore;
 
 namespace {
 

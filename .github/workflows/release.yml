@@ -1,7 +1,7 @@
 name: Publish desktop release
 
 # The shape of this workflow is the one the Tauri app's release workflow
-# (BSC---BetterSoundCloud/.github/workflows/release.yml) already proved:
+# (resonance-backend/.github/workflows/release.yml) already proved:
 # one job with a platform matrix, a dispatch input that narrows the matrix to a
 # single platform, a version synced from the tag before anything is built, and
 # Apple signing that is used when the secrets are there and reported when they
@@ -56,23 +56,8 @@ jobs:
       - name: Check out the app
         uses: actions/checkout@v4
         with:
-          # The app goes into ./swiftify rather than the workspace root, because
-          # cmake finds the soundcloud sidecar at ../BSC---BetterSoundCloud/backend
-          # (SWIFTIFY_SIDECAR_SOURCE_DIR): the two checkouts have to sit side by
-          # side for that default to resolve.
-          path: swiftify
-
-      # The go sidecar is one copy of the local-api that lives in the better
-      # soundcloud repository, not a copy vendored here: a release builds it
-      # from that source, exactly as a local build does.
-      - name: Check out the soundcloud sidecar source
-        uses: actions/checkout@v4
-        with:
-          repository: BohdanKrakoviatskyi/BSC---BetterSoundCloud
-          ref: main
-          path: BSC---BetterSoundCloud
-          sparse-checkout: |
-            backend
+          # CMake builds the Go sidecar from resonance/backend.
+          path: resonance
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -80,7 +65,7 @@ jobs:
           node-version: 22
 
       - name: Sync version from the release tag
-        working-directory: swiftify
+        working-directory: resonance
         shell: bash
         # the tag is the version: every file that carries one is rewritten here,
         # so the bundle, the core and the updater agree on what this build is
@@ -89,8 +74,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: BSC---BetterSoundCloud/backend/go.mod
-          cache-dependency-path: BSC---BetterSoundCloud/backend/go.sum
+          go-version-file: resonance/backend/go.mod
+          cache-dependency-path: resonance/backend/go.sum
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -357,7 +342,7 @@ jobs:
       # ── build ─────────────────────────────────────────────────────────────
       - name: Build (macOS)
         if: runner.os == 'macOS'
-        working-directory: swiftify
+        working-directory: resonance
         shell: bash
         env:
           SIGNING_IDENTITY: ${{ steps.apple.outputs.identity }}
@@ -372,14 +357,13 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=OFF \
             -DCMAKE_PREFIX_PATH="$QT_PREFIX;$QCORO_PREFIX;$KEYCHAIN_PREFIX" \
-            -DSWIFTIFY_SIDECAR_SOURCE_DIR="$PWD/../BSC---BetterSoundCloud/backend" \
-            -DSWIFTIFY_CODESIGN_IDENTITY="$SIGNING_IDENTITY"
+            -DRESONANCE_CODESIGN_IDENTITY="$SIGNING_IDENTITY"
 
-          cmake --build build --target swiftify
+          cmake --build build --target resonance
 
       - name: Build (Linux)
         if: runner.os == 'Linux'
-        working-directory: swiftify
+        working-directory: resonance
         shell: bash
         run: |
           set -euo pipefail
@@ -396,13 +380,12 @@ jobs:
             -DBUILD_TESTING=OFF \
             -DCMAKE_C_COMPILER=clang-18 \
             -DCMAKE_CXX_COMPILER=clang++-18 \
-            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
-            -DSWIFTIFY_SIDECAR_SOURCE_DIR="$PWD/../BSC---BetterSoundCloud/backend"
+            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
           cmake --build build
 
       - name: Build (Windows)
         if: runner.os == 'Windows'
-        working-directory: swiftify
+        working-directory: resonance
         shell: pwsh
         run: |
           # qcoro and qtkeychain are installed into C:\qcoro-install and
@@ -410,20 +393,19 @@ jobs:
           cmake -B build -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
             -DBUILD_TESTING=OFF `
-            -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR;C:\qcoro-install" `
-            -DSWIFTIFY_SIDECAR_SOURCE_DIR="$PWD/../BSC---BetterSoundCloud/backend"
+            -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR;C:\qcoro-install"
           cmake --build build
 
       - name: Check the soundcloud sidecar was built in
         shell: bash
-        working-directory: swiftify
+        working-directory: resonance
         # a missing sidecar is silent at run time — the app just says the service
         # is missing — so a release fails here instead of shipping without it
         run: |
           set -euo pipefail
           # the go tool writes local-api.exe on windows and local-api elsewhere
           if ! ls build/sidecar/local-api* > /dev/null 2>&1; then
-            echo "::error::the soundcloud sidecar was not built; check the go source at ../BSC---BetterSoundCloud/backend"
+            echo "::error::the soundcloud sidecar was not built from backend/"
             exit 1
           fi
           ls -l build/sidecar/local-api*
@@ -431,7 +413,7 @@ jobs:
       # ── package ───────────────────────────────────────────────────────────
       - name: Package DMG and zip (macOS)
         if: runner.os == 'macOS'
-        working-directory: swiftify
+        working-directory: resonance
         shell: bash
         env:
           SIGNING_IDENTITY: ${{ steps.apple.outputs.identity }}
@@ -440,10 +422,10 @@ jobs:
           export PATH="$(brew --prefix qt@6)/bin:$PATH"
           mkdir -p release-artifacts
           ./packaging/macos/package-dmg.sh \
-            build/swiftify.app release-artifacts "${RELEASE_TAG#v}" "$SIGNING_IDENTITY"
+            build/resonance.app release-artifacts "${RELEASE_TAG#v}" "$SIGNING_IDENTITY"
 
           # Self-containment check on what was actually shipped. It has to be the
-          # archive, not build/swiftify.app: macdeployqt ran inside
+          # archive, not build/resonance.app: macdeployqt ran inside
           # package-dmg.sh on a staging copy of the bundle, and that copy is
           # deleted again when the script returns. The zip is the same bundle
           # without a filesystem image wrapped round it.
@@ -457,7 +439,7 @@ jobs:
           ditto -x -k "$ZIP" "$CHECK"
           BUNDLE="$CHECK/Resonance.app/Contents"
           REQUIRED=(
-            "MacOS/swiftify"
+            "MacOS/resonance"
             "MacOS/local-api"
             "Frameworks/QtCore.framework/Versions/A/QtCore"
             "Frameworks/QtQuick.framework/Versions/A/QtQuick"
@@ -481,9 +463,9 @@ jobs:
           # Homebrew's qt, qcoro and qtkeychain all live under /opt/homebrew, so
           # this is what a bundle that was never run through macdeployqt looks
           # like — and macos builds green while the bundle is still unpacked.
-          if otool -L "$BUNDLE/MacOS/swiftify" | grep -qE '(/opt/homebrew|/usr/local)'; then
+          if otool -L "$BUNDLE/MacOS/resonance" | grep -qE '(/opt/homebrew|/usr/local)'; then
             echo "::error::the shipped app links against build-machine paths:"
-            otool -L "$BUNDLE/MacOS/swiftify" | grep -E '(/opt/homebrew|/usr/local)'
+            otool -L "$BUNDLE/MacOS/resonance" | grep -E '(/opt/homebrew|/usr/local)'
             exit 1
           fi
           echo "no build-machine library paths in the linked libraries"
@@ -491,7 +473,7 @@ jobs:
 
       - name: Notarize DMG
         if: runner.os == 'macOS' && steps.apple.outputs.notarize == 'true'
-        working-directory: swiftify
+        working-directory: resonance
         shell: bash
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -510,7 +492,7 @@ jobs:
 
       - name: Package AppImage (Linux)
         if: runner.os == 'Linux'
-        working-directory: swiftify
+        working-directory: resonance
         shell: bash
         run: |
           set -euo pipefail
@@ -542,8 +524,8 @@ jobs:
           # usr/lib and usr/lib/<triple> for the deployed libraries, and the
           # app and the sidecar are what must be exactly where they are.
           MISSING=()
-          for entry in usr/bin/swiftify usr/bin/local-api \
-                        usr/share/applications/swiftify.desktop; do
+          for entry in usr/bin/resonance usr/bin/local-api \
+                        usr/share/applications/resonance.desktop; do
             [ -e "$ROOT/$entry" ] || MISSING+=("$entry")
           done
           for pattern in "libQt6Core.so*" "libQt6Quick.so*" "libQt6Multimedia.so*" \
@@ -563,7 +545,7 @@ jobs:
 
       - name: Package zip (Windows)
         if: runner.os == 'Windows'
-        working-directory: swiftify
+        working-directory: resonance
         shell: pwsh
         # The archive has to be self-contained: the qml is compiled into the exe,
         # so what Qt needs on top of that is its dlls, the platform plugin, the
@@ -572,7 +554,7 @@ jobs:
         # unpacks and then fails to start — which is what the last windows build
         # produced — so the list is checked before the archive is made. Only the
         # zip is published: the updater downloads the first asset it finds with a
-        # matching extension, and a bare swiftify.exe beside it would be pickable
+        # matching extension, and a bare resonance.exe beside it would be pickable
         # and unusable.
         run: |
           $version = $env:RELEASE_TAG -replace '^v', ''
@@ -580,7 +562,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $staging | Out-Null
           New-Item -ItemType Directory -Force -Path release-artifacts | Out-Null
 
-          Copy-Item 'build/swiftify.exe' $staging
+          Copy-Item 'build/resonance.exe' $staging
 
           # Both dependencies are built static, so there is normally nothing here. The
           # copy is kept as a guard: if a future change puts a dll back, it has
@@ -610,7 +592,7 @@ jobs:
             --qmldir (Join-Path $PWD 'qml') `
             --no-translations --no-system-d3d-compiler `
             --ignore-library-errors `
-            (Join-Path $staging 'swiftify.exe')
+            (Join-Path $staging 'resonance.exe')
 
           # the go sidecar sits beside the binary the app looks next to itself,
           # named the way the app asks for it on windows (SidecarClient)
@@ -626,7 +608,7 @@ jobs:
           # windeployqt itself deploys none of them, so demanding them would be
           # demanding a different package than the one being built.
           $required = @(
-            'swiftify.exe',
+            'resonance.exe',
             'local-api.exe',
             'Qt6Core.dll',
             'Qt6Gui.dll',
@@ -660,7 +642,7 @@ jobs:
           # provides. A hardcoded list only proves what somebody thought of;
           # this proves the loader will find everything that was asked for.
           $systemDir = Join-Path $env:SystemRoot 'System32'
-          $imports = & dumpbin /dependents (Join-Path $staging 'swiftify.exe') |
+          $imports = & dumpbin /dependents (Join-Path $staging 'resonance.exe') |
               Select-String -Pattern '^\s+\S+\.dll\s*$' |
               ForEach-Object { $_.Line.Trim().ToLower() } |
               Sort-Object -Unique
@@ -716,12 +698,12 @@ jobs:
             > **macOS**: the app is signed ad hoc unless the Apple secrets are set; if Gatekeeper
             > blocks it, right-click → Open, or run `xattr -cr Resonance.app`.
             > **Linux**: `chmod +x Resonance-*.AppImage` before running it.
-            > **Windows**: extract the zip and run `swiftify.exe`.
+            > **Windows**: extract the zip and run `resonance.exe`.
           draft: false
           prerelease: false
           # the updater reads the latest release, so a draft would be invisible
           # to it; asset names carry the platform, which is what it matches on
-          files: swiftify/release-artifacts/*
+          files: resonance/release-artifacts/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

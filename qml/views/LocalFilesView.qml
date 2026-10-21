@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // Local Files: the playlists made on this computer from music files of the
 // person's own, as My Playlists lays out spotify's, with a tile to start a

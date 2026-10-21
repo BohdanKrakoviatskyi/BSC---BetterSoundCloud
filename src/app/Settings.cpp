@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <initializer_list>
 
-namespace swiftify {
+namespace resonance {
 
 namespace {
 
@@ -33,9 +33,17 @@ T stored(const QSettings &store, const char *key, const T &fallback)
 
 Settings::Settings(QObject *parent)
     : QObject(parent)
-    , m_store(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("Swiftify"),
-              QStringLiteral("Swiftify"))
+    , m_store(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("Resonance"),
+              QStringLiteral("Resonance"))
 {
+    if (m_store.allKeys().isEmpty()) {
+        const QSettings legacy(QSettings::IniFormat, QSettings::UserScope,
+                               QStringLiteral("Swiftify"), QStringLiteral("Swiftify"));
+        for (const QString &key : legacy.allKeys()) {
+            m_store.setValue(key, legacy.value(key));
+        }
+        m_store.sync();
+    }
     load();
     if (!s_instance) {
         s_instance = this;
@@ -551,4 +559,4 @@ void Settings::clearCustomBackground()
     emit customBackgroundPathChanged();
 }
 
-} // namespace swiftify
+} // namespace resonance

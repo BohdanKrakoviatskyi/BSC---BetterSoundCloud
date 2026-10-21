@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Templates as T
-import Swiftify
+import Resonance
 
 // a genre to explore: a two-colour gradient with a big faint shape of its
 // own cut off by the corner, its symbol on it, turning when hovered.

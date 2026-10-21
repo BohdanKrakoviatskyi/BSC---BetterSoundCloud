@@ -8,7 +8,7 @@
 #include <cmath>
 #include <limits>
 
-namespace swiftify::palette {
+namespace resonance::palette {
 
 namespace {
 
@@ -240,4 +240,4 @@ std::optional<WeightedPalette> extract(const QByteArray &encoded)
     return extract(reader.read());
 }
 
-} // namespace swiftify::palette
+} // namespace resonance::palette

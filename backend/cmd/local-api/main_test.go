@@ -1,0 +1,781 @@
+package main
+
+import (
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+)
+
+func newTestService(t *testing.T, apiBase string) *service {
+	t.Helper()
+	dir := t.TempDir()
+	return &service{
+		settingsPath: filepath.Join(dir, "settings.json"),
+		settings:     defaultSettings(),
+		authPath:     filepath.Join(dir, "auth.json"),
+		apiBase:      apiBase,
+		httpClient:   &http.Client{Timeout: 5 * time.Second},
+	}
+}
+
+type testRoundTripper func(*http.Request) (*http.Response, error)
+
+func (roundTrip testRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	return roundTrip(request)
+}
+
+func TestDecodeMixedSelectionPlaylist(t *testing.T) {
+	item := json.RawMessage(`{"type":"system-playlist","playlist":{"id":42,"urn":"soundcloud:playlists:42","title":"SoundCloud Weekly","artwork_url":"https://i1.sndcdn.com/playlists-test-large.jpg","track_count":25,"user":{"username":"SoundCloud"}}}`)
+	playlist, ok := decodeMixedSelectionPlaylist(item)
+	if !ok {
+		t.Fatal("expected system-playlist item to decode")
+	}
+	if playlist.ID != "42" || playlist.URN != "soundcloud:playlists:42" || playlist.Title != "SoundCloud Weekly" || playlist.TrackCount != 25 || playlist.User.Username != "SoundCloud" {
+		t.Fatalf("unexpected playlist card: %#v", playlist)
+	}
+	if !strings.Contains(playlist.ArtworkURL, "t500x500") {
+		t.Fatalf("playlist artwork was not normalized: %q", playlist.ArtworkURL)
+	}
+	if _, ok := decodeMixedSelectionTrack(item); ok {
+		t.Fatal("system-playlist item must not be exposed as a track")
+	}
+}
+
+func TestIsMadeForYouSelection(t *testing.T) {
+	for _, test := range []struct {
+		id, title string
+		want      bool
+	}{
+		{id: "discovery-mix", want: true},
+		{id: "personalized-playlists", want: true},
+		{title: "Made for you", want: true},
+		{title: "Специально для вас", want: true},
+		{title: "Recently played", want: false},
+	} {
+		if got := isMadeForYouSelection(test.id, test.title); got != test.want {
+			t.Errorf("isMadeForYouSelection(%q, %q) = %v, want %v", test.id, test.title, got, test.want)
+		}
+	}
+}
+
+func TestMixedSelectionsIncludesPlaylistsAndOAuthToken(t *testing.T) {
+	svc := newTestService(t, "")
+	svc.auth.Token = "mixed-token"
+	svc.settings.ClientID = "test-client-id"
+	svc.httpClient = &http.Client{Transport: testRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Path != "/mixed-selections" {
+			t.Errorf("request path = %q, want /mixed-selections", request.URL.Path)
+		}
+		if request.URL.Query().Get("client_id") != "test-client-id" {
+			t.Errorf("client_id = %q", request.URL.Query().Get("client_id"))
+		}
+		if request.URL.Query().Get("oauth_token") != "mixed-token" {
+			t.Errorf("oauth_token = %q", request.URL.Query().Get("oauth_token"))
+		}
+		if request.Header.Get("Authorization") != "OAuth mixed-token" {
+			t.Errorf("Authorization = %q", request.Header.Get("Authorization"))
+		}
+		body := `{"collection":[{"id":"personalized-discovery","title":"Made for you","items":[{"type":"system-playlist","playlist":{"id":42,"urn":"soundcloud:playlists:42","title":"SoundCloud Weekly","track_count":25,"user":{"username":"SoundCloud"}}},{"type":"playlist","playlist":{"id":43,"urn":"soundcloud:playlists:43","title":"Daily Drops","track_count":12,"user":{"username":"SoundCloud"}}},{"type":"track","track":{"id":7,"urn":"soundcloud:tracks:7","title":"Recommended track","duration":1000,"user":{"username":"Artist"}}}]}]}`
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body)), Request: request}, nil
+	})}
+
+	selections, err := svc.RPCMixedSelections(emptyParams{})
+	if err != nil {
+		t.Fatalf("mixed.selections: %v", err)
+	}
+	if len(selections) != 1 {
+		t.Fatalf("selection count = %d, want 1", len(selections))
+	}
+	selection := selections[0]
+	if !selection.MadeForYou || selection.Title != "Made for you" {
+		t.Fatalf("unexpected personalized selection: %#v", selection)
+	}
+	if len(selection.Playlists) != 2 || selection.Playlists[0].Title != "SoundCloud Weekly" || selection.Playlists[1].Title != "Daily Drops" {
+		t.Fatalf("unexpected personalized playlists: %#v", selection.Playlists)
+	}
+	if len(selection.Tracks) != 1 || selection.Tracks[0].Title != "Recommended track" {
+		t.Fatalf("unexpected selection tracks: %#v", selection.Tracks)
+	}
+}
+
+func TestBackgroundImageValidation(t *testing.T) {
+	dataURL := func(mime string, payload []byte) string {
+		return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(payload)
+	}
+	validJPEG := dataURL("image/jpeg", []byte{0xff, 0xd8, 0xff, 0xd9})
+	// GIF89a is what real encoders emit; GIF87a is the older revision and must be accepted too.
+	validGIF := dataURL("image/gif", []byte("GIF89a"))
+	validPNG := dataURL("image/png", []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a})
+	// Builds a GIF data URL at least `size` characters long, whose payload really decodes to
+	// something starting with a GIF signature.
+	//
+	// Two details are load-bearing. Padding with raw 'A' characters cannot be padded past a
+	// multiple of four, because base64 rejects any other length and the whole URL would fail to
+	// decode, which would prove nothing about the size ceiling. And the length is rounded up, so
+	// the caller's number is a floor the result always reaches: the ceiling case has to come out
+	// strictly above the limit, since the validator refuses a value only when it is longer.
+	animationOfSize := func(fileBytes int) string {
+		const prefix = "data:image/gif;base64,"
+		signature := []byte("GIF89a")
+		encoded := base64.StdEncoding.EncodeToString(signature)
+		// The filler is measured in encoded characters, not in bytes: base64 spends four
+		// characters on every three bytes. Sizing it in bytes would build a URL three quarters of
+		// the requested length, which is the very mistake that caused this bug.
+		filler := base64.StdEncoding.EncodedLen(fileBytes) - len(encoded)
+		if filler < 0 {
+			filler = 0
+		}
+		return prefix + encoded + strings.Repeat("A", filler)
+	}
+	for _, test := range []struct {
+		name  string
+		value string
+		valid bool
+	}{
+		{name: "empty image clears background", value: "", valid: true},
+		{name: "jpeg data url", value: validJPEG, valid: true},
+		{name: "gif data url", value: validGIF, valid: true},
+		{name: "older gif revision", value: dataURL("image/gif", []byte("GIF87a")), valid: true},
+		{name: "png data url", value: validPNG, valid: true},
+		{name: "unsupported mime type", value: "data:image/bmp;base64," + base64.StdEncoding.EncodeToString([]byte{0xff, 0xd8, 0xff, 0xd9}), valid: false},
+		{name: "invalid jpeg signature", value: "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString([]byte("not jpeg")), valid: false},
+		// A GIF cannot be smuggled through the jpeg prefix: the declared type and the payload
+		// signature have to agree, which is the whole reason the check is per format.
+		{name: "gif bytes under jpeg prefix", value: "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString([]byte("GIF89a")), valid: false},
+		{name: "jpeg bytes under gif prefix", value: "data:image/gif;base64," + base64.StdEncoding.EncodeToString([]byte{0xff, 0xd8, 0xff, 0xd9}), valid: false},
+		{name: "truncated gif signature", value: dataURL("image/gif", []byte("GIF")), valid: false},
+		{name: "not base64", value: "data:image/gif;base64,%%%not-base64%%%", valid: false},
+		{name: "oversized still image", value: "data:image/jpeg;base64," + strings.Repeat("A", 700_000), valid: false},
+		// The animation ceiling is deliberately three times the still one, because an animation is
+		// stored as the untouched file while a still image is redrawn and re-encoded as JPEG.
+		{name: "oversized animation", value: "data:image/gif;base64," + strings.Repeat("A", 12_000_000), valid: false},
+		{name: "animation at its ceiling", value: animationOfSize(animatedFileBytes), valid: true},
+		{name: "animation just over the ceiling", value: animationOfSize(animatedFileBytes + 1), valid: false},
+		// 11.5 MB was the size that produced the report: it is comfortably inside the file limit
+		// but needs more data-URL characters than a naively written ceiling would allow.
+		{name: "eleven and a half megabytes", value: animationOfSize(11_500_000), valid: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := validBackgroundImage(test.value); got != test.valid {
+				t.Fatalf("validBackgroundImage() = %v, want %v", got, test.valid)
+			}
+		})
+	}
+}
+
+func TestBackgroundSettingsPersistAndValidateBlur(t *testing.T) {
+	svc := newTestService(t, "")
+	image := "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString([]byte{0xff, 0xd8, 0xff, 0xd9})
+	blur := 13
+
+	updated, err := svc.RPCSettingsUpdate(settingsPatch{BackgroundImage: &image, BackgroundBlur: &blur})
+	if err != nil {
+		t.Fatalf("update background settings: %v", err)
+	}
+	if updated.BackgroundImage != image || updated.BackgroundBlur != blur {
+		t.Fatalf("unexpected updated settings: %#v", updated)
+	}
+
+	reloaded := &service{settingsPath: svc.settingsPath, settings: defaultSettings()}
+	if err := reloaded.loadSettings(); err != nil {
+		t.Fatalf("reload settings: %v", err)
+	}
+	if reloaded.settings.BackgroundImage != image || reloaded.settings.BackgroundBlur != blur {
+		t.Fatalf("background settings did not persist: %#v", reloaded.settings)
+	}
+
+	for _, invalidBlur := range []int{-1, 25} {
+		if _, err := svc.RPCSettingsUpdate(settingsPatch{BackgroundBlur: &invalidBlur}); err == nil {
+			t.Errorf("expected blur %d to be rejected", invalidBlur)
+		}
+	}
+}
+
+func soundCloudStub(t *testing.T, wantToken string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/me" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.Header.Get("Authorization") != "OAuth "+wantToken {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":              1323227109,
+			"username":        "Max",
+			"full_name":       "Максим Райский",
+			"permalink_url":   "https://soundcloud.com/maksim-rajskij",
+			"avatar_url":      "https://i1.sndcdn.com/avatars-test-large.jpg",
+			"followers_count": 3,
+			"likes_count":     45,
+		})
+	}))
+}
+
+func TestAuthLoginStoresTokenAndHidesIt(t *testing.T) {
+	server := soundCloudStub(t, "valid-token")
+	defer server.Close()
+	svc := newTestService(t, server.URL)
+
+	result, err := svc.call("auth.login", json.RawMessage(`{"token":" valid-token "}`))
+	if err != nil {
+		t.Fatalf("auth.login: %v", err)
+	}
+	status, ok := result.(authStatus)
+	if !ok || !status.Authorized || status.Profile == nil {
+		t.Fatalf("unexpected login result: %#v", result)
+	}
+	if status.Profile.Username != "Max" || status.Profile.LikesCount != 45 {
+		t.Fatalf("unexpected profile: %#v", status.Profile)
+	}
+	if !strings.Contains(status.Profile.AvatarURL, "-t500x500.") {
+		t.Fatalf("avatar should use the largest size, got %q", status.Profile.AvatarURL)
+	}
+
+	stored, err := os.ReadFile(svc.authPath)
+	if err != nil {
+		t.Fatalf("auth file: %v", err)
+	}
+	if !strings.Contains(string(stored), "valid-token") {
+		t.Fatalf("auth file should contain the token")
+	}
+	// Only where the bits exist. Windows has no POSIX modes, Go's Chmod does not restrict access
+	// there, and the file comes out 0666, so this assertion can only ever fail on that platform.
+	//
+	// Note what the guard does not do: the token file on Windows is still not restricted to the
+	// owner. This makes the suite green, it does not tighten the file.
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(svc.authPath)
+		if err != nil {
+			t.Fatalf("auth file stat: %v", err)
+		}
+		if info.Mode().Perm() != 0o600 {
+			t.Fatalf("auth file permissions = %o, want 600", info.Mode().Perm())
+		}
+	}
+
+	// Renderer не должен получать сам токен — только признак входа и профиль.
+	statusResult, err := svc.call("auth.status", nil)
+	if err != nil {
+		t.Fatalf("auth.status: %v", err)
+	}
+	payload, err := json.Marshal(statusResult)
+	if err != nil {
+		t.Fatalf("marshal status: %v", err)
+	}
+	if strings.Contains(string(payload), "valid-token") {
+		t.Fatalf("auth.status leaks the token: %s", payload)
+	}
+}
+
+func TestAuthLoginRejectsInvalidToken(t *testing.T) {
+	server := soundCloudStub(t, "valid-token")
+	defer server.Close()
+	svc := newTestService(t, server.URL)
+
+	_, err := svc.call("auth.login", json.RawMessage(`{"token":"wrong-token"}`))
+	if !errors.Is(err, errTokenRejected) {
+		t.Fatalf("err = %v, want errTokenRejected", err)
+	}
+	if _, statErr := os.Stat(svc.authPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("auth file must not be created for rejected token")
+	}
+	status, err := svc.call("auth.status", nil)
+	if err != nil {
+		t.Fatalf("auth.status: %v", err)
+	}
+	if status.(authStatus).Authorized {
+		t.Fatalf("service must stay unauthorized")
+	}
+}
+
+func TestAuthLoginRequiresToken(t *testing.T) {
+	svc := newTestService(t, officialAPIBase)
+	if _, err := svc.call("auth.login", json.RawMessage(`{"token":"   "}`)); err == nil {
+		t.Fatalf("expected an error for an empty token")
+	}
+}
+
+func TestAuthRefreshClearsRejectedToken(t *testing.T) {
+	reject := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if reject {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": 1, "username": "Max"})
+	}))
+	defer server.Close()
+	svc := newTestService(t, server.URL)
+
+	if _, err := svc.call("auth.login", json.RawMessage(`{"token":"session-token"}`)); err != nil {
+		t.Fatalf("auth.login: %v", err)
+	}
+	reject = true
+	result, err := svc.call("auth.refresh", nil)
+	if err != nil {
+		t.Fatalf("auth.refresh: %v", err)
+	}
+	if result.(authStatus).Authorized {
+		t.Fatalf("rejected token must log the user out")
+	}
+	if _, statErr := os.Stat(svc.authPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("auth file must be removed after rejected refresh")
+	}
+}
+
+func TestAuthLogoutClearsState(t *testing.T) {
+	server := soundCloudStub(t, "valid-token")
+	defer server.Close()
+	svc := newTestService(t, server.URL)
+
+	if _, err := svc.call("auth.login", json.RawMessage(`{"token":"valid-token"}`)); err != nil {
+		t.Fatalf("auth.login: %v", err)
+	}
+	result, err := svc.call("auth.logout", nil)
+	if err != nil {
+		t.Fatalf("auth.logout: %v", err)
+	}
+	if result.(authStatus).Authorized {
+		t.Fatalf("logout must clear the session")
+	}
+	if _, statErr := os.Stat(svc.authPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("auth file must be removed after logout")
+	}
+}
+
+func TestSoundCloudLiveProfile(t *testing.T) {
+	token := strings.TrimSpace(os.Getenv("BSC_TEST_TOKEN"))
+	if token == "" {
+		t.Skip("BSC_TEST_TOKEN не задан — живой тест SoundCloud пропущен (npm run test:go:live)")
+	}
+
+	svc := newTestService(t, apiBase())
+	payload, err := json.Marshal(map[string]string{"token": token})
+	if err != nil {
+		t.Fatalf("marshal token: %v", err)
+	}
+	result, err := svc.call("auth.login", payload)
+	if err != nil {
+		t.Fatalf("живой auth.login: %v", err)
+	}
+	status, ok := result.(authStatus)
+	if !ok || !status.Authorized || status.Profile == nil {
+		t.Fatalf("неожиданный ответ: %#v", result)
+	}
+	if status.Profile.ID == 0 || status.Profile.Username == "" {
+		t.Fatalf("SoundCloud вернул неполный профиль: %#v", status.Profile)
+	}
+	t.Logf("подключено: %s (@%s), лайков: %d, аватар: %s",
+		status.Profile.FullName, status.Profile.Username, status.Profile.LikesCount, status.Profile.AvatarURL)
+
+	// Профиль должен восстанавливаться из auth.json после перезапуска sidecar.
+	restarted := newTestService(t, apiBase())
+	restarted.authPath = svc.authPath
+	if err := restarted.loadAuth(); err != nil {
+		t.Fatalf("loadAuth: %v", err)
+	}
+	restored := restarted.authStatus()
+	if !restored.Authorized || restored.Profile == nil || restored.Profile.ID != status.Profile.ID {
+		t.Fatalf("сессия не восстановилась: %#v", restored)
+	}
+}
+
+func TestAuthStateSurvivesRestart(t *testing.T) {
+	server := soundCloudStub(t, "valid-token")
+	defer server.Close()
+	svc := newTestService(t, server.URL)
+	if _, err := svc.call("auth.login", json.RawMessage(`{"token":"valid-token"}`)); err != nil {
+		t.Fatalf("auth.login: %v", err)
+	}
+
+	restarted := newTestService(t, server.URL)
+	restarted.authPath = svc.authPath
+	if err := restarted.loadAuth(); err != nil {
+		t.Fatalf("loadAuth: %v", err)
+	}
+	status := restarted.authStatus()
+	if !status.Authorized || status.Profile == nil || status.Profile.Username != "Max" {
+		t.Fatalf("session should survive restart: %#v", status)
+	}
+}
+
+func TestPlaylistTracksHydrateStubsInOriginalOrder(t *testing.T) {
+	var chunkSizes []int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "OAuth playlist-token" {
+			http.Error(w, "missing auth", http.StatusUnauthorized)
+			return
+		}
+
+		switch r.URL.Path {
+		case "/playlists/42":
+			if r.URL.Query().Get("limit") != "500" {
+				t.Errorf("playlist limit = %q, want 500", r.URL.Query().Get("limit"))
+			}
+			stubs := make([]map[string]any, 55)
+			for index := range stubs {
+				stub := map[string]any{"id": index + 1}
+				if index < 5 {
+					stub["title"] = "Partial track " + strconv.Itoa(index+1)
+				}
+				stubs[index] = stub
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"tracks": stubs})
+		case "/tracks":
+			ids := strings.Split(r.URL.Query().Get("ids"), ",")
+			chunkSizes = append(chunkSizes, len(ids))
+			tracks := make([]map[string]any, 0, len(ids))
+			for index := len(ids) - 1; index >= 0; index-- {
+				id, err := strconv.Atoi(ids[index])
+				if err != nil {
+					t.Errorf("invalid track ID %q: %v", ids[index], err)
+					continue
+				}
+				if id == 17 {
+					continue
+				}
+				tracks = append(tracks, map[string]any{
+					"id": id, "title": "Hydrated track " + strconv.Itoa(id),
+					"duration": id * 1000, "artwork_url": "https://sndcdn.com/large/cover.jpg",
+				})
+			}
+			_ = json.NewEncoder(w).Encode(tracks)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	svc := newTestService(t, server.URL)
+	svc.auth.Token = "playlist-token"
+	tracks, err := svc.RPCPlaylistTracks(playlistTracksParams{PlaylistURN: "soundcloud:playlists:42"})
+	if err != nil {
+		t.Fatalf("playlist.tracks: %v", err)
+	}
+	if len(chunkSizes) != 2 || chunkSizes[0] != 50 || chunkSizes[1] != 5 {
+		t.Fatalf("chunk sizes = %v, want [50 5]", chunkSizes)
+	}
+	if len(tracks) != 54 {
+		t.Fatalf("loaded %d tracks, want 54 (missing track 17 should be skipped)", len(tracks))
+	}
+
+	wantID := 1
+	for _, track := range tracks {
+		if wantID == 17 {
+			wantID++
+		}
+		if track.ID != int64(wantID) {
+			t.Fatalf("track order has ID %d, want %d", track.ID, wantID)
+		}
+		if track.Title != "Hydrated track "+strconv.Itoa(wantID) {
+			t.Fatalf("track %d was not hydrated: title = %q", wantID, track.Title)
+		}
+		if track.Duration != int64(wantID*1000) {
+			t.Fatalf("track %d duration = %d, want %d", wantID, track.Duration, wantID*1000)
+		}
+		wantID++
+	}
+}
+
+func TestUserLikesReadsTracksAcrossPages(t *testing.T) {
+	requests := 0
+	svc := newTestService(t, "")
+	svc.auth.Token = "likes-token"
+	svc.httpClient = &http.Client{Transport: testRoundTripper(func(r *http.Request) (*http.Response, error) {
+		if r.Header.Get("Authorization") != "OAuth likes-token" {
+			return nil, errors.New("missing auth")
+		}
+		requests++
+		if requests == 1 {
+			if r.URL.Path != "/users/42/likes" {
+				t.Errorf("first page path = %q, want /users/42/likes", r.URL.Path)
+			}
+			if r.URL.Query().Get("limit") != "20" {
+				t.Errorf("limit = %q, want 20", r.URL.Query().Get("limit"))
+			}
+			return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"collection":[{"track":{"id":1,"title":"First","urn":"soundcloud:tracks:1"}}],"next_href":"https://api-v2.soundcloud.com/users/42/likes?cursor=next"}`))}, nil
+		}
+		if r.URL.Query().Get("cursor") != "next" {
+			t.Errorf("second page query = %q, want cursor=next", r.URL.RawQuery)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"collection":[{"id":2,"title":"Second","urn":"soundcloud:tracks:2"}]}`))}, nil
+	})}
+	firstPage, err := svc.RPCUserLikes(userLikesParams{UserID: 42})
+	if err != nil {
+		t.Fatalf("user.likes: %v", err)
+	}
+	if requests != 1 || len(firstPage.Tracks) != 1 || firstPage.Tracks[0].Title != "First" || firstPage.NextHref == "" {
+		t.Fatalf("first page = %#v requests=%d, want one track and next href", firstPage, requests)
+	}
+	secondPage, err := svc.RPCUserLikes(userLikesParams{UserID: 42, Next: firstPage.NextHref})
+	if err != nil {
+		t.Fatalf("user.likes next page: %v", err)
+	}
+	if requests != 2 || len(secondPage.Tracks) != 1 || secondPage.Tracks[0].Title != "Second" || secondPage.NextHref != "" {
+		t.Fatalf("second page = %#v requests=%d, want final track page", secondPage, requests)
+	}
+}
+
+func TestPlaylistsFallbackToFirstTrackArtwork(t *testing.T) {
+	playlistDetailRequests := 0
+	trackHydrationRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "OAuth playlist-token" {
+			http.Error(w, "missing auth", http.StatusUnauthorized)
+			return
+		}
+
+		switch r.URL.Path {
+		case "/users/7/playlists":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"collection": []any{
+					map[string]any{"id": 42, "title": "Fallback from API", "track_count": 1},
+					map[string]any{
+						"id": 43, "title": "Fallback from embedded track", "track_count": 1,
+						"tracks": []any{map[string]any{"id": 123, "artwork_url": "https://sndcdn.com/embedded-large.jpg"}},
+					},
+				},
+			})
+		case "/playlists/42":
+			playlistDetailRequests++
+			if r.URL.Query().Get("limit") != "5" {
+				t.Errorf("first-track limit = %q, want 5", r.URL.Query().Get("limit"))
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"tracks": []any{map[string]any{"id": 99}}})
+		case "/tracks":
+			trackHydrationRequests++
+			if r.URL.Query().Get("ids") != "99" {
+				t.Errorf("track IDs = %q, want 99", r.URL.Query().Get("ids"))
+			}
+			_ = json.NewEncoder(w).Encode([]any{map[string]any{
+				"id": 99, "title": "First track", "artwork_url": "https://sndcdn.com/first-large.jpg",
+			}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	svc := newTestService(t, server.URL)
+	svc.auth.Token = "playlist-token"
+	playlists, err := svc.fetchPlaylistsFrom(server.URL, server.URL+"/users/7/playlists?limit=200")
+	if err != nil {
+		t.Fatalf("fetch playlists: %v", err)
+	}
+	if len(playlists) != 2 {
+		t.Fatalf("loaded %d playlists, want 2", len(playlists))
+	}
+	if playlists[0].ArtworkURL != "https://sndcdn.com/first-t500x500.jpg" {
+		t.Fatalf("first playlist artwork = %q", playlists[0].ArtworkURL)
+	}
+	if playlists[1].ArtworkURL != "https://sndcdn.com/embedded-t500x500.jpg" {
+		t.Fatalf("embedded fallback artwork = %q", playlists[1].ArtworkURL)
+	}
+	if playlistDetailRequests != 1 || trackHydrationRequests != 1 {
+		t.Fatalf("fallback requests = playlist:%d tracks:%d, want 1 each", playlistDetailRequests, trackHydrationRequests)
+	}
+}
+
+func TestPlaybackHistorySurvivesRestart(t *testing.T) {
+	historyPath := filepath.Join(t.TempDir(), "history.json")
+	svc := newTestService(t, officialAPIBase)
+	svc.historyPath = historyPath
+
+	track := soundcloudTrackCard{ID: 42, TrackURN: "soundcloud:tracks:42", Title: "Recently played", Duration: 125_000}
+	payload, err := json.Marshal(historyTrackParams{Track: track})
+	if err != nil {
+		t.Fatalf("marshal track: %v", err)
+	}
+	if _, err := svc.call("history.record", payload); err != nil {
+		t.Fatalf("history.record: %v", err)
+	}
+
+	restarted := newTestService(t, officialAPIBase)
+	restarted.historyPath = historyPath
+	if err := restarted.loadHistory(); err != nil {
+		t.Fatalf("loadHistory after restart: %v", err)
+	}
+	loaded, err := restarted.RPCHistoryList(emptyParams{})
+	if err != nil {
+		t.Fatalf("history.list after restart: %v", err)
+	}
+	if len(loaded) != 1 || loaded[0].ID != track.ID || loaded[0].Title != track.Title {
+		t.Fatalf("restored history = %#v, want the recently played track", loaded)
+	}
+}
+
+func TestTrackLikeUsesSoundCloudV2Endpoints(t *testing.T) {
+	for _, test := range []struct {
+		name                 string
+		liked                bool
+		wantMethod           string
+		dataDomeCookie       string
+		wantCookieHeader     string
+		wantDataDomeClientID string
+	}{
+		{name: "like", liked: true, wantMethod: http.MethodPut},
+		{name: "unlike", liked: false, wantMethod: http.MethodDelete},
+		{name: "like after captcha", liked: true, wantMethod: http.MethodPut, dataDomeCookie: "verified-cookie", wantCookieHeader: "datadome=verified-cookie", wantDataDomeClientID: "verified-cookie"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/users/1323227109/track_likes/2391534675" {
+					t.Errorf("request path = %q", r.URL.Path)
+				}
+				if r.Method != test.wantMethod {
+					t.Errorf("request method = %q, want %q", r.Method, test.wantMethod)
+				}
+				if r.URL.Query().Get("client_id") != "test-client-id" {
+					t.Errorf("client_id = %q", r.URL.Query().Get("client_id"))
+				}
+				if r.Header.Get("Authorization") != "OAuth test-token" {
+					t.Errorf("unexpected authorization header")
+				}
+				if r.Header.Get("Cookie") != test.wantCookieHeader {
+					t.Errorf("Cookie header = %q, want %q", r.Header.Get("Cookie"), test.wantCookieHeader)
+				}
+				if r.Header.Get("X-Datadome-ClientId") != test.wantDataDomeClientID {
+					t.Errorf("X-Datadome-ClientId header = %q, want %q", r.Header.Get("X-Datadome-ClientId"), test.wantDataDomeClientID)
+				}
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
+
+			svc := newTestService(t, server.URL)
+			svc.auth.Token = "test-token"
+			svc.auth.Profile.ID = 1323227109
+			svc.settings.ClientID = "test-client-id"
+			params := trackLikeParams{TrackID: 2391534675, TrackURN: "soundcloud:tracks:2391534675", DataDomeCookie: test.dataDomeCookie}
+			var result trackLikeResult
+			var err error
+			if test.liked {
+				result, err = svc.RPCTrackLike(params)
+			} else {
+				result, err = svc.RPCTrackUnlike(params)
+			}
+			if err != nil {
+				t.Fatalf("track-like request failed: %v", err)
+			}
+			if result.Liked != test.liked || result.CaptchaURL != "" {
+				t.Fatalf("result = %#v", result)
+			}
+		})
+	}
+}
+
+func TestTrackLikeReturnsCaptchaURLFromForbiddenResponse(t *testing.T) {
+	const captchaURL = "https://geo.captcha-delivery.com/captcha/?challenge=test"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			t.Errorf("request method = %q, want PUT", r.Method)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"url":"` + captchaURL + `"}`))
+	}))
+	defer server.Close()
+
+	svc := newTestService(t, server.URL)
+	svc.auth.Token = "test-token"
+	svc.auth.Profile.ID = 1323227109
+	svc.settings.ClientID = "test-client-id"
+	result, err := svc.RPCTrackLike(trackLikeParams{TrackID: 2391534675})
+	if err != nil {
+		t.Fatalf("captcha response should be returned to the UI: %v", err)
+	}
+	if result.Liked || result.CaptchaURL != captchaURL {
+		t.Fatalf("result = %#v, want captcha URL and no like", result)
+	}
+}
+
+// The failing transport must produce an error that mentions the URL with the token in it,
+// which is exactly what *url.Error does.
+type urlLeakingTransport struct {
+	token string
+}
+
+func (t urlLeakingTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	return nil, &url_Error{url: request.URL.String()}
+}
+
+func TestOAuthTokenStaysOutOfErrors(t *testing.T) {
+	const token = "SECRET-TOKEN-VALUE-123"
+
+	// A token-free log line must not be rewritten.
+	if got := scrubToken("connection reset by peer", ""); got != "connection reset by peer" {
+		t.Fatalf("an empty token must not alter the text, got %q", got)
+	}
+
+	// A body that echoes the token must lose it.
+	body := fmt.Sprintf(`{"detail":"bad oauth_token=%s"}`, token)
+	if got := scrubToken(body, token); strings.Contains(got, token) {
+		t.Fatalf("token survived body scrubbing: %q", got)
+	}
+
+	// Transport failure: the real function under test.
+	service := newTestService(t, "")
+	service.auth.Token = token
+	service.httpClient = &http.Client{Transport: urlLeakingTransport{token: token}}
+	err := service.getSoundCloudJSONLimit(
+		"https://api-v2.soundcloud.com/me?client_id=abc&oauth_token="+token,
+		&struct{}{},
+		1024,
+	)
+	if err == nil {
+		t.Fatal("expected a transport error")
+	}
+	if strings.Contains(err.Error(), token) {
+		t.Fatalf("token reached the user-visible error: %q", err.Error())
+	}
+	// The user still learns which host failed.
+	if !strings.Contains(err.Error(), "api-v2.soundcloud.com") {
+		t.Fatalf("expected the host in the message, got %q", err.Error())
+	}
+
+	// Non-200: the body is logged scrubbed, the user gets the status only.
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.WriteHeader(http.StatusForbidden)
+		_, _ = writer.Write([]byte(fmt.Sprintf(`{"detail":"bad oauth_token=%s"}`, token)))
+	}))
+	defer server.Close()
+
+	service.httpClient = server.Client()
+	err = service.getSoundCloudJSONLimit(server.URL+"/me?oauth_token="+token, &struct{}{}, 1024)
+	if err == nil {
+		t.Fatal("expected an HTTP status error")
+	}
+	if strings.Contains(err.Error(), token) {
+		t.Fatalf("token reached the user-visible error: %q", err.Error())
+	}
+	if !strings.Contains(err.Error(), "403") {
+		t.Fatalf("expected the status code in the message, got %q", err.Error())
+	}
+	// The raw body must not be handed to the user.
+	if strings.Contains(err.Error(), "detail") {
+		t.Fatalf("raw response body leaked to the user: %q", err.Error())
+	}
+}
+
+// url_Error reproduces the part of *url.Error that matters here: its message quotes the
+// full request URL, query string and token included.
+type url_Error struct {
+	url string
+}
+
+func (e *url_Error) Error() string {
+	return fmt.Sprintf("Get %q: dial tcp: lookup api-v2.soundcloud.com: no such host", e.url)
+}

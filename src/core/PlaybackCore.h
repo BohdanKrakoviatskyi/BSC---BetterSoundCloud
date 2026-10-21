@@ -5,7 +5,7 @@
 #include <QStringList>
 #include <QCoroTask>
 
-namespace swiftify {
+namespace resonance {
 
 /// what the player asks of the audio core: the rust core in the app, a fake in
 /// tests. calls that can fail throw SpotifyError with the core's own message;
@@ -63,4 +63,4 @@ public:
     static constexpr int kSpectrumBands = 48;
 };
 
-} // namespace swiftify
+} // namespace resonance

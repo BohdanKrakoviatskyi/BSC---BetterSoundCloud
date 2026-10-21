@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // a setting that is one of a few choices: its name, then the choices as
 // segmented buttons (end4's ConfigSelectionArray).

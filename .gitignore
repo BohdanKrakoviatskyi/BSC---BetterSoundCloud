@@ -10,9 +10,9 @@ build-*/
 target/
 *.profraw
 
-# the swift glue the core's default (apple) feature writes beside it,
-# when an editor builds the core with it
+# generated Swift bridge output
 /Swiftify/
+/Resonance/
 
 # editors' and language servers' own settings
 .qmlls.ini
@@ -24,3 +24,4 @@ target/
 *~
 third_party/local-api/
 release-artifacts/
+node_modules/

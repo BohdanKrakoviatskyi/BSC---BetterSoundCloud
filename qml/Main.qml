@@ -3,7 +3,7 @@ import QtQuick
 import QtQuick.Controls.Basic
 import QtMultimedia
 import Qt.labs.platform as Platform
-import Swiftify
+import Resonance
 
 // the main window: drawer, a content sheet with the top bar and the page, the
 // inspector beside it, and the player floating over the bottom.
@@ -46,7 +46,7 @@ ApplicationWindow {
         target: Player
         function onPanelsChanged() { window.closeCrowdedPanels() }
     }
-    title: "Swiftify"
+    title: "Resonance"
     // on linux the app draws its whole frame. on macos the content runs under
     // a transparent title bar that keeps the traffic lights and nothing else.
     flags: App.macOS ? Qt.Window | Qt.ExpandedClientAreaHint | Qt.NoTitleBarBackgroundHint
@@ -807,9 +807,9 @@ ApplicationWindow {
     Loader {
         active: App.trayAvailable && (Settings.trayIcon || (App.windows && !window.visible))
         sourceComponent: Platform.SystemTrayIcon {
-            objectName: "swiftifyTrayIcon"
+            objectName: "resonanceTrayIcon"
             visible: true
-            icon.source: "qrc:/qt/qml/Swiftify/resources/swiftify-icon.png"
+            icon.source: "qrc:/qt/qml__LEGACY_RESONANCE_IGNORE__resources/resonance-icon.png"
             tooltip: Player.hasSong ? Player.currentSong.name + " — " + Player.currentSong.artists : "Resonance"
             onActivated: (reason) => {
                 if (reason === Platform.SystemTrayIcon.Trigger || reason === Platform.SystemTrayIcon.DoubleClick) {

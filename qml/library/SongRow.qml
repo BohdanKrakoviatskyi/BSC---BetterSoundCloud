@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Templates as T
-import Swiftify
+import Resonance
 
 // one song in a list (SongListRow): number or play glyph, artwork, title and
 // artists, the star and more buttons, and the time. hovered, the card grows

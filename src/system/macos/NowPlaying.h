@@ -6,7 +6,7 @@
 
 #include <memory>
 
-namespace swiftify {
+namespace resonance {
 
 class ArtworkCache;
 class PlaybackController;
@@ -41,4 +41,4 @@ private:
     bool m_publishedPlaying = false;
 };
 
-} // namespace swiftify
+} // namespace resonance

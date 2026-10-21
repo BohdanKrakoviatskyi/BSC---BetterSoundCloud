@@ -4,7 +4,7 @@
 #include <QObject>
 #include <QtQml/qqmlregistration.h>
 
-namespace swiftify {
+namespace resonance {
 
 /// the clock the app's slow, ambient motion runs on: the shapes and
 /// squiggles that turn while music plays. `value` grows at `speed` units a
@@ -49,4 +49,4 @@ private:
     bool m_ticking = false;
 };
 
-} // namespace swiftify
+} // namespace resonance

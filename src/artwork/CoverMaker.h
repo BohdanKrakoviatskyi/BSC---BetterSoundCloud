@@ -10,7 +10,7 @@
 #include <QUrl>
 #include <QtQml/qqmlregistration.h>
 
-namespace swiftify {
+namespace resonance {
 
 /// one generated cover, drawn at whatever size it is given: the editor's
 /// carousel tiles (CoverCanvas)
@@ -93,4 +93,4 @@ private:
     QImage m_image;
 };
 
-} // namespace swiftify
+} // namespace resonance

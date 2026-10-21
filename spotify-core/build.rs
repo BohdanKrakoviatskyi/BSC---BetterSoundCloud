@@ -17,7 +17,7 @@ fn generate_swift_bridge() {
         println!("cargo:rerun-if-changed={bridge_file}");
     }
 
-    let generated_directory = PathBuf::from("../Swiftify/Swiftify/Bridge/Generated");
+    let generated_directory = PathBuf::from("../Resonance/Resonance/Bridge/Generated");
     std::fs::create_dir_all(&generated_directory)
         .expect("failed to create the swift-bridge output directory");
 

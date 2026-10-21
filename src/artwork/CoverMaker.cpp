@@ -9,7 +9,7 @@
 
 #include <algorithm>
 
-namespace swiftify {
+namespace resonance {
 
 PlaylistCoverItem::PlaylistCoverItem(QQuickItem *parent)
     : QQuickPaintedItem(parent)
@@ -130,4 +130,4 @@ QUrl CoverMaker::preview(const QByteArray &jpeg)
     return jpeg.isEmpty() ? QUrl() : QUrl(QStringLiteral("data:image/jpeg;base64,") + QString::fromLatin1(jpeg.toBase64()));
 }
 
-} // namespace swiftify
+} // namespace resonance

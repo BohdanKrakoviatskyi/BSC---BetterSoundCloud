@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Templates as T
-import Swiftify
+import Resonance
 
 // the immersive player's Sound panel (AudioShapingPanel): the equalizer, with
 // the live spectrum behind its curve, and tempo and pitch.

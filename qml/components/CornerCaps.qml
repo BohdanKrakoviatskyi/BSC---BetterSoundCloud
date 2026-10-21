@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // a rounded panel's corners, painted over in the colour behind it: what
 // fills the panel clips square, so a sticker or a cover in flight reaching

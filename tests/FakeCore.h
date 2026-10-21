@@ -3,7 +3,7 @@
 #include "core/PlaybackCore.h"
 #include "spotify/SpotifyError.h"
 
-#include <swiftify_core.h>
+#include <resonance_core.h>
 
 #include <QCoroSignal>
 #include <QElapsedTimer>
@@ -16,7 +16,7 @@
 #include <memory>
 #include <utility>
 
-namespace swiftify::testing {
+namespace resonance::testing {
 
 /// an async call the test decides the outcome of
 class PendingCall : public QObject {
@@ -178,7 +178,7 @@ private:
         }
         if (!ok) {
             // as RustCore tells a replaced request from a failed one
-            throw SpotifyError(payload == QLatin1StringView(SWIFTIFY_CORE_SUPERSEDED) ? SpotifyError::Kind::Superseded
+            throw SpotifyError(payload == QLatin1StringView(RESONANCE_CORE_SUPERSEDED) ? SpotifyError::Kind::Superseded
                                                                                      : SpotifyError::Kind::Core,
                                payload);
         }
@@ -186,4 +186,4 @@ private:
     }
 };
 
-} // namespace swiftify::testing
+} // namespace resonance::testing

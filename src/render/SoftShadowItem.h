@@ -5,7 +5,7 @@
 #include <QVector2D>
 #include <QtQml/qqmlregistration.h>
 
-namespace swiftify {
+namespace resonance {
 
 /// a rounded rectangle's soft shadow or glow, drawn as qt quick effects'
 /// RectangularShadow draws one: solid over the rectangle and fading out to
@@ -55,4 +55,4 @@ private:
     QColor m_color = Qt::black;
 };
 
-} // namespace swiftify
+} // namespace resonance

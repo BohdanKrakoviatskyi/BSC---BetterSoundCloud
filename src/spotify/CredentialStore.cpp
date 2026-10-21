@@ -8,7 +8,7 @@
 #include <qt6keychain/keychain.h>
 #include <QCoroSignal>
 
-namespace swiftify {
+namespace resonance {
 
 namespace {
 
@@ -127,4 +127,4 @@ QCoro::Task<> MemoryCredentialStore::removeAll()
     co_return;
 }
 
-} // namespace swiftify
+} // namespace resonance

@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.Basic
-import Swiftify
+import Resonance
 
 // SoundCloud track detail page: ambient hero (no empty space), stats, tags, description, and related carousel
 Flickable {

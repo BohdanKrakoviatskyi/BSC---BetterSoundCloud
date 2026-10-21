@@ -35,13 +35,13 @@
 #include <malloc.h>
 #endif
 
-#if defined(SWIFTIFY_HAS_DBUS) && defined(Q_OS_LINUX)
+#if defined(RESONANCE_HAS_DBUS) && defined(Q_OS_LINUX)
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QDBusServiceWatcher>
 #endif
 
-namespace swiftify {
+namespace resonance {
 
 namespace {
 AppController *s_instance = nullptr;
@@ -66,7 +66,7 @@ AppController::AppController(QObject *parent)
 #ifdef Q_OS_WIN
     m_trayAvailable = QSystemTrayIcon::isSystemTrayAvailable();
 #endif
-#if defined(SWIFTIFY_HAS_DBUS) && defined(Q_OS_LINUX)
+#if defined(RESONANCE_HAS_DBUS) && defined(Q_OS_LINUX)
     // qt's tray icon on linux is a StatusNotifierItem, which needs a watcher
     // to register with; without one it has nowhere to appear
     const QString watcher = QStringLiteral("org.kde.StatusNotifierWatcher");
@@ -199,17 +199,9 @@ void AppController::releaseMemory()
 
 QString AppController::version() const
 {
-    return QStringLiteral(SWIFTIFY_VERSION);
+    return QStringLiteral(RESONANCE_VERSION);
 }
 
-bool AppController::hasDesktopIntegration() const
-{
-#ifdef SWIFTIFY_DESKTOP_INTEGRATION
-    return true;
-#else
-    return false;
-#endif
-}
 
 void AppController::handleCommand(const QString &command)
 {
@@ -306,7 +298,7 @@ QString typeName(const QObject *object)
 bool isOwnComponent(const QObject *object)
 {
     const QString name = QString::fromLatin1(object->metaObject()->className());
-    return name.contains(QLatin1StringView("_QMLTYPE_")) || name.startsWith(QLatin1StringView("swiftify::"));
+    return name.contains(QLatin1StringView("_QMLTYPE_")) || name.startsWith(QLatin1StringView("resonance::"));
 }
 
 void census(QQuickItem *item, const QString &owner, const QRectF &window, QMap<QString, int> &drawn)
@@ -410,4 +402,4 @@ void AppController::openUrl(const QString &url) const
     QDesktopServices::openUrl(QUrl(url));
 }
 
-} // namespace swiftify
+} // namespace resonance

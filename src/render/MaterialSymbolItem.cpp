@@ -21,7 +21,7 @@
 #include <optional>
 #include <utility>
 
-namespace swiftify {
+namespace resonance {
 
 /// a name filled at one size, for one screen's pixels
 struct SymbolGlyph {
@@ -57,29 +57,29 @@ int opticalSize(qreal iconSize)
     return iconSize < 22 ? 20 : (iconSize < 32 ? 24 : (iconSize < 44 ? 40 : 48));
 }
 
-QFont symbolFont(int pixels, int fill, int weight, qreal grade, int opsz)
+QFont symbolFont(int pixels, int fill, int weight, int opsz)
 {
     QFont font(fonts::iconFamily());
     font.setPixelSize(pixels);
     font.setVariableAxis(QFont::Tag("FILL"), float(fill));
     font.setVariableAxis(QFont::Tag("wght"), float(weight));
-    font.setVariableAxis(QFont::Tag("GRAD"), float(grade));
+
     font.setVariableAxis(QFont::Tag("opsz"), float(opsz));
     return font;
 }
 
 /// a name's glyphs in the icon font, shaped with its axes; empty when the
 /// font does not draw the name itself (it is not installed)
-const QList<quint32> &glyphsFor(const QString &name, int fill, int weight, qreal grade, int opsz)
+const QList<quint32> &glyphsFor(const QString &name, int fill, int weight, int opsz)
 {
     // shaping is what copies the font's tables into a font engine of its own
     // (harfbuzz's face), and a Text shaped at every size it was shown at
     static QHash<QString, QList<quint32>> shaped;
-    const QString key = QStringLiteral("%1|%2|%3|%4|%5").arg(name).arg(fill).arg(weight).arg(grade).arg(opsz);
+    const QString key = QStringLiteral("%1|%2|%3|%4").arg(name).arg(fill).arg(weight).arg(opsz);
     if (const auto found = shaped.constFind(key); found != shaped.cend()) {
         return *found;
     }
-    QTextLayout layout(name, symbolFont(kShapingPixels, fill, weight, grade, opsz));
+    QTextLayout layout(name, symbolFont(kShapingPixels, fill, weight, opsz));
     layout.setCacheEnabled(false);
     layout.beginLayout();
     layout.createLine();
@@ -95,15 +95,14 @@ const QList<quint32> &glyphsFor(const QString &name, int fill, int weight, qreal
 /// a name drawn at a size, shared by every icon showing it so. its glyphs
 /// are drawn by the platform's rasteriser through the font engine a Text of
 /// that size draws with, so they come out as a Text's did
-std::shared_ptr<const SymbolGlyph> glyphFor(const QString &name, qreal fill, int weight, qreal grade, qreal iconSize,
-                                            qreal ratio)
+std::shared_ptr<const SymbolGlyph> glyphFor(const QString &name, qreal fill, int weight, qreal iconSize, qreal ratio)
 {
     static QHash<QString, std::weak_ptr<const SymbolGlyph>> glyphs;
     const int filled = fill >= 0.5 ? 1 : 0;
     const int opsz = opticalSize(iconSize);
     // a Text's pixel size is a whole one
     const int pixels = std::max(1, qRound(iconSize));
-    const QString key = QStringLiteral("%1|%2|%3|%4|%5|%6|%7").arg(name).arg(filled).arg(weight).arg(grade).arg(opsz)
+    const QString key = QStringLiteral("%1|%2|%3|%4|%5|%6").arg(name).arg(filled).arg(weight).arg(opsz)
                             .arg(pixels).arg(ratio);
     if (std::shared_ptr<const SymbolGlyph> shown = glyphs.value(key).lock()) {
         return shown;
@@ -112,8 +111,8 @@ std::shared_ptr<const SymbolGlyph> glyphFor(const QString &name, qreal fill, int
     auto glyph = std::make_shared<SymbolGlyph>();
     glyph->key = key;
     glyph->devicePixelRatio = ratio;
-    const QFont font = symbolFont(pixels, filled, weight, grade, opsz);
-    const QList<quint32> &indexes = glyphsFor(name, filled, weight, grade, opsz);
+    const QFont font = symbolFont(pixels, filled, weight, opsz);
+    const QList<quint32> &indexes = glyphsFor(name, filled, weight, opsz);
 
     // the line, and how to draw it, from its left end on the baseline
     std::function<void(QPainter &)> draw;
@@ -509,15 +508,6 @@ void MaterialSymbolItem::setWeight(int weight)
     reshape();
 }
 
-void MaterialSymbolItem::setGrade(qreal grade)
-{
-    if (grade == m_grade) {
-        return;
-    }
-    m_grade = grade;
-    emit gradeChanged();
-    reshape();
-}
 
 void MaterialSymbolItem::setColor(const QColor &color)
 {
@@ -542,7 +532,7 @@ void MaterialSymbolItem::updatePolish()
     }
     m_stale = false;
     const qreal ratio = window() ? window()->effectiveDevicePixelRatio() : 1;
-    m_glyph = m_text.isEmpty() ? nullptr : glyphFor(m_text, m_fill, m_weight, m_grade, m_iconSize, ratio);
+    m_glyph = m_text.isEmpty() ? nullptr : glyphFor(m_text, m_fill, m_weight, m_iconSize, ratio);
     update();
 }
 
@@ -622,4 +612,4 @@ QSGNode *MaterialSymbolItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeDa
     return node;
 }
 
-} // namespace swiftify
+} // namespace resonance

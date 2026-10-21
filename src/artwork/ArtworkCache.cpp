@@ -18,9 +18,9 @@
 #include <utility>
 #include <QCoroSignal>
 
-namespace swiftify {
+namespace resonance {
 
-Q_LOGGING_CATEGORY(lcArtwork, "swiftify.artwork")
+Q_LOGGING_CATEGORY(lcArtwork, "resonance.artwork")
 
 namespace {
 
@@ -254,6 +254,6 @@ QQuickImageResponse *ArtworkImageProvider::requestImageResponse(const QString &i
     return new ArtworkResponse(url, pixels);
 }
 
-} // namespace swiftify
+} // namespace resonance
 
 #include "ArtworkCache.moc"

@@ -8,7 +8,7 @@
 
 class QWindow;
 
-namespace swiftify {
+namespace resonance {
 
 class PlaybackController;
 class Theme;
@@ -41,4 +41,4 @@ private:
     std::unique_ptr<Native> m_native;
 };
 
-} // namespace swiftify
+} // namespace resonance

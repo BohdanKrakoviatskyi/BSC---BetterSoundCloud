@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Templates as T
-import Swiftify
+import Resonance
 
 // a material 3 expressive slider: the track splits around a slim handle, with
 // a stop dot at the far end. horizontal or vertical (the equalizer's bands).

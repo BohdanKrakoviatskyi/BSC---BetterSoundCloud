@@ -6,7 +6,7 @@
 
 #include <algorithm>
 
-namespace swiftify {
+namespace resonance {
 
 namespace {
 
@@ -187,4 +187,4 @@ QSGNode *SoftShadowItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *
     return node;
 }
 
-} // namespace swiftify
+} // namespace resonance

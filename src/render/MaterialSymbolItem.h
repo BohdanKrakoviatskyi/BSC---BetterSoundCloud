@@ -6,7 +6,7 @@
 
 #include <memory>
 
-namespace swiftify {
+namespace resonance {
 
 struct SymbolGlyph;
 
@@ -33,7 +33,7 @@ class MaterialSymbolItem : public QQuickItem {
     /// outlined below a half, filled from it
     Q_PROPERTY(qreal fill READ fill WRITE setFill NOTIFY fillChanged FINAL)
     Q_PROPERTY(int weight READ weight WRITE setWeight NOTIFY weightChanged FINAL)
-    Q_PROPERTY(qreal grade READ grade WRITE setGrade NOTIFY gradeChanged FINAL)
+
     /// transparent, and so not drawn, until one is given
     Q_PROPERTY(QColor color READ color WRITE setColor NOTIFY colorChanged FINAL)
 
@@ -49,8 +49,7 @@ public:
     void setFill(qreal fill);
     int weight() const { return m_weight; }
     void setWeight(int weight);
-    qreal grade() const { return m_grade; }
-    void setGrade(qreal grade);
+
     QColor color() const { return m_color; }
     void setColor(const QColor &color);
 
@@ -59,7 +58,7 @@ signals:
     void iconSizeChanged();
     void fillChanged();
     void weightChanged();
-    void gradeChanged();
+
     void colorChanged();
 
 protected:
@@ -76,11 +75,11 @@ private:
     qreal m_iconSize = 24;
     qreal m_fill = 0;
     int m_weight = 400;
-    qreal m_grade = 0;
+
     QColor m_color = Qt::transparent;
 
     std::shared_ptr<const SymbolGlyph> m_glyph;
     bool m_stale = true;
 };
 
-} // namespace swiftify
+} // namespace resonance

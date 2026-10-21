@@ -3,7 +3,7 @@ param(
     [string]$QtPath,
     [string]$MingwPath,
     [string]$BuildRoot,
-    [string]$InstallPrefix = "$env:LOCALAPPDATA\Programs\Swiftify",
+    [string]$InstallPrefix = "$env:LOCALAPPDATA\Programs\Resonance",
     [ValidateRange(1, 256)]
     [int]$Jobs = [Math]::Max(1, [Math]::Min(8, [Environment]::ProcessorCount))
 )
@@ -156,7 +156,7 @@ function Invoke-WindowsBuild {
     $qtConfiguration = Get-Content -LiteralPath "$QtPath\mkspecs\qconfig.pri" -Raw
     $qtVersion = [regex]::Match($qtConfiguration, '(?m)^QT_VERSION\s*=\s*(\S+)').Groups[1].Value
     if (-not $qtVersion -or [version]$qtVersion -lt [version]'6.9' -or $qtConfiguration -notmatch '(?m)^QT_ARCH\s*=\s*x86_64\s*$') {
-        throw 'Swiftify requires a Qt 6.9+ x64 kit.'
+        throw 'Resonance requires a Qt 6.9+ x64 kit.'
     }
     foreach ($module in @('Qt6Core', 'Qt6Widgets', 'Qt6Quick', 'Qt6QuickControls2', 'Qt6ShaderTools')) {
         if (-not (Test-Path -LiteralPath "$QtPath\lib\cmake\$module\${module}Config.cmake")) {
@@ -247,13 +247,13 @@ function Invoke-WindowsBuild {
             Invoke-Native $cmake @('--install', $dependencyBuild) | Out-Host
         }
 
-        Write-Host 'Building Swiftify...'
-        $appBuild = Join-Path $buildDirectory 'swiftify'
+        Write-Host 'Building Resonance...'
+        $appBuild = Join-Path $buildDirectory 'resonance'
         Invoke-Native $cmake (@('-S', $sourceRoot, '-B', $appBuild) + $commonOptions + @("-DRust_TOOLCHAIN=$rustToolchain", "-DRust_CARGO_TARGET=$rustTarget", "-DCMAKE_INSTALL_PREFIX=$($InstallPrefix.Replace('\', '/'))")) | Out-Host
         Invoke-Native $cmake @('--build', $appBuild, '--parallel', "$Jobs") | Out-Host
         Invoke-Native $cmake @('--install', $appBuild) | Out-Host
         $installBin = Join-Path $InstallPrefix 'bin'
-        $executable = Join-Path $installBin 'swiftify.exe'
+        $executable = Join-Path $installBin 'resonance.exe'
         Invoke-Native $deployQt @('--release', '--force', '--compiler-runtime', '--qmldir', (Join-Path $sourceRoot 'qml'), $executable) | Out-Host
         # Only present when a dependency was built shared. qtkeychain is static (see above) and qcoro
         # builds static libs, so there is normally no bin directory under the deps prefix at all, and
@@ -274,7 +274,7 @@ function Invoke-WindowsBuild {
                 Copy-Item -LiteralPath $runtimePath -Destination $installBin -Force
             }
         }
-        Write-Host "Installed Swiftify. Run: & `"$executable`""
+        Write-Host "Installed Resonance. Run: & `"$executable`""
     } finally {
         foreach ($entry in Get-ChildItem Env:) {
             if (-not $originalEnvironment.ContainsKey($entry.Name)) {

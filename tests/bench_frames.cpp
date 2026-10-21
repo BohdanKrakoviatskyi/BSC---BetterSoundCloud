@@ -28,9 +28,9 @@
 #include <utility>
 #include <vector>
 
-using namespace swiftify;
+using namespace resonance;
 using namespace Qt::StringLiterals;
-using swiftify::testing::ViewRig;
+using resonance::testing::ViewRig;
 
 namespace {
 
@@ -171,7 +171,7 @@ QString typeName(const QObject *object)
 bool isOwnComponent(const QObject *object)
 {
     const QString name = QString::fromLatin1(object->metaObject()->className());
-    return name.contains(QLatin1StringView("_QMLTYPE_")) || name.startsWith(QLatin1StringView("swiftify::"));
+    return name.contains(QLatin1StringView("_QMLTYPE_")) || name.startsWith(QLatin1StringView("resonance::"));
 }
 
 /// what draws: every item with contents, shown and inside the window, by
@@ -193,7 +193,7 @@ void countItems(QQuickItem *item, const QString &owner, const QRectF &window, st
 
 const char *kShell = R"(
 import QtQuick
-import Swiftify
+import Resonance
 
 Item {
     id: root
@@ -631,8 +631,8 @@ private slots:
         // "Sans Serif" no mac has, and looking for it loads every font there
         // is to find out what else it might be called
         QGuiApplication::setFont(QFont(QStringLiteral(".AppleSystemUIFont"), 13));
-        swiftify::fonts::loadIconFont();
-        swiftify::fonts::loadInterfaceFont();
+        resonance::fonts::loadIconFont();
+        resonance::fonts::loadInterfaceFont();
         qputenv("QT_QUICK_BACKEND", "rhi");
         QQuickWindow::setGraphicsApi(QSGRendererInterface::Metal);
     }

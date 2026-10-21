@@ -18,7 +18,7 @@
 class QQmlEngine;
 class QJSEngine;
 
-namespace swiftify {
+namespace resonance {
 
 class ErrorCenter;
 class PlaybackCore;
@@ -36,7 +36,7 @@ class PlaybackController : public QObject {
     Q_CLASSINFO("RegisterEnumClassesUnscoped", "false")
     QML_SINGLETON
 
-    Q_PROPERTY(swiftify::Song currentSong READ currentSong NOTIFY currentSongChanged FINAL)
+    Q_PROPERTY(resonance::Song currentSong READ currentSong NOTIFY currentSongChanged FINAL)
     Q_PROPERTY(bool hasSong READ hasSong NOTIFY currentSongChanged FINAL)
     /// how long the crossfade into the current song lasts, 0 when it started without one
     Q_PROPERTY(int crossfadeMs READ crossfadeMs NOTIFY currentSongChanged FINAL)
@@ -51,10 +51,10 @@ class PlaybackController : public QObject {
     Q_PROPERTY(RepeatMode repeatMode READ repeatMode NOTIFY repeatModeChanged FINAL)
     Q_PROPERTY(bool canSkipBackward READ canSkipBackward NOTIFY queueChanged FINAL)
     Q_PROPERTY(bool canSkipForward READ canSkipForward NOTIFY queueChanged FINAL)
-    Q_PROPERTY(swiftify::SongListModel *upNext READ upNext CONSTANT FINAL)
-    Q_PROPERTY(swiftify::SongListModel *previouslyPlayed READ previouslyPlayed CONSTANT FINAL)
+    Q_PROPERTY(resonance::SongListModel *upNext READ upNext CONSTANT FINAL)
 
-    Q_PROPERTY(swiftify::LyricsModel *lyrics READ lyrics CONSTANT FINAL)
+
+    Q_PROPERTY(resonance::LyricsModel *lyrics READ lyrics CONSTANT FINAL)
     Q_PROPERTY(bool hasLyrics READ hasLyrics NOTIFY lyricsChanged FINAL)
     Q_PROPERTY(bool lyricsSynchronized READ lyricsSynchronized NOTIFY lyricsChanged FINAL)
     Q_PROPERTY(QString lyricsProvider READ lyricsProvider NOTIFY lyricsChanged FINAL)
@@ -72,9 +72,7 @@ class PlaybackController : public QObject {
     Q_PROPERTY(bool volumeManagedBySleepTimer READ isVolumeManagedBySleepTimer NOTIFY sleepTimerChanged FINAL)
 
     /// the core is analysing audio for the visualizers
-    Q_PROPERTY(bool analysisActive READ isAnalysisActive NOTIFY analysisActiveChanged FINAL)
-    /// anything would show the loading pulse if a song were loading
-    Q_PROPERTY(bool loadingPulseVisible READ isLoadingPulseVisible NOTIFY analysisActiveChanged FINAL)
+
     /// a window showing visualizers is on screen and not covered
     Q_PROPERTY(bool visualizerPresentationActive READ isVisualizerPresentationActive WRITE setVisualizerPresentationActive NOTIFY analysisActiveChanged FINAL)
 
@@ -106,7 +104,7 @@ public:
     bool canSkipBackward() const;
     bool canSkipForward() const;
     SongListModel *upNext() const { return m_upNext; }
-    SongListModel *previouslyPlayed() const { return m_previouslyPlayed; }
+
     QList<Song> upNextSongs() const;
     QList<Song> previouslyPlayedSongs() const;
     std::optional<Song> upcomingSong() const;
@@ -144,23 +142,23 @@ public:
     /// plays on its own.
     void play(const Song &song, const QList<Song> &queue, bool fromSearch = false);
     /// plays row `index` of a list, with the list as the queue
-    Q_INVOKABLE void playFromModel(swiftify::SongListModel *model, int index, bool fromSearch = false);
+    Q_INVOKABLE void playFromModel(resonance::SongListModel *model, int index, bool fromSearch = false);
     /// plays the list from a random song with shuffle on
-    Q_INVOKABLE void shufflePlay(swiftify::SongListModel *model);
-    Q_INVOKABLE void playSong(const swiftify::Song &song);
+    Q_INVOKABLE void shufflePlay(resonance::SongListModel *model);
+    Q_INVOKABLE void playSong(const resonance::Song &song);
     /// debugging: plays a song whose load never finishes, so the loading
     /// animation of every visualizer can be watched for as long as wanted.
     /// it waits as a real load does, until paused, skipped or replaced
     Q_INVOKABLE void playLoadingTest();
     /// the never-loading song's uri
-    static constexpr auto kLoadingTestUri = "swiftify:debug:loading";
-    Q_INVOKABLE void playNext(const swiftify::Song &song);
-    Q_INVOKABLE void playLast(const swiftify::Song &song);
+    static constexpr auto kLoadingTestUri = "resonance:debug:loading";
+    Q_INVOKABLE void playNext(const resonance::Song &song);
+    Q_INVOKABLE void playLast(const resonance::Song &song);
     /// songs of one's own whose files now say something else (an edit of
     /// their tags): the ones queued, playing or played take it on, each
     /// staying the occurrence it was
     void refreshSongDetails(const QList<Song> &fresh);
-    Q_INVOKABLE void playFromQueue(const swiftify::Song &song);
+    Q_INVOKABLE void playFromQueue(const resonance::Song &song);
     Q_INVOKABLE void togglePlayback();
     Q_INVOKABLE void pause();
     /// play from where it is, rebuilding the output or reloading as needed
@@ -208,7 +206,7 @@ signals:
     void sleepTimerChanged();
     void analysisActiveChanged();
     /// a song started from search results, for the search history
-    void playedFromSearch(const swiftify::Song &song);
+    void playedFromSearch(const resonance::Song &song);
     /// state the system media session reflects changed
     void mediaStateChanged();
 
@@ -257,7 +255,7 @@ private:
     QList<Song> m_history;
     std::optional<Song> m_currentSong;
     SongListModel *m_upNext;
-    SongListModel *m_previouslyPlayed;
+
 
     /// whatever is asking the core to make sound right now: a song loading, a
     /// resume, an output rebuild. empty once it finished or was withdrawn.
@@ -305,4 +303,4 @@ private:
 
 };
 
-} // namespace swiftify
+} // namespace resonance

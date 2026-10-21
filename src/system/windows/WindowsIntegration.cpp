@@ -22,7 +22,7 @@
 #include <array>
 #include <cwchar>
 
-namespace swiftify {
+namespace resonance {
 
 namespace {
 
@@ -142,7 +142,7 @@ struct WindowsIntegration::Native {
 
 void WindowsIntegration::initializeProcess()
 {
-    SetCurrentProcessExplicitAppUserModelID(L"dev.addenator.Swiftify.Qt");
+    SetCurrentProcessExplicitAppUserModelID(L"dev.addenator.Resonance.Qt");
 }
 
 void WindowsIntegration::setNativeTitleBar(QWindow *window, bool enabled)
@@ -334,7 +334,7 @@ void WindowsIntegration::updateButtons()
         m_native->taskbar->ThumbBarUpdateButtons(handle, UINT(buttons.size()), buttons.data());
     }
     const Song song = m_player->currentSong();
-    const QString tooltip = m_player->hasSong() ? song.name + QStringLiteral(" — ") + song.artists : QStringLiteral("Swiftify");
+    const QString tooltip = m_player->hasSong() ? song.name + QStringLiteral(" — ") + song.artists : QStringLiteral("Resonance");
     m_native->taskbar->SetThumbnailTooltip(handle, reinterpret_cast<LPCWSTR>(tooltip.utf16()));
     updateProgress();
 }
@@ -385,4 +385,4 @@ bool WindowsIntegration::nativeEventFilter(const QByteArray &eventType, void *me
     return false;
 }
 
-} // namespace swiftify
+} // namespace resonance

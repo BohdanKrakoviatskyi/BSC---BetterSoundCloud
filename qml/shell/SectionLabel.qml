@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // a group's heading in the drawer: its name, and a squiggle running on to
 // whatever sits at the end of the row.

@@ -14,9 +14,9 @@
 
 #include <utility>
 
-namespace swiftify {
+namespace resonance {
 
-Q_LOGGING_CATEGORY(lcSession, "swiftify.session")
+Q_LOGGING_CATEGORY(lcSession, "resonance.session")
 
 namespace {
 SpotifySession *s_instance = nullptr;
@@ -787,8 +787,8 @@ SpotifyError SpotifySession::repairIfRevoked(const SpotifyError &error, LoginPur
     repairLogin(purpose);
     const bool repairing = m_repairing == purpose || m_repairQueue.contains(purpose);
     return {SpotifyError::Kind::LoginRevoked,
-            repairing ? QStringLiteral("Spotify signed Swiftify out. Signing in again…")
-                      : QStringLiteral("Spotify signed Swiftify out. Reconnect in Settings to continue.")};
+            repairing ? QStringLiteral("Spotify signed Resonance out. Signing in again…")
+                      : QStringLiteral("Spotify signed Resonance out. Reconnect in Settings to continue.")};
 }
 
 void SpotifySession::repairLogin(LoginPurpose purpose)
@@ -875,4 +875,4 @@ void SpotifySession::repairTimedOut()
     }
 }
 
-} // namespace swiftify
+} // namespace resonance

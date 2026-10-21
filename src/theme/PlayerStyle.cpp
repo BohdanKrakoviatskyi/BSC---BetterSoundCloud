@@ -12,7 +12,7 @@
 #include <algorithm>
 #include <utility>
 
-namespace swiftify {
+namespace resonance {
 
 namespace {
 
@@ -198,4 +198,4 @@ void PlayerStyle::step(qreal progress)
     emit paletteChanged();
 }
 
-} // namespace swiftify
+} // namespace resonance

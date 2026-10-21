@@ -4,7 +4,7 @@ version = "0.2.6"
 edition = "2024"
 
 [dependencies]
-hound = "3.5.1"
+
 librespot = "=0.8.0"
 rustfft = "=6.4.1"
 # local music: mp3, flac, ogg vorbis, wav and aiff, and aac or apple lossless
@@ -21,6 +21,9 @@ serde_json = "1"
 swift-bridge = { version = "=0.1.59", features = ["async"], optional = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
 
+[dev-dependencies]
+hound = "3.5.1"
+
 [build-dependencies]
 swift-bridge-build = { version = "=0.1.59", optional = true }
 
@@ -28,7 +31,7 @@ swift-bridge-build = { version = "=0.1.59", optional = true }
 default = ["swift"]
 # the swift-bridge interface the macos and ios apps link against.
 swift = ["dep:swift-bridge", "dep:swift-bridge-build"]
-# a plain c abi for the linux qt front end (include/swiftify_core.h).
+# a plain c abi for the linux qt front end (include/resonance_core.h).
 capi = []
 
 [lib]

@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Qt.labs.platform as Platform
-import Swiftify
+import Resonance
 
 // the mac's menu bar for the main window. its key equivalents are the app's
 // shortcuts, so on macos the window's own Shortcuts for these stand down

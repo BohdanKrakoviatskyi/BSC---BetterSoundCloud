@@ -12,8 +12,8 @@
 #include <dwmapi.h>
 #include <shobjidl.h>
 
-using namespace swiftify;
-using swiftify::testing::ViewRig;
+using namespace resonance;
+using resonance::testing::ViewRig;
 
 class WindowsTest : public QObject {
     Q_OBJECT
@@ -60,7 +60,7 @@ class WindowsTest : public QObject {
         const QImage desktop = screen->grabWindow(0, position.x(), position.y(),
             qRound((visible.right - visible.left) / scale), qRound((visible.bottom - visible.top) / scale)).toImage();
         QVERIFY(!desktop.isNull());
-        const QString preview = qEnvironmentVariable("SWIFTIFY_WINDOW_PREVIEW");
+        const QString preview = qEnvironmentVariable("RESONANCE_WINDOW_PREVIEW");
         if (!preview.isEmpty()) QVERIFY(desktop.save(preview + QStringLiteral(".%1.png").arg(stage)));
         const QColor actual = desktop.pixelColor(captionCenter - QPoint(visible.left, visible.top));
         QVERIFY(qAbs(actual.red() - background.red()) <= 3);
@@ -114,7 +114,7 @@ private slots:
         rig.settings.setTrayIcon(trayEnabled);
         rig.settings.setNativeTitleBar(nativeTitleBar);
         if (playing) rig.playSomething();
-        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml/Swiftify/qml/Main.qml")));
+        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml__LEGACY_RESONANCE_IGNORE__qml/Main.qml")));
         std::unique_ptr<QObject> object(component.create());
         QVERIFY2(object, qPrintable(component.errorString()));
         auto *window = qobject_cast<QQuickWindow *>(object.get());
@@ -126,7 +126,7 @@ private slots:
         QVERIFY(!window->close());
         QTRY_VERIFY(!window->isVisible());
         if (rig.app.isTrayAvailable()) {
-            QTRY_VERIFY(window->findChild<QObject *>(QStringLiteral("swiftifyTrayIcon")));
+            QTRY_VERIFY(window->findChild<QObject *>(QStringLiteral("resonanceTrayIcon")));
         }
         QVERIFY(!rig.app.isQuitting());
         QCOMPARE(rig.player.isPlaying(), playing);
@@ -151,7 +151,7 @@ private slots:
         QFETCH(int, panelWidth);
         ViewRig rig;
         rig.settings.setPerformanceMode(true);
-        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml/Swiftify/qml/Main.qml")));
+        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml__LEGACY_RESONANCE_IGNORE__qml/Main.qml")));
         std::unique_ptr<QObject> object(component.create());
         QVERIFY2(object, qPrintable(component.errorString()));
         auto *window = qobject_cast<QQuickWindow *>(object.get());
@@ -186,7 +186,7 @@ private slots:
         QVERIFY(!rig.settings.nativeTitleBar());
         rig.settings.setShowWindowControls(false);
         rig.settings.setPerformanceMode(true);
-        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml/Swiftify/qml/Main.qml")));
+        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml__LEGACY_RESONANCE_IGNORE__qml/Main.qml")));
         std::unique_ptr<QObject> object(component.create());
         QVERIFY2(object, qPrintable(component.errorString()));
         auto *window = qobject_cast<QQuickWindow *>(object.get());
@@ -224,7 +224,7 @@ private slots:
         QCOMPARE(immersiveClose->mapToScene(QPointF()), QPointF(24, 42));
         QVERIFY(immersiveClose->y() >= controls->y() + controls->height() + 6);
         QVERIFY(immersiveClose->y() + immersiveClose->height() <= immersiveClose->parentItem()->height());
-        const QString preview = qEnvironmentVariable("SWIFTIFY_WINDOW_PREVIEW");
+        const QString preview = qEnvironmentVariable("RESONANCE_WINDOW_PREVIEW");
         if (!preview.isEmpty() && QGuiApplication::platformName() == QLatin1StringView("windows")) {
             QTest::qWait(300);
             const qreal scale = window->devicePixelRatio();
@@ -272,7 +272,7 @@ private slots:
         rig.session.restoreSavedSessions();
         QTRY_VERIFY(!rig.session.isEvaluatingStoredLogin());
         WindowsIntegration integration(&rig.player, &rig.theme);
-        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml/Swiftify/qml/Main.qml")));
+        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml__LEGACY_RESONANCE_IGNORE__qml/Main.qml")));
         const QRect available = screen->availableGeometry();
         const QSize size = QSize(1000, 650).boundedTo(available.size() - QSize(100, 100));
         std::unique_ptr<QObject> object(component.createWithInitialProperties({
@@ -317,7 +317,7 @@ private slots:
             QCOMPARE(corners, DWORD(2));
         };
         checkBounds();
-        const QString preview = qEnvironmentVariable("SWIFTIFY_WINDOW_PREVIEW");
+        const QString preview = qEnvironmentVariable("RESONANCE_WINDOW_PREVIEW");
         if (!preview.isEmpty()) {
             window->raise();
             window->requestActivate();
@@ -413,7 +413,7 @@ private slots:
         rig.session.restoreSavedSessions();
         QTRY_VERIFY(!rig.session.isEvaluatingStoredLogin());
         WindowsIntegration integration(&rig.player, &rig.theme);
-        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml/Swiftify/qml/Main.qml")));
+        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml__LEGACY_RESONANCE_IGNORE__qml/Main.qml")));
         const QRect available = screen->availableGeometry();
         const QSize size = QSize(1100, 700).boundedTo(available.size() - QSize(100, 100));
         const QVariantMap initial {
@@ -537,7 +537,7 @@ private slots:
     {
         ViewRig rig;
         rig.settings.setTrayIcon(false);
-        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml/Swiftify/qml/Main.qml")));
+        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml__LEGACY_RESONANCE_IGNORE__qml/Main.qml")));
         std::unique_ptr<QObject> object(component.create());
         QVERIFY2(object, qPrintable(component.errorString()));
         auto *window = qobject_cast<QQuickWindow *>(object.get());

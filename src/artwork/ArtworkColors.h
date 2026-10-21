@@ -6,7 +6,7 @@
 #include <QUrl>
 #include <QtQml/qqmlregistration.h>
 
-namespace swiftify {
+namespace resonance {
 
 /// the palette of any cover, for the glows behind header artwork. palettes are
 /// shared through a cache of 256, as ArtworkAmbience.swift keeps them.
@@ -39,4 +39,4 @@ private:
     QList<QColor> m_palette;
 };
 
-} // namespace swiftify
+} // namespace resonance

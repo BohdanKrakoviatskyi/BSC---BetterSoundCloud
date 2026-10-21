@@ -13,7 +13,7 @@
 class QQmlEngine;
 class QJSEngine;
 
-namespace swiftify {
+namespace resonance {
 
 class ArtworkCache;
 class PlaybackController;
@@ -36,9 +36,9 @@ class PlayerStyle : public QObject {
     Q_PROPERTY(QColor primary READ primary NOTIFY paletteChanged FINAL)
     Q_PROPERTY(QColor secondary READ secondary NOTIFY paletteChanged FINAL)
     /// follows the app's light or dark
-    Q_PROPERTY(swiftify::MaterialScheme *scheme READ scheme CONSTANT FINAL)
+    Q_PROPERTY(resonance::MaterialScheme *scheme READ scheme CONSTANT FINAL)
     /// always dark, for the immersive player
-    Q_PROPERTY(swiftify::MaterialScheme *darkScheme READ darkScheme CONSTANT FINAL)
+    Q_PROPERTY(resonance::MaterialScheme *darkScheme READ darkScheme CONSTANT FINAL)
 
 public:
     PlayerStyle(PlaybackController *player, Theme *theme, ArtworkCache *artwork, QObject *parent = nullptr);
@@ -95,4 +95,4 @@ private:
     QVariantAnimation m_transition;
 };
 
-} // namespace swiftify
+} // namespace resonance

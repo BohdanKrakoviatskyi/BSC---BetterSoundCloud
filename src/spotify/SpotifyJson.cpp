@@ -5,7 +5,7 @@
 #include <cstdlib>
 #include <limits>
 
-namespace swiftify::json {
+namespace resonance::json {
 
 namespace {
 
@@ -157,4 +157,4 @@ std::optional<Song> wrappedTrack(const QJsonObject &entry)
     return legacy.isObject() ? track(legacy.toObject()) : std::nullopt;
 }
 
-} // namespace swiftify::json
+} // namespace resonance::json

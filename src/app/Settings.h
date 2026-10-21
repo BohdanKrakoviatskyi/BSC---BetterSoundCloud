@@ -9,7 +9,7 @@
 class QQmlEngine;
 class QJSEngine;
 
-namespace swiftify {
+namespace resonance {
 
 /// the app's preferences, under the macos app's key names and defaults
 /// (AppDesign.swift) so the two read the same way. stores that keep their own
@@ -64,7 +64,7 @@ class Settings : public QObject {
     Q_PROPERTY(double customBackgroundDim READ customBackgroundDim WRITE setCustomBackgroundDim NOTIFY customBackgroundDimChanged FINAL)
 
 public:
-    /// the default file, ~/.config/Swiftify/Swiftify.conf. no default argument:
+    /// the default file, ~/.config__LEGACY_RESONANCE_IGNORE__Resonance.conf. no default argument:
     /// qml builds a singleton with a default constructor in preference to
     /// create(), and would end up with an instance of its own
     explicit Settings(QObject *parent);
@@ -239,4 +239,4 @@ private:
     double m_customBackgroundDim = 0.35;
 };
 
-} // namespace swiftify
+} // namespace resonance

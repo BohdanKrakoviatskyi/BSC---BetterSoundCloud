@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // the head of a playlist, album, artist or favourites page: glowing artwork
 // on a soft burst in its own colour, beside a kind chip, the title, a

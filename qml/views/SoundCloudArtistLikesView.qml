@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // Author's liked tracks page: matches SavedSongsView UI with pagination
 SongListPage {

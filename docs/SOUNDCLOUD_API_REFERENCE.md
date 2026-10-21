@@ -1,6 +1,6 @@
-# SoundCloud API & BetterSoundCloud Integration Reference
+# SoundCloud API & Resonance Integration Reference
 
-This document outlines the data sources, RPC methods, parameters, and payloads extracted from `BSC---BetterSoundCloud` (Go sidecar `cmd/local-api` and desktop frontend `src/renderer`) for use in `swiftify`.
+This document outlines the data sources, RPC methods, parameters, and payloads extracted from `resonance-backend` (Go sidecar `cmd/local-api` and desktop frontend `src/renderer`) for use in `resonance`.
 
 ---
 
@@ -226,8 +226,8 @@ This document outlines the data sources, RPC methods, parameters, and payloads e
 - **RPC Method:** `track.stream`
 - **Parameters:** `{ "trackUrn": "soundcloud:tracks:..." }`
 - **Returns:** `{ "url": "https://...", "hls": true/false, "preview": false, "quality": "sq" }`
-- **Swiftify Playback Strategy:**
-  - HLS streams fetched segment-by-segment and saved to a local `.mp3`/`.aac` in the cache directory (`~/Library/Caches/Swiftify/soundcloud/`).
+- **Resonance Playback Strategy:**
+  - HLS streams fetched segment-by-segment and saved to a local `.mp3`/`.aac` in the cache directory (`~/Library/Caches__LEGACY_RESONANCE_IGNORE__soundcloud/`).
   - Progressive streams downloaded directly.
   - The local cached file is then passed to the core player engine.
 

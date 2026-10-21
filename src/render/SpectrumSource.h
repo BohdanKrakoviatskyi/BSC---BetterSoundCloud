@@ -11,7 +11,7 @@
 class QQmlEngine;
 class QJSEngine;
 
-namespace swiftify {
+namespace resonance {
 
 class PlaybackController;
 class PlaybackCore;
@@ -65,4 +65,4 @@ private:
     float m_loadingPhase = 0;
 };
 
-} // namespace swiftify
+} // namespace resonance

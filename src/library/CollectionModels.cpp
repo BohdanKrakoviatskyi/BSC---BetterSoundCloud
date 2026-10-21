@@ -1,6 +1,6 @@
 #include "library/CollectionModels.h"
 
-namespace swiftify {
+namespace resonance {
 
 QVariant PlaylistListModel::data(const QModelIndex &index, int role) const
 {
@@ -69,4 +69,4 @@ QHash<int, QByteArray> ArtistListModel::roleNames() const
     return {{ArtistRole, "artist"}, {IdRole, "artistId"}, {NameRole, "name"}, {ArtworkUrlRole, "artworkUrl"}};
 }
 
-} // namespace swiftify
+} // namespace resonance

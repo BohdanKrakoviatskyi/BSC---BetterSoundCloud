@@ -14,7 +14,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace swiftify {
+namespace resonance {
 
 namespace {
 
@@ -351,4 +351,4 @@ void AudioShaping::applyShaping()
     }
 }
 
-} // namespace swiftify
+} // namespace resonance

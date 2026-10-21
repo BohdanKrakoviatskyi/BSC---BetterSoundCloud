@@ -4,7 +4,7 @@
 
 #include <atomic>
 
-namespace swiftify {
+namespace resonance {
 
 namespace {
 
@@ -121,4 +121,4 @@ Song Song::fromJson(const QJsonObject &object)
     return song;
 }
 
-} // namespace swiftify
+} // namespace resonance

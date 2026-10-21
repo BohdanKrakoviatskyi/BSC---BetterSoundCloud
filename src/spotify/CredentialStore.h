@@ -7,7 +7,7 @@
 
 #include <optional>
 
-namespace swiftify {
+namespace resonance {
 
 /// a saved login. the json the apple apps keep in their keychain, and more
 /// that they ignore.
@@ -46,9 +46,9 @@ public:
     static QString service()
     {
 #ifdef Q_OS_MACOS
-        return QStringLiteral("dev.addenator.Swiftify.spotify.qt-development");
+        return QStringLiteral("dev.addenator.Resonance.spotify.qt-development");
 #else
-        return QStringLiteral("dev.addenator.Swiftify.spotify");
+        return QStringLiteral("dev.addenator.Resonance.spotify");
 #endif
     }
     static QString accountName(Account account);
@@ -72,4 +72,4 @@ public:
     QHash<Account, StoredCredentials> items;
 };
 
-} // namespace swiftify
+} // namespace resonance

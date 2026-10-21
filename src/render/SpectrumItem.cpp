@@ -13,7 +13,7 @@
 #include <cmath>
 #include <utility>
 
-namespace swiftify {
+namespace resonance {
 
 namespace {
 
@@ -979,4 +979,4 @@ QSGNode *SpectrumItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
     return root;
 }
 
-} // namespace swiftify
+} // namespace resonance

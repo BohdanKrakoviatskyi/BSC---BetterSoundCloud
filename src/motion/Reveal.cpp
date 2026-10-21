@@ -7,7 +7,11 @@
 
 #include <algorithm>
 
-namespace swiftify {
+namespace resonance {
+
+namespace {
+constexpr qreal kScaleFrom = 0.85;
+}
 
 RevealAttached::RevealAttached(QObject *parent)
     : QObject(parent)
@@ -20,14 +24,6 @@ RevealAttached::RevealAttached(QObject *parent)
     });
 }
 
-void RevealAttached::setScaleFrom(qreal scale)
-{
-    if (qFuzzyCompare(m_scaleFrom, scale)) {
-        return;
-    }
-    m_scaleFrom = scale;
-    emit scaleFromChanged();
-}
 
 void RevealAttached::setDuration(int duration)
 {
@@ -77,7 +73,7 @@ void RevealAttached::animate(bool shown)
 
     if (shown && !m_item->isVisible()) {
         m_item->setOpacity(0);
-        m_item->setScale(m_scaleFrom);
+        m_item->setScale(kScaleFrom);
     }
     m_item->setVisible(true);
 
@@ -88,7 +84,7 @@ void RevealAttached::animate(bool shown)
     m_animation.addAnimation(fade);
 
     auto *grow = new QPropertyAnimation(m_item, "scale");
-    grow->setEndValue(shown ? 1.0 : m_scaleFrom);
+    grow->setEndValue(shown ? 1.0 : kScaleFrom);
     grow->setDuration(shown ? m_duration : std::min(170, m_duration));
     QEasingCurve spring(shown ? (m_overshoot > 0 ? QEasingCurve::OutBack : QEasingCurve::OutCubic) : QEasingCurve::InCubic);
     if (shown && m_overshoot > 0) {
@@ -100,4 +96,4 @@ void RevealAttached::animate(bool shown)
     m_animation.start();
 }
 
-} // namespace swiftify
+} // namespace resonance

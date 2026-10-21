@@ -6,7 +6,7 @@
 
 #include <random>
 
-using namespace swiftify;
+using namespace resonance;
 
 /// PlaylistCoverArt's rules: ten designs from any palette, a crop that never
 /// leaves a gap, and a jpeg that always fits spotify's 256 kB.

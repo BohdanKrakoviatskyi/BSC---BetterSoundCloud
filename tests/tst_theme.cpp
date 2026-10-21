@@ -14,7 +14,7 @@
 #include <QTest>
 #include <QUrl>
 
-using namespace swiftify;
+using namespace resonance;
 
 namespace {
 
@@ -94,7 +94,7 @@ private slots:
     {
         QFETCH(bool, dark);
         QTemporaryDir directory;
-        Settings settings(directory.filePath(QStringLiteral("swiftify.conf")));
+        Settings settings(directory.filePath(QStringLiteral("resonance.conf")));
         settings.setThemeMode(dark ? QStringLiteral("dark") : QStringLiteral("light"));
         Theme theme(&settings);
         const themes::Family *spotify = themes::find(QStringLiteral("spotify"));
@@ -137,7 +137,7 @@ private slots:
     void readsAndFollowsTheMatugenFile()
     {
         QTemporaryDir directory;
-        Settings settings(directory.filePath(QStringLiteral("swiftify.conf")));
+        Settings settings(directory.filePath(QStringLiteral("resonance.conf")));
         settings.setThemeSource(QStringLiteral("system"));
         const QString path = directory.filePath(QStringLiteral("colors.json"));
         settings.setMatugenColorsPath(path);
@@ -227,7 +227,7 @@ private slots:
         QVERIFY(writeJson(config + QStringLiteral("/colors.json"), "{\"primary\": \"#123456\"}"));
         // Even valid-looking input templates must never override generated output.
         QVERIFY(writeJson(config + QStringLiteral("/templates/colors.json"), matugenJson(red)));
-        Settings settings(paths.directory.filePath(QStringLiteral("swiftify.conf")));
+        Settings settings(paths.directory.filePath(QStringLiteral("resonance.conf")));
         settings.setThemeSource(QStringLiteral("system"));
         Theme theme(&settings);
         QVERIFY(theme.usingSystemScheme());
@@ -255,7 +255,7 @@ private slots:
         const QJsonObject modes{{"colors", QJsonObject{{"dark", QJsonDocument::fromJson(matugenJson(night)).object()},
                                                       {"light", QJsonDocument::fromJson(matugenJson(day)).object()}}}};
         QVERIFY(writeJson(custom, QJsonDocument(modes).toJson()));
-        Settings settings(paths.directory.filePath(QStringLiteral("swiftify.conf")));
+        Settings settings(paths.directory.filePath(QStringLiteral("resonance.conf")));
         settings.setThemeSource(QStringLiteral("system"));
         settings.setThemeMode(QStringLiteral("dark"));
         settings.setMatugenColorsPath(QUrl::fromLocalFile(custom).toString());
@@ -291,7 +291,7 @@ private slots:
     void fallsBackWhenTheFileIsMissingOrIncomplete()
     {
         QTemporaryDir directory;
-        Settings settings(directory.filePath(QStringLiteral("swiftify.conf")));
+        Settings settings(directory.filePath(QStringLiteral("resonance.conf")));
         settings.setThemeSource(QStringLiteral("system"));
         const QString path = directory.filePath(QStringLiteral("colors.json"));
         settings.setMatugenColorsPath(path);
@@ -347,7 +347,7 @@ private slots:
     void aThemeFollowsTheMode()
     {
         QTemporaryDir directory;
-        Settings settings(directory.filePath(QStringLiteral("swiftify.conf")));
+        Settings settings(directory.filePath(QStringLiteral("resonance.conf")));
         settings.setThemeSource(QStringLiteral("catppuccin-mocha"));
         settings.setThemeMode(QStringLiteral("dark"));
         Theme theme(&settings);

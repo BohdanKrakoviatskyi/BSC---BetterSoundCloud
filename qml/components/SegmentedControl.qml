@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // material 3 segmented buttons, drawn the way end4 draws its tab groups: a
 // pill track, and the choice as a filled pill that slides to the chosen
@@ -170,7 +170,7 @@ Item {
                             sourceSize.height: root.iconSize * 2
                             fillMode: Image.PreserveAspectFit
                             visible: segment.modelData.symbol === "spotify"
-                            source: "qrc:/qt/qml/Swiftify/resources/spotify.svg"
+                            source: "qrc:/qt/qml__LEGACY_RESONANCE_IGNORE__resources/spotify.svg"
                             opacity: segment.selected ? 1.0 : 0.65
 
                             Behavior on opacity {
@@ -187,7 +187,7 @@ Item {
                             sourceSize.height: root.iconSize * 2
                             fillMode: Image.PreserveAspectFit
                             visible: segment.modelData.symbol === "soundcloud" || segment.modelData.symbol === "cloud"
-                            source: "qrc:/qt/qml/Swiftify/resources/soundcloud.svg"
+                            source: "qrc:/qt/qml__LEGACY_RESONANCE_IGNORE__resources/soundcloud.svg"
                             opacity: segment.selected ? 1.0 : 0.65
 
                             Behavior on opacity {

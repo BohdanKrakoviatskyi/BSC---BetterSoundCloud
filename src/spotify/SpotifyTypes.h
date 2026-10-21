@@ -7,7 +7,7 @@
 #include <QUrl>
 #include <QtQml/qqmlregistration.h>
 
-namespace swiftify {
+namespace resonance {
 
 struct Artist {
     Q_GADGET
@@ -204,9 +204,9 @@ struct SearchResults {
     bool isEmpty() const { return songs.isEmpty() && albums.isEmpty() && artists.isEmpty() && playlists.isEmpty(); }
 };
 
-} // namespace swiftify
+} // namespace resonance
 
-Q_DECLARE_METATYPE(swiftify::Song)
-Q_DECLARE_METATYPE(swiftify::Playlist)
-Q_DECLARE_METATYPE(swiftify::Album)
-Q_DECLARE_METATYPE(swiftify::Artist)
+Q_DECLARE_METATYPE(resonance::Song)
+Q_DECLARE_METATYPE(resonance::Playlist)
+Q_DECLARE_METATYPE(resonance::Album)
+Q_DECLARE_METATYPE(resonance::Artist)

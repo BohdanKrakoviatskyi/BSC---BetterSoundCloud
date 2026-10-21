@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // framing a picked photo as a square (CoverCropper): drag to move it, scroll,
 // pinch or slide to zoom, and the photo always covers the square. what it

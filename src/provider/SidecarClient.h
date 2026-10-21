@@ -13,9 +13,9 @@
 
 #include <coroutine>
 
-namespace swiftify {
+namespace resonance {
 
-/// the soundcloud sidecar: the go local-api that the better soundcloud app
+/// the soundcloud sidecar: the go local-api that the SoundCloud app
 /// also runs, spoken to over one json object per line on its stdin and stdout.
 /// stdout carries nothing but responses (its logging goes to stderr), so the
 /// two never confuse each other.
@@ -68,7 +68,7 @@ public:
     bool isRunning() const;
     void stop();
     /// next to the executable in an installed app, or in third_party while
-    /// developing; SWIFTIFY_SIDECAR points somewhere else
+    /// developing; RESONANCE_SIDECAR points somewhere else
     QString binaryPath() const;
 
     /// asks the sidecar one thing. the response carries either a result or the
@@ -93,4 +93,4 @@ private:
     QHash<qint64, Call *> m_calls;
 };
 
-} // namespace swiftify
+} // namespace resonance

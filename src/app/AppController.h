@@ -12,7 +12,7 @@
 class QQmlEngine;
 class QJSEngine;
 
-namespace swiftify {
+namespace resonance {
 
 /// app-wide requests that come from outside the windows: the media session,
 /// a second launch, the tray, the dock. the qml shell carries them out.
@@ -22,7 +22,7 @@ class AppController : public QObject {
     QML_SINGLETON
 
     Q_PROPERTY(QString version READ version CONSTANT FINAL)
-    Q_PROPERTY(bool desktopIntegration READ hasDesktopIntegration CONSTANT FINAL)
+
     /// the window keeps the mac's traffic lights, so the app draws no
     /// buttons of its own and leaves the title bar's height clear for them
     Q_PROPERTY(bool macOS READ isMacOS CONSTANT FINAL)
@@ -43,7 +43,7 @@ class AppController : public QObject {
     /// close first, and a window that hides instead would cancel the quit
     Q_PROPERTY(bool quitting READ isQuitting NOTIFY quittingChanged FINAL)
     /// the clock what turns with the music follows (UiState sets its speed)
-    Q_PROPERTY(swiftify::AmbientClock *spinClock READ spinClock CONSTANT FINAL)
+    Q_PROPERTY(resonance::AmbientClock *spinClock READ spinClock CONSTANT FINAL)
 
 public:
     /// no default argument: qml builds a singleton with a default constructor
@@ -55,7 +55,7 @@ public:
     static AppController *create(QQmlEngine *, QJSEngine *);
 
     QString version() const;
-    bool hasDesktopIntegration() const;
+
     bool hasNativeMenuBar() const
     {
         return isMacOS() && QGuiApplication::platformName() == QLatin1StringView("cocoa");
@@ -130,4 +130,4 @@ private:
     bool m_quitting = false;
 };
 
-} // namespace swiftify
+} // namespace resonance

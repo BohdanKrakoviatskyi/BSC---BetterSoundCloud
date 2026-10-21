@@ -2,16 +2,16 @@
 
 #include <QString>
 
-namespace swiftify::fonts {
+namespace resonance::fonts {
 
 /// makes "Material Symbols Rounded" available. end4 installs it system-wide, so
-/// that copy wins; otherwise the one installed beside swiftify (or left in the
+/// that copy wins; otherwise the one installed beside resonance (or left in the
 /// build tree) is loaded.
 void loadIconFont();
 /// "Material Symbols Rounded"
 QString iconFamily();
 
-/// makes google sans flex available, from the system or beside swiftify:
+/// makes google sans flex available, from the system or beside resonance:
 /// the interface's face, and its titles drawn round through its variable
 /// axes (TitleText). before interfaceFamily() is first asked.
 void loadInterfaceFont();
@@ -23,4 +23,4 @@ QString interfaceFamily();
 /// means nothing to macos, which then searches every family for it
 QString fixedFamily();
 
-} // namespace swiftify::fonts
+} // namespace resonance::fonts

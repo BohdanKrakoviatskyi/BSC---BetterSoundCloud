@@ -6,7 +6,7 @@
 #include <QVector4D>
 #include <QtQml/qqmlregistration.h>
 
-namespace swiftify {
+namespace resonance {
 
 /// what moves the living backdrop (ArtworkBackdrop.swift): a clock that runs
 /// while music plays and holds where it stopped on pause, and the five band
@@ -67,4 +67,4 @@ private:
     qreal m_lead = 0;
 };
 
-} // namespace swiftify
+} // namespace resonance

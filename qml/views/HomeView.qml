@@ -2,7 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Effects
-import Swiftify
+import Resonance
 
 // Listen Now (MusicHomeView)
 Flickable {

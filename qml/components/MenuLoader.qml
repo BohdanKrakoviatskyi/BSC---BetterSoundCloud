@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Templates as T
-import Swiftify
+import Resonance
 
 // a menu built the first time it is opened, rather than with the view it
 // belongs to: most menus are never opened, and each one built is a few

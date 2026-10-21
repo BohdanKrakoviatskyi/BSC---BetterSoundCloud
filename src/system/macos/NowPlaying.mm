@@ -10,9 +10,9 @@
 #import <AppKit/AppKit.h>
 #import <MediaPlayer/MediaPlayer.h>
 
-Q_LOGGING_CATEGORY(lcNowPlaying, "swiftify.nowplaying")
+Q_LOGGING_CATEGORY(lcNowPlaying, "resonance.nowplaying")
 
-namespace swiftify {
+namespace resonance {
 
 namespace {
 
@@ -166,4 +166,4 @@ void NowPlaying::loadArtwork(const QUrl &url)
     });
 }
 
-} // namespace swiftify
+} // namespace resonance

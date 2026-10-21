@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Swiftify
+import Resonance
 
 // the sleep timer (SleepTimerPanel): hours and minutes to pick, then a
 // countdown in their place while it runs, how the music fades, and the button
