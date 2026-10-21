@@ -221,8 +221,14 @@ QSGNode *WavyLineItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
     auto *node = static_cast<QSGGeometryNode *>(oldNode);
     if (!node) {
         node = new QSGGeometryNode;
-        auto *geometry = new QSGGeometry(waveAttributes(), 4);
+        auto *geometry = new QSGGeometry(waveAttributes(), 4, 4);
         geometry->setDrawingMode(QSGGeometry::DrawTriangleStrip);
+        // an unbatched strip with no indices gives the renderer a zero-sized
+        // index buffer, and its dynamic upload then memcpy's from a null
+        // pointer; explicit identity indices keep that buffer non-empty
+        auto *stripIndices = geometry->indexDataAsUShort();
+        for (int stripIndex = 0; stripIndex < 4; ++stripIndex)
+            stripIndices[stripIndex] = quint16(stripIndex);
         node->setGeometry(geometry);
         node->setFlag(QSGNode::OwnsGeometry);
         node->setMaterial(new WaveMaterial);
