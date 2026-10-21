@@ -5,7 +5,11 @@ param(
     [string]$BuildRoot,
     [string]$InstallPrefix = "$env:LOCALAPPDATA\Programs\Resonance",
     [ValidateRange(1, 256)]
-    [int]$Jobs = [Math]::Max(1, [Math]::Min(8, [Environment]::ProcessorCount))
+    [int]$Jobs = [Math]::Max(1, [Math]::Min(8, [Environment]::ProcessorCount)),
+    # emits a PDB next to resonance.exe. Codegen is unchanged (/Zi only adds debug
+    # info), so the binary still behaves like the release build; the PDB just lets
+    # crash dumps be symbolized. Off by default to keep release artifacts clean.
+    [switch]$WithDebugInfo
 )
 
 Set-StrictMode -Version Latest
@@ -15,7 +19,16 @@ $PSNativeCommandUseErrorActionPreference = $false
 function Invoke-Native {
     param([string]$FilePath, [string[]]$Arguments = @())
 
-    & $FilePath @Arguments
+    # A native tool writing to stderr (e.g. rustup's "info: ... up to date") must not
+    # become a terminating error just because $ErrorActionPreference is 'Stop' —
+    # only the exit code decides success. Keep stderr visible but non-fatal.
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $FilePath @Arguments
+    } finally {
+        $ErrorActionPreference = $previousPreference
+    }
     if ($LASTEXITCODE -ne 0) {
         throw "$FilePath failed with exit code ${LASTEXITCODE}: $($Arguments -join ' ')"
     }
@@ -244,7 +257,18 @@ function Invoke-WindowsBuild {
 
         Write-Host 'Building Resonance...'
         $appBuild = Join-Path $buildDirectory 'resonance'
-        Invoke-Native $cmake (@('-S', $sourceRoot, '-B', $appBuild) + $commonOptions + @("-DRust_TOOLCHAIN=$rustToolchain", "-DRust_CARGO_TARGET=$rustTarget", "-DCMAKE_INSTALL_PREFIX=$($InstallPrefix.Replace('\', '/'))")) | Out-Host
+        $appOptions = @()
+        if ($WithDebugInfo) {
+            $pdbPath = Join-Path $appBuild 'resonance.pdb'
+            # /Zi writes symbols to a separate PDB and does not alter codegen, so the
+            # resulting .text still matches the plain release binary. The linker gets
+            # /DEBUG (keeping /INCREMENTAL:NO) to emit the PDB.
+            $appOptions += @(
+                "-DCMAKE_CXX_FLAGS_RELEASE=/O2 /Ob2 /DNDEBUG /Zi",
+                "-DCMAKE_EXE_LINKER_FLAGS_RELEASE=/INCREMENTAL:NO /DEBUG /PDB:$pdbPath"
+            )
+        }
+        Invoke-Native $cmake (@('-S', $sourceRoot, '-B', $appBuild) + $commonOptions + $appOptions + @("-DRust_TOOLCHAIN=$rustToolchain", "-DRust_CARGO_TARGET=$rustTarget", "-DCMAKE_INSTALL_PREFIX=$($InstallPrefix.Replace('\', '/'))")) | Out-Host
         Invoke-Native $cmake @('--build', $appBuild, '--parallel', "$Jobs") | Out-Host
         Invoke-Native $cmake @('--install', $appBuild) | Out-Host
         $installBin = Join-Path $InstallPrefix 'bin'

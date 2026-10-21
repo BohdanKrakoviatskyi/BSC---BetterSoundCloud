@@ -379,7 +379,9 @@ bool WindowsIntegration::nativeEventFilter(const QByteArray &eventType, void *me
         case kNext: m_player->skipForward(); break;
         default: return false;
         }
-        *result = 0;
+        // Qt passes result == nullptr for "windows_dispatcher_MSG" events, so the
+        // write must be guarded — an unguarded *result = 0 dereferences null.
+        if (result) *result = 0;
         return true;
     }
     return false;

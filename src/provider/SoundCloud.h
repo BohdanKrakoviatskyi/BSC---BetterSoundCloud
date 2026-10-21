@@ -285,6 +285,14 @@ private:
 
     QCoro::Task<> loadArtistData(qint64 userId, quint64 generation);
     QCoro::Task<> loadTrackDetailsData(Song song, quint64 generation);
+    // named member coroutines, not detached [this] lambdas: a lambda coroutine
+    // stores only a pointer to its closure, so a detached temporary's captures
+    // were gone by the time it resumed and it read a garbage `this`.
+    QCoro::Task<> runLogout();
+    QCoro::Task<> runLoadMoreLikedSongs();
+    QCoro::Task<> runLoadMoreArtistLikes();
+    QCoro::Task<> runLoadMoreArtistTracks();
+    QCoro::Task<> runOpenArtistFromSong(Song song);
 
     SidecarClient *m_sidecar = nullptr;
     Settings *m_settings = nullptr;

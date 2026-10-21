@@ -358,12 +358,15 @@ void SoundCloud::logOut()
     ++m_connectGeneration;
     setToken(QString());
     setBusy(true);
-    detach([this]() -> QCoro::Task<> {
-        const QJsonObject status = co_await call(QStringLiteral("auth.logout"));
-        setBusy(false);
-        applyStatus(status.contains(QStringLiteral("error")) ? QJsonObject {} : status);
-        setStatusMessage(QStringLiteral("SoundCloud disconnected."));
-    }());
+    detach(runLogout());
+}
+
+QCoro::Task<> SoundCloud::runLogout()
+{
+    const QJsonObject status = co_await call(QStringLiteral("auth.logout"));
+    setBusy(false);
+    applyStatus(status.contains(QStringLiteral("error")) ? QJsonObject {} : status);
+    setStatusMessage(QStringLiteral("SoundCloud disconnected."));
 }
 
 Song SoundCloud::songFromCard(const QJsonObject &card)
@@ -447,33 +450,36 @@ void SoundCloud::loadMoreLikedSongs()
     if (m_loadingMoreLikes || !m_hasMoreLikedSongs || m_likedSongsNextHref.isEmpty() || m_sidecar == nullptr) {
         return;
     }
-    detach([this]() -> QCoro::Task<> {
-        m_loadingMoreLikes = true;
-        emit loadingMoreLikesChanged();
+    detach(runLoadMoreLikedSongs());
+}
 
-        QJsonObject params {
-            { QStringLiteral("userId"), m_userId.toLongLong() },
-            { QStringLiteral("limit"), 20 },
-            { QStringLiteral("next"), m_likedSongsNextHref },
-        };
-        SidecarClient::Response response = co_await m_sidecar->call(QStringLiteral("user.likes"), params);
-        if (response.ok()) {
-            const QJsonObject obj = response.result;
-            const QList<Song> newSongs = songsFromCards(obj.value(QStringLiteral("tracks")).toArray());
-            m_likedSongsNextHref = obj.value(QStringLiteral("nextHref")).toString();
-            m_hasMoreLikedSongs = !m_likedSongsNextHref.isEmpty();
-            emit hasMoreLikedSongsChanged();
+QCoro::Task<> SoundCloud::runLoadMoreLikedSongs()
+{
+    m_loadingMoreLikes = true;
+    emit loadingMoreLikesChanged();
 
-            if (!newSongs.isEmpty() && LibraryStore::instance() != nullptr) {
-                LibraryStore::instance()->savedSongs()->appendSongs(newSongs);
-                for (const Song &s : newSongs) {
-                    LibraryStore::instance()->recordSavedUri(s.uri);
-                }
+    QJsonObject params {
+        { QStringLiteral("userId"), m_userId.toLongLong() },
+        { QStringLiteral("limit"), 20 },
+        { QStringLiteral("next"), m_likedSongsNextHref },
+    };
+    SidecarClient::Response response = co_await m_sidecar->call(QStringLiteral("user.likes"), params);
+    if (response.ok()) {
+        const QJsonObject obj = response.result;
+        const QList<Song> newSongs = songsFromCards(obj.value(QStringLiteral("tracks")).toArray());
+        m_likedSongsNextHref = obj.value(QStringLiteral("nextHref")).toString();
+        m_hasMoreLikedSongs = !m_likedSongsNextHref.isEmpty();
+        emit hasMoreLikedSongsChanged();
+
+        if (!newSongs.isEmpty() && LibraryStore::instance() != nullptr) {
+            LibraryStore::instance()->savedSongs()->appendSongs(newSongs);
+            for (const Song &s : newSongs) {
+                LibraryStore::instance()->recordSavedUri(s.uri);
             }
         }
-        m_loadingMoreLikes = false;
-        emit loadingMoreLikesChanged();
-    }());
+    }
+    m_loadingMoreLikes = false;
+    emit loadingMoreLikesChanged();
 }
 
 QCoro::Task<QList<Playlist>> SoundCloud::playlists()
@@ -971,30 +977,33 @@ void SoundCloud::loadMoreArtistLikes()
     if (m_loadingMoreArtistLikes || !m_hasMoreArtistLikes || m_artistLikesNextHref.isEmpty() || m_sidecar == nullptr || m_artistLikesUserId <= 0) {
         return;
     }
-    detach([this]() -> QCoro::Task<> {
-        m_loadingMoreArtistLikes = true;
-        emit loadingMoreArtistLikesChanged();
+    detach(runLoadMoreArtistLikes());
+}
 
-        QJsonObject params {
-            { QStringLiteral("userId"), m_artistLikesUserId },
-            { QStringLiteral("limit"), 20 },
-            { QStringLiteral("next"), m_artistLikesNextHref },
-        };
-        SidecarClient::Response response = co_await m_sidecar->call(QStringLiteral("user.likes"), params);
-        if (response.ok()) {
-            const QJsonObject obj = response.result;
-            const QList<Song> newSongs = songsFromCards(obj.value(QStringLiteral("tracks")).toArray());
-            m_artistLikesNextHref = obj.value(QStringLiteral("nextHref")).toString();
-            m_hasMoreArtistLikes = !m_artistLikesNextHref.isEmpty();
-            emit hasMoreArtistLikesChanged();
+QCoro::Task<> SoundCloud::runLoadMoreArtistLikes()
+{
+    m_loadingMoreArtistLikes = true;
+    emit loadingMoreArtistLikesChanged();
 
-            if (!newSongs.isEmpty()) {
-                m_artistLikes->appendSongs(newSongs);
-            }
+    QJsonObject params {
+        { QStringLiteral("userId"), m_artistLikesUserId },
+        { QStringLiteral("limit"), 20 },
+        { QStringLiteral("next"), m_artistLikesNextHref },
+    };
+    SidecarClient::Response response = co_await m_sidecar->call(QStringLiteral("user.likes"), params);
+    if (response.ok()) {
+        const QJsonObject obj = response.result;
+        const QList<Song> newSongs = songsFromCards(obj.value(QStringLiteral("tracks")).toArray());
+        m_artistLikesNextHref = obj.value(QStringLiteral("nextHref")).toString();
+        m_hasMoreArtistLikes = !m_artistLikesNextHref.isEmpty();
+        emit hasMoreArtistLikesChanged();
+
+        if (!newSongs.isEmpty()) {
+            m_artistLikes->appendSongs(newSongs);
         }
-        m_loadingMoreArtistLikes = false;
-        emit loadingMoreArtistLikesChanged();
-    }());
+    }
+    m_loadingMoreArtistLikes = false;
+    emit loadingMoreArtistLikesChanged();
 }
 
 void SoundCloud::loadMoreArtistTracks()
@@ -1002,31 +1011,34 @@ void SoundCloud::loadMoreArtistTracks()
     if (m_loadingMoreArtistTracks || !m_hasMoreArtistTracks || m_artistTracksNextHref.isEmpty() || m_sidecar == nullptr || m_artistTracksUserId <= 0) {
         return;
     }
-    detach([this]() -> QCoro::Task<> {
-        m_loadingMoreArtistTracks = true;
-        emit loadingMoreArtistTracksChanged();
+    detach(runLoadMoreArtistTracks());
+}
 
-        QJsonObject params {
-            { QStringLiteral("userId"), m_artistTracksUserId },
-            { QStringLiteral("paginated"), true },
-            { QStringLiteral("limit"), 20 },
-            { QStringLiteral("next"), m_artistTracksNextHref },
-        };
-        SidecarClient::Response response = co_await m_sidecar->call(QStringLiteral("user.tracks"), params);
-        if (response.ok()) {
-            const QJsonObject obj = response.result;
-            const QList<Song> newSongs = songsFromCards(obj.value(QStringLiteral("tracks")).toArray());
-            m_artistTracksNextHref = obj.value(QStringLiteral("nextHref")).toString();
-            m_hasMoreArtistTracks = !m_artistTracksNextHref.isEmpty();
-            emit hasMoreArtistTracksChanged();
+QCoro::Task<> SoundCloud::runLoadMoreArtistTracks()
+{
+    m_loadingMoreArtistTracks = true;
+    emit loadingMoreArtistTracksChanged();
 
-            if (!newSongs.isEmpty()) {
-                m_artistTracks->appendSongs(newSongs);
-            }
+    QJsonObject params {
+        { QStringLiteral("userId"), m_artistTracksUserId },
+        { QStringLiteral("paginated"), true },
+        { QStringLiteral("limit"), 20 },
+        { QStringLiteral("next"), m_artistTracksNextHref },
+    };
+    SidecarClient::Response response = co_await m_sidecar->call(QStringLiteral("user.tracks"), params);
+    if (response.ok()) {
+        const QJsonObject obj = response.result;
+        const QList<Song> newSongs = songsFromCards(obj.value(QStringLiteral("tracks")).toArray());
+        m_artistTracksNextHref = obj.value(QStringLiteral("nextHref")).toString();
+        m_hasMoreArtistTracks = !m_artistTracksNextHref.isEmpty();
+        emit hasMoreArtistTracksChanged();
+
+        if (!newSongs.isEmpty()) {
+            m_artistTracks->appendSongs(newSongs);
         }
-        m_loadingMoreArtistTracks = false;
-        emit loadingMoreArtistTracksChanged();
-    }());
+    }
+    m_loadingMoreArtistTracks = false;
+    emit loadingMoreArtistTracksChanged();
 }
 
 QCoro::Task<SoundCloudTrackDetails> SoundCloud::fetchTrackDetails(qint64 trackId)
@@ -1197,12 +1209,15 @@ void SoundCloud::openArtist(const QString &userIdOrUsername)
 
 void SoundCloud::openArtistFromSong(const swiftify::Song &song)
 {
-    detach([this, song]() -> QCoro::Task<> {
-        Artist artist = co_await artistFromSong(song);
-        if (artist.isValid()) {
-            openArtist(artist.id);
-        }
-    }());
+    detach(runOpenArtistFromSong(song));
+}
+
+QCoro::Task<> SoundCloud::runOpenArtistFromSong(Song song)
+{
+    Artist artist = co_await artistFromSong(song);
+    if (artist.isValid()) {
+        openArtist(artist.id);
+    }
 }
 
 void SoundCloud::openTrackDetails(const swiftify::Song &song)
