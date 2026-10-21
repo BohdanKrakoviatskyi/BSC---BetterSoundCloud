@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QSettings>
 #include <QString>
+#include <QUrl>
 #include <QVariant>
 #include <QtQml/qqmlregistration.h>
 
@@ -63,6 +64,10 @@ class Settings : public QObject {
     Q_PROPERTY(QString soundcloudClientId READ soundcloudClientId WRITE setSoundcloudClientId NOTIFY soundcloudClientIdChanged FINAL)
     Q_PROPERTY(QString soundcloudToken READ soundcloudToken WRITE setSoundcloudToken NOTIFY soundcloudTokenChanged FINAL)
     Q_PROPERTY(QString customBackgroundPath READ customBackgroundPath WRITE setCustomBackgroundPath NOTIFY customBackgroundPathChanged FINAL)
+    /// the same path as a url an Image or AnimatedImage can load. built here
+    /// rather than in qml, where "file://" + "C:/..." makes the drive letter a
+    /// host name and nothing opens
+    Q_PROPERTY(QUrl customBackgroundUrl READ customBackgroundUrl NOTIFY customBackgroundPathChanged FINAL)
     Q_PROPERTY(QStringList customBackgrounds READ customBackgrounds WRITE setCustomBackgrounds NOTIFY customBackgroundsChanged FINAL)
     Q_PROPERTY(double customBackgroundDim READ customBackgroundDim WRITE setCustomBackgroundDim NOTIFY customBackgroundDimChanged FINAL)
 
@@ -160,6 +165,7 @@ public:
     void setSoundcloudToken(const QString &value);
     QString customBackgroundPath() const { return m_customBackgroundPath; }
     void setCustomBackgroundPath(const QString &value);
+    QUrl customBackgroundUrl() const;
     QStringList customBackgrounds() const { return m_customBackgrounds; }
     void setCustomBackgrounds(const QStringList &value);
     double customBackgroundDim() const { return m_customBackgroundDim; }
@@ -168,6 +174,8 @@ public:
     Q_INVOKABLE void addCustomBackground(const QString &path);
     Q_INVOKABLE void removeCustomBackground(const QString &path);
     Q_INVOKABLE void clearCustomBackground();
+    /// a saved background's path as a loadable url, for the thumbnails
+    Q_INVOKABLE QUrl backgroundUrl(const QString &path) const;
 
 signals:
     void visualizersEnabledChanged();

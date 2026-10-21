@@ -499,6 +499,37 @@ void Settings::setCustomBackgroundPath(const QString &value)
     emit customBackgroundPathChanged();
 }
 
+namespace {
+
+/// a stored path as a url qml can load. "file://" + "C:/x.gif" parses the
+/// drive letter as a host and opens nothing, so the third slash belongs here.
+QUrl backgroundUrlOf(const QString &path)
+{
+    const QString cleaned = path.trimmed();
+    if (cleaned.isEmpty()) {
+        return {};
+    }
+    if (cleaned.startsWith(QLatin1StringView("file://"))
+        || cleaned.startsWith(QLatin1StringView("qrc:/"))
+        || cleaned.startsWith(QLatin1StringView("http://"))
+        || cleaned.startsWith(QLatin1StringView("https://"))) {
+        return QUrl(cleaned);
+    }
+    return QUrl::fromLocalFile(cleaned);
+}
+
+} // namespace
+
+QUrl Settings::customBackgroundUrl() const
+{
+    return backgroundUrlOf(m_customBackgroundPath);
+}
+
+QUrl Settings::backgroundUrl(const QString &path) const
+{
+    return backgroundUrlOf(path);
+}
+
 void Settings::setCustomBackgrounds(const QStringList &value)
 {
     if (m_customBackgrounds == value) {
