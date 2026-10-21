@@ -24,3 +24,5 @@ target/
 *~
 third_party/local-api/
 release-artifacts/
+
+/packaging/windows/Output/
