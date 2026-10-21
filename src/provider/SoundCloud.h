@@ -21,6 +21,7 @@ namespace resonance {
 class ErrorCenter;
 class Settings;
 class SidecarClient;
+class SoundCloudBrowserLogin;
 
 struct SoundCloudArtistProfile {
     Q_GADGET
@@ -131,6 +132,8 @@ class SoundCloud : public QObject {
     /// the last thing that happened, for the connect form to show: an error
     /// from soundcloud, or that the account is connected
     Q_PROPERTY(QString statusMessage READ statusMessage NOTIFY statusMessageChanged FINAL)
+    /// a browser window is open, waiting for the person to sign in there
+    Q_PROPERTY(bool browserLoginActive READ browserLoginActive NOTIFY browserLoginActiveChanged FINAL)
     /// the app's own soundcloud client id, kept in the app's settings
     Q_PROPERTY(QString clientId READ clientId WRITE setClientId NOTIFY clientIdChanged FINAL)
     /// whether this build has the sidecar at all
@@ -192,6 +195,13 @@ public:
     /// the sidecar's settings, the token is verified against /me and kept
     /// there. both are needed, and the client id is remembered by the app.
     Q_INVOKABLE void connectAccount(const QString &clientId, const QString &token);
+    /// opens a chromium-based browser window for the soundcloud sign-in and
+    /// lifts the client id and token off the requests the web client makes
+    /// there; once both are captured, connectAccount runs on its own
+    Q_INVOKABLE void loginWithBrowser();
+    /// closes the sign-in window and stops the capture
+    Q_INVOKABLE void cancelBrowserLogin();
+    bool browserLoginActive() const;
     /// asks the sidecar what it has, without spending anything
     Q_INVOKABLE void refreshStatus();
     Q_INVOKABLE void logOut();
@@ -242,6 +252,7 @@ signals:
     void statusMessageChanged();
     void clientIdChanged();
     void availableChanged();
+    void browserLoginActiveChanged();
 
     void currentArtistChanged();
     void loadingArtistChanged();
@@ -289,6 +300,7 @@ private:
     Settings *m_settings = nullptr;
     QNetworkAccessManager *m_network = nullptr;
     ErrorCenter *m_errors = nullptr;
+    SoundCloudBrowserLogin *m_browserLogin = nullptr;
 
     bool m_connected = false;
     QString m_userName;

@@ -6,6 +6,7 @@
 #include "core/Async.h"
 #include "library/LibraryStore.h"
 #include "provider/SidecarClient.h"
+#include "provider/SoundCloudBrowserLogin.h"
 #include "spotify/SpotifyError.h"
 
 #include <QCryptographicHash>
@@ -151,6 +152,17 @@ SoundCloud::SoundCloud(SidecarClient *sidecar, Settings *settings, QNetworkAcces
             qCDebug(lcSoundCloud).noquote() << line;
         });
     }
+    // the browser sign-in hands over the two things connectAccount asks for
+    m_browserLogin = new SoundCloudBrowserLogin(this);
+    connect(m_browserLogin, &SoundCloudBrowserLogin::activeChanged, this,
+            &SoundCloud::browserLoginActiveChanged);
+    connect(m_browserLogin, &SoundCloudBrowserLogin::captured, this, [this](const QString &clientId,
+                                                                           const QString &token) {
+        connectAccount(clientId, token);
+    });
+    connect(m_browserLogin, &SoundCloudBrowserLogin::failed, this, [this](const QString &message) {
+        setStatusMessage(message);
+    });
     if (m_settings != nullptr) {
         connect(m_settings, &Settings::soundcloudClientIdChanged, this, &SoundCloud::clientIdChanged);
     }
@@ -296,6 +308,7 @@ QCoro::Task<> SoundCloud::runConnect(QString clientId, QString token, quint64 ge
     }
     if (updated.contains(QStringLiteral("error"))) {
         setBusy(false);
+        m_browserLogin->cancel();
         setStatusMessage(updated.value(QStringLiteral("error")).toString());
         co_return;
     }
@@ -305,6 +318,8 @@ QCoro::Task<> SoundCloud::runConnect(QString clientId, QString token, quint64 ge
     if (generation != m_connectGeneration) {
         co_return;
     }
+    // one way or another the connect is over, and the sign-in window can go
+    m_browserLogin->cancel();
     setBusy(false);
     if (login.contains(QStringLiteral("error"))) {
         setStatusMessage(login.value(QStringLiteral("error")).toString());
@@ -333,6 +348,27 @@ void SoundCloud::connectAccount(const QString &clientId, const QString &token)
     setStatusMessage(QString());
     setBusy(true);
     detach(runConnect(id, accessToken, generation));
+}
+
+void SoundCloud::loginWithBrowser()
+{
+    if (m_browserLogin == nullptr || m_browserLogin->active()) {
+        return;
+    }
+    clearStatusMessage();
+    m_browserLogin->start();
+}
+
+void SoundCloud::cancelBrowserLogin()
+{
+    if (m_browserLogin != nullptr && m_browserLogin->active()) {
+        m_browserLogin->cancel();
+    }
+}
+
+bool SoundCloud::browserLoginActive() const
+{
+    return m_browserLogin != nullptr && m_browserLogin->active();
 }
 
 void SoundCloud::logOut()

@@ -223,8 +223,58 @@ Flickable {
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
-                text: "Connect your SoundCloud account using your Client ID and OAuth Access Token."
+                text: "Connect your SoundCloud account — sign in from your browser, or paste a Client ID and OAuth token by hand."
                 color: Appearance.colors.onSurfaceVariant
+            }
+
+            TextButton {
+                anchors.horizontalCenter: parent.horizontalCenter
+                variant: SoundCloud.browserLoginActive ? TextButton.Tonal : TextButton.Filled
+                symbol: SoundCloud.browserLoginActive ? "" : "cloud"
+                busy: SoundCloud.browserLoginActive
+                text: SoundCloud.browserLoginActive
+                      ? "Waiting for soundcloud.com sign-in"
+                      : "Login with SoundCloud"
+                onClicked: {
+                    if (SoundCloud.browserLoginActive) {
+                        SoundCloud.cancelBrowserLogin()
+                    } else {
+                        SoundCloud.loginWithBrowser()
+                    }
+                }
+            }
+
+            StyledText {
+                visible: SoundCloud.browserLoginActive
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+                text: "Sign in to SoundCloud in the browser window that just opened. Once you are in, the app grabs your session there by itself and closes the window. Click the button again to cancel."
+                font.pixelSize: Appearance.fontSize.smaller
+                color: Appearance.colors.onSurfaceVariant
+            }
+
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 12
+
+                Rectangle {
+                    width: 90
+                    height: 1
+                    color: Appearance.colors.outlineVariant
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+                StyledText {
+                    text: "or"
+                    color: Appearance.colors.onSurfaceVariant
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+                Rectangle {
+                    width: 90
+                    height: 1
+                    color: Appearance.colors.outlineVariant
+                    anchors.verticalCenter: parent.verticalCenter
+                }
             }
 
             Column {

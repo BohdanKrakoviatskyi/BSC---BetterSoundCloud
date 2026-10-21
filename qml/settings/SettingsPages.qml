@@ -859,6 +859,48 @@ Item {
                          : (SoundCloud.available ? "Not connected" : "Sidecar not available")
                     good: SoundCloud.connected
                 }
+                TextButton {
+                    x: 8
+                    variant: SoundCloud.browserLoginActive ? TextButton.Tonal : TextButton.Filled
+                    symbol: SoundCloud.browserLoginActive ? "" : "cloud"
+                    busy: SoundCloud.browserLoginActive
+                    text: SoundCloud.browserLoginActive
+                          ? "Waiting for soundcloud.com sign-in"
+                          : "Login with SoundCloud"
+                    onClicked: {
+                        if (SoundCloud.browserLoginActive) {
+                            SoundCloud.cancelBrowserLogin()
+                        } else {
+                            SoundCloud.loginWithBrowser()
+                        }
+                    }
+                }
+                NoteText {
+                    visible: SoundCloud.browserLoginActive
+                    text: "Sign in to SoundCloud in the browser window that just opened — it closes itself once the session is in. Click the button again to cancel."
+                }
+                Row {
+                    x: 8
+                    spacing: 12
+
+                    Rectangle {
+                        width: 90
+                        height: 1
+                        color: Appearance.colors.outlineVariant
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    StyledText {
+                        text: "or"
+                        color: Appearance.colors.onSurfaceVariant
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Rectangle {
+                        width: 90
+                        height: 1
+                        color: Appearance.colors.outlineVariant
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
                 OutlinedTextField {
                     id: scSettingsClientIdField
                     x: 8
@@ -920,7 +962,7 @@ Item {
                     text: SoundCloud.statusMessage
                 }
                 NoteText {
-                    text: "Paste your SoundCloud Client ID and OAuth token from soundcloud.com. Streams are cached locally with full EQ and spectrum."
+                    text: "Paste your SoundCloud Client ID and OAuth token from soundcloud.com — or log in with the browser button above, which grabs both by itself. Streams are cached locally with full EQ and spectrum."
                 }
             }
 
