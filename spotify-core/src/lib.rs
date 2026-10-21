@@ -167,6 +167,15 @@ impl PlaybackTimeline {
         self.observed_at = Some(Instant::now());
     }
 
+    /// local-file position is advanced by samples consumed in the device callback;
+    /// only a changed position proves that output is still being consumed.
+    fn observe_output_position(&mut self, position_ms: u32) {
+        if self.position_ms != position_ms {
+            self.position_ms = position_ms;
+            self.observed_at = Some(Instant::now());
+        }
+    }
+
     fn current_position_ms(&self) -> u32 {
         let elapsed_ms = if self.is_playing {
             self.observed_at
@@ -452,11 +461,26 @@ impl SpotifyCore {
         if self.output_health.is_stalled() {
             return true;
         }
-        // file playback has its own clock, driven by what the device
-        // actually consumed, so a stalled local sink shows up as a position
-        // that stops moving rather than as a quiet timeline.
+        // file playback has its own clock, driven by samples consumed in the
+        // device callback. unlike Spotify's timeline, it needs progress observed
+        // here to detect when that callback has stopped.
         if self.local_playback_active.load(Ordering::Acquire) {
-            return false;
+            let position = self.lock_state().ok().and_then(|state| {
+                state.local_playback.as_ref().map(|local| {
+                    local
+                        .position_ms()
+                        .min(local.duration_ms.min(u32::MAX as u64) as u32)
+                })
+            });
+            return position.is_some_and(|position| {
+                self.timeline
+                    .lock()
+                    .map(|mut timeline| {
+                        timeline.observe_output_position(position);
+                        timeline.is_stalled()
+                    })
+                    .unwrap_or(false)
+            });
         }
         self.timeline
             .lock()
@@ -1366,9 +1390,15 @@ struct LyricsColorsPayload {
 
 #[cfg(test)]
 mod tests {
-    use std::time::{Duration, Instant};
+    use std::{
+        sync::{
+            Arc,
+            atomic::{AtomicBool, AtomicU64, Ordering},
+        },
+        time::{Duration, Instant},
+    };
 
-    use super::{PlaybackTimeline, SUPERSEDED, SpotifyCore};
+    use super::{PlaybackTimeline, SUPERSEDED, SpotifyCore, file_playback::LocalPlayback};
 
     #[test]
     fn a_quiet_player_stops_inventing_progress_and_reports_the_stall() {
@@ -1392,6 +1422,36 @@ mod tests {
             timeline.current_position_ms(),
             10_000 + PlaybackTimeline::STALL_TIMEOUT.as_millis() as u32
         );
+    }
+
+    #[test]
+    fn a_local_output_that_stops_consuming_reports_a_stall() {
+        let core = SpotifyCore::new();
+        let frames = Arc::new(AtomicU64::new(0));
+        core.local_playback_active.store(true, Ordering::Release);
+        core.lock_state().unwrap().local_playback = Some(LocalPlayback {
+            path: std::path::PathBuf::new(),
+            duration_ms: 10_000,
+            pushed_frames: Arc::clone(&frames),
+            base_position_ms: 0,
+            channels: 2,
+            sample_rate: 44_100,
+            cancel: Arc::new(AtomicBool::new(false)),
+        });
+        core.timeline
+            .lock()
+            .unwrap()
+            .observe_position(0, Some(true));
+
+        assert!(!core.audio_output_stalled());
+        frames.store(88_200, Ordering::Relaxed);
+        assert!(!core.audio_output_stalled());
+
+        // local progress comes from samples consumed by the output callback;
+        // if it stops moving, don't leave the UI claiming that music plays.
+        core.timeline.lock().unwrap().observed_at =
+            Instant::now().checked_sub(PlaybackTimeline::STALL_TIMEOUT);
+        assert!(core.audio_output_stalled());
     }
 
     #[test]
