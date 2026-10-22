@@ -116,7 +116,7 @@ func (s *service) RPCTrackLyrics(params trackLyricsParams) (trackLyrics, error) 
 	canonical, canonicalFound := s.resolveLyricsTrack(params, &logs)
 	if canonicalFound {
 		logs = append(logs, fmt.Sprintf("Deezer выбрал: %s — %s", canonical.Artist, canonical.Title))
-		if lyrics, found := s.findLyricsForQuery(params.TrackID, canonical, &logs); found {
+		if lyrics, found := s.findLyricsForQuery(params, canonical, &logs); found {
 			lyrics.Logs = logs
 			return saveCache(lyrics), nil
 		}
@@ -239,7 +239,8 @@ func scoreDeezerCandidate(params trackLyricsParams, candidate deezerTrack, title
 	return candidateScore{rank: rank, title: bestTitleScore, artist: artistScore, duration: durationScore}, true
 }
 
-func (s *service) findLyricsForQuery(trackID int64, query lyricsQuery, logs *[]string) (trackLyrics, bool) {
+func (s *service) findLyricsForQuery(params trackLyricsParams, query lyricsQuery, logs *[]string) (trackLyrics, bool) {
+	trackID := params.TrackID
 	lyrics, exactOK, exactErr := s.fetchLRCLibExact(trackID, query)
 	if exactOK {
 		*logs = append(*logs, "LRCLIB: точный поиск нашёл текст")
@@ -256,11 +257,21 @@ func (s *service) findLyricsForQuery(trackID int64, query lyricsQuery, logs *[]s
 		*logs = append(*logs, "LRCLIB: ошибка поиска — "+err.Error())
 		return trackLyrics{}, false
 	}
+	// The catalog is scored against the duration of the track that is actually
+	// playing, not the canonical one Deezer returned: a reupload on SoundCloud
+	// is usually a few seconds off, and its synced lines must line up with that
+	// copy. Without this the fallback accepted a record of another length, whose
+	// timestamps drifted one or two lines behind the song.
+	scoring := query
+	if params.DurationMs > 0 {
+		scoring.Duration = (params.DurationMs + 500) / 1000
+	}
+	requireDuration := scoring.Duration > 0 && !lyricsHasVersionMarker(params.Title)
 	for _, record := range records {
 		if record.Instrumental || strings.TrimSpace(record.SyncedLyrics+record.PlainLyrics) == "" {
 			continue
 		}
-		score, ok := scoreLRCLibRecord(query, record, false)
+		score, ok := scoreLRCLibRecord(scoring, record, requireDuration)
 		if ok && (best == nil || score.rank > best.score.rank) {
 			best = &scoredLRCLibRecord{record: record, score: score}
 		}

@@ -25,3 +25,8 @@ target/
 third_party/local-api/
 release-artifacts/
 node_modules/
+
+# local sidecar build and installer artifacts
+backend/local-api.exe
+/packaging/windows/Output/
+aqtinstall.log
