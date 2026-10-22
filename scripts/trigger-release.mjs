@@ -4,7 +4,7 @@ import fs from 'node:fs';
 const run = (command, args) => {
   const result = spawnSync(command, args, { encoding: 'utf8', stdio: 'inherit' });
   if (result.error) {
-    console.error(`Не удалось запустить ${command}: ${result.error.message}`);
+    console.error(`Failed to run ${command}: ${result.error.message}`);
     process.exit(1);
   }
   if (result.status !== 0) process.exit(result.status ?? 1);
@@ -12,7 +12,7 @@ const run = (command, args) => {
 
 const tag = process.argv[2];
 if (tag && !/^v\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(tag)) {
-  console.error('Укажите тег версии в формате v0.3.4.');
+  console.error('Provide a version tag in the format v0.3.4.');
   process.exit(1);
 }
 
@@ -35,7 +35,7 @@ if (!selectedTag) {
     encoding: 'utf8',
   });
   if (remoteTags.error || remoteTags.status !== 0) {
-    console.warn(`Внимание: не удалось получить удаленные теги (${remoteTags.stderr?.trim()}). Используем локальные.`);
+    console.warn(`Warning: could not fetch remote tags (${remoteTags.stderr?.trim()}). Using local tags.`);
   }
 
   const localTags = spawnSync('git', ['tag', '--list', 'v*'], { encoding: 'utf8' });
@@ -61,12 +61,12 @@ if (!selectedTag) {
     const packageJson = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
     packageVersion = packageJson.version;
   } catch {
-    console.error('Не удалось прочитать version из package.json.');
+    console.error('Could not read version from package.json.');
     process.exit(1);
   }
 
   if (!packageVersion) {
-    console.error('В package.json нет поля version.');
+    console.error('package.json has no version field.');
     process.exit(1);
   }
 
@@ -85,16 +85,16 @@ if (!selectedTag) {
 
   const latestVersion = candidates.sort(compareVersions).at(-1);
   if (!latestVersion) {
-    console.error('Не удалось определить текущую версию из package.json или Git-тегов.');
+    console.error('Could not determine the current version from package.json or Git tags.');
     process.exit(1);
   }
 
   latestVersion[2] += 1;
   selectedTag = `v${latestVersion.join('.')}`;
-  console.log(`Новая версия: ${selectedTag} (увеличен patch)`);
+  console.log(`New version: ${selectedTag} (patch incremented)`);
 }
 
-console.log(`Запускаю сборку релиза ${selectedTag} для ${repository} (ветка ${currentBranch})…`);
+console.log(`Starting release build ${selectedTag} for ${repository} (branch ${currentBranch})…`);
 
 const existingRun = spawnSync('gh', [
   'run', 'list',
@@ -124,4 +124,4 @@ if (matchingRun) {
   ]);
 }
 
-console.log(`Workflow отправлен. Ссылка на запуски: https://github.com/${repository}/actions/workflows/release.yml`);
+console.log(`Workflow dispatched. View runs at: https://github.com/${repository}/actions/workflows/release.yml`);

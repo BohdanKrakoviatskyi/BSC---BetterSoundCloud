@@ -11,8 +11,8 @@ SongListPage {
     loadingMore: SoundCloud.loadingMoreArtistTracks
     showsEmpty: !SoundCloud.loadingArtist && SoundCloud.artistTracks.count === 0
     emptySymbol: "music_note"
-    emptyTitle: "Нет треков"
-    emptyDescription: "У этого автора пока нет треков."
+    emptyTitle: "No tracks"
+    emptyDescription: "This artist has no tracks yet."
 
     onLoadMoreRequested: {
         if (SoundCloud.hasMoreArtistTracks && !SoundCloud.loadingMoreArtistTracks) {
@@ -23,7 +23,7 @@ SongListPage {
     hero: CollectionHero {
         id: hero
         kind: "TRACKS"
-        title: "Треки " + (Library.currentArtist.name.length > 0 ? Library.currentArtist.name : SoundCloud.currentArtist.fullName)
+        title: "Tracks by " + (Library.currentArtist.name.length > 0 ? Library.currentArtist.name : SoundCloud.currentArtist.fullName)
         artworkUrl: SoundCloud.artistTracks.count > 0
                     ? SoundCloud.artistTracks.at(0).artworkUrl
                     : Library.currentArtist.artworkUrl
@@ -59,7 +59,7 @@ SongListPage {
                 wavy: true
                 symbol: "play_arrow"
                 burst: "play"
-                text: "Воспроизвести"
+                text: "Play"
                 enabled: SoundCloud.artistTracks.count > 0
                 onClicked: Player.playFromModel(SoundCloud.artistTracks, 0)
             }

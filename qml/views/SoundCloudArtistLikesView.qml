@@ -11,8 +11,8 @@ SongListPage {
     loadingMore: SoundCloud.loadingMoreArtistLikes
     showsEmpty: !SoundCloud.loadingArtist && SoundCloud.artistLikes.count === 0
     emptySymbol: "favorite"
-    emptyTitle: "Нет лайкнутых треков"
-    emptyDescription: "У этого автора пока нет публичных лайков."
+    emptyTitle: "No liked tracks"
+    emptyDescription: "This artist has no public likes yet."
 
     onLoadMoreRequested: {
         if (SoundCloud.hasMoreArtistLikes && !SoundCloud.loadingMoreArtistLikes) {
@@ -24,7 +24,7 @@ SongListPage {
         id: hero
         kind: "LIKES"
         themeTinted: true
-        title: "Лайки " + (Library.currentArtist.name.length > 0 ? Library.currentArtist.name : SoundCloud.currentArtist.fullName)
+        title: (Library.currentArtist.name.length > 0 ? Library.currentArtist.name : SoundCloud.currentArtist.fullName) + "’s likes"
         artworkUrl: SoundCloud.artistLikes.count > 0
                     ? SoundCloud.artistLikes.at(0).artworkUrl
                     : Library.currentArtist.artworkUrl
@@ -60,7 +60,7 @@ SongListPage {
                 wavy: true
                 symbol: "play_arrow"
                 burst: "play"
-                text: "Воспроизвести"
+                text: "Play"
                 enabled: SoundCloud.artistLikes.count > 0
                 onClicked: Player.playFromModel(SoundCloud.artistLikes, 0)
             }

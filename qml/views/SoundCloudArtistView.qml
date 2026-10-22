@@ -249,7 +249,7 @@ Flickable {
                 TextButton {
                     symbol: "play_arrow"
                     burst: "play"
-                    text: "Воспроизвести"
+                    text: "Play"
                     wavy: true
                     enabled: SoundCloud.artistTracks.count > 0
                     onClicked: Player.playFromModel(SoundCloud.artistTracks, 0)
@@ -282,7 +282,7 @@ Flickable {
                 StyledText {
                     font.pixelSize: Appearance.fontSize.small
                     font.weight: Font.DemiBold
-                    text: "О художнике"
+                    text: "About the artist"
                     color: Appearance.colors.onSurface
                 }
 
@@ -301,7 +301,7 @@ Flickable {
 
                 StyledText {
                     visible: bioText.implicitHeight > bioText.height || bioText.bioExpanded
-                    text: bioText.bioExpanded ? "Скрыть" : "Показать больше"
+                    text: bioText.bioExpanded ? "Show less" : "Show more"
                     font.pixelSize: Appearance.fontSize.smaller
                     color: Appearance.colors.primary
                     font.weight: Font.DemiBold
@@ -327,7 +327,7 @@ Flickable {
                 }
                 StyledText {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "Загрузка профиля…"
+                    text: "Loading profile…"
                     color: Appearance.colors.onSurfaceVariant
                 }
             }
@@ -347,7 +347,7 @@ Flickable {
 
                 TitleText {
                     anchors.verticalCenter: parent.verticalCenter
-                    text: "Треки"
+                    text: "Tracks"
                     font.pixelSize: Appearance.fontSize.title
                     font.weight: Font.Bold
                 }
@@ -361,7 +361,7 @@ Flickable {
                     anchors.verticalCenter: parent.verticalCenter
                     variant: TextButton.Text
                     symbol: "arrow_forward"
-                    text: "Все"
+                    text: "All"
                     visible: SoundCloud.artistTracks.count > 0
                     onClicked: UiState.goToArtistTracks(Library.currentArtist)
                 }
@@ -373,7 +373,7 @@ Flickable {
             visible: !root.loading && root.hasData && SoundCloud.artistTracks.count === 0
             height: visible ? implicitHeight : 0
             symbol: "music_note"
-            title: "Треков не найдено"
+            title: "No tracks found"
         }
 
         Repeater {
@@ -396,7 +396,7 @@ Flickable {
             Shelf {
                 id: playlistsShelf
                 width: root.width
-                title: "Плейлисты"
+                title: "Playlists"
                 symbol: "playlist_play"
                 iconShape: "cookie9"
                 model: SoundCloud.artistPlaylists
@@ -442,7 +442,7 @@ Flickable {
 
                 TitleText {
                     anchors.verticalCenter: parent.verticalCenter
-                    text: "Лайки"
+                    text: "Likes"
                     font.pixelSize: Appearance.fontSize.title
                     font.weight: Font.Bold
                 }
@@ -456,7 +456,7 @@ Flickable {
                     anchors.verticalCenter: parent.verticalCenter
                     variant: TextButton.Text
                     symbol: "arrow_forward"
-                    text: "Все"
+                    text: "All"
                     onClicked: UiState.goToArtistLikes(Library.currentArtist)
                 }
             }

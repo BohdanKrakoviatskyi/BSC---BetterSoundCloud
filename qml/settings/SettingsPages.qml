@@ -1221,21 +1221,21 @@ Item {
                                 text: {
                                     switch (Updater.status) {
                                     case Updater.Checking:
-                                        return "Проверка наличия обновлений…";
+                                        return "Checking for updates…";
                                     case Updater.UpdateAvailable:
-                                        return "Доступна новая версия: " + Updater.latestVersion;
+                                        return "New version available: " + Updater.latestVersion;
                                     case Updater.Downloading:
-                                        return "Загрузка обновления… " + Math.round(Updater.downloadProgress * 100) + "%";
+                                        return "Downloading update… " + Math.round(Updater.downloadProgress * 100) + "%";
                                     case Updater.Downloaded:
-                                        return "Обновление " + Updater.latestVersion + " загружено";
+                                        return "Update " + Updater.latestVersion + " downloaded";
                                     case Updater.Installing:
-                                        return "Установка обновления…";
+                                        return "Installing update…";
                                     case Updater.UpToDate:
-                                        return "У вас установлена актуальная версия (" + Updater.currentVersion + ")";
+                                        return "You’re up to date (" + Updater.currentVersion + ")";
                                     case Updater.Error:
-                                        return "Ошибка проверки обновлений";
+                                        return "Failed to check for updates";
                                     default:
-                                        return "Текущая версия: " + Updater.currentVersion;
+                                        return "Current version: " + Updater.currentVersion;
                                     }
                                 }
                                 font.weight: Font.Medium
@@ -1255,15 +1255,15 @@ Item {
                                     if (Updater.status === Updater.Downloading) {
                                         const receivedMb = (Updater.downloadedBytes / (1024 * 1024)).toFixed(1);
                                         const totalMb = Updater.assetSize > 0 ? (Updater.assetSize / (1024 * 1024)).toFixed(1) : "?";
-                                        return receivedMb + " MB из " + totalMb + " MB";
+                                        return receivedMb + " MB of " + totalMb + " MB";
                                     }
                                     if (Updater.status === Updater.Downloaded) {
-                                        return "Установщик готов к запуску в папке Загрузки";
+                                        return "The installer is ready to run from your Downloads folder";
                                     }
                                     if (Updater.status === Updater.Error) {
                                         return Updater.errorMessage;
                                     }
-                                    return "Релизы GitHub: Resonance";
+                                    return "GitHub releases: Resonance";
                                 }
                                 font.pixelSize: Appearance.fontSize.smaller
                                 color: Appearance.colors.onSurfaceVariant
@@ -1329,7 +1329,7 @@ Item {
                         TextButton {
                             variant: TextButton.Filled
                             symbol: "sync"
-                            text: "Проверить обновления"
+                            text: "Check for updates"
                             visible: Updater.status === Updater.Idle || Updater.status === Updater.UpToDate || Updater.status === Updater.Error
                             busy: Updater.status === Updater.Checking
                             enabled: Updater.status !== Updater.Checking
@@ -1339,7 +1339,7 @@ Item {
                         TextButton {
                             variant: TextButton.Filled
                             symbol: "download"
-                            text: "Загрузить обновление"
+                            text: "Download update"
                             visible: Updater.status === Updater.UpdateAvailable
                             onClicked: Updater.startDownload()
                         }
@@ -1347,7 +1347,7 @@ Item {
                         TextButton {
                             variant: TextButton.Filled
                             symbol: "open_in_new"
-                            text: App.macOS ? "Установить и перезапустить" : "Открыть установщик"
+                            text: App.macOS ? "Install and restart" : "Open installer"
                             visible: Updater.status === Updater.Downloaded
                             onClicked: {
                                 if (App.macOS) {
@@ -1361,7 +1361,7 @@ Item {
                         TextButton {
                             variant: TextButton.Tonal
                             symbol: "folder_open"
-                            text: "Показать файл"
+                            text: "Show file"
                             visible: Updater.status === Updater.Downloaded
                             onClicked: Updater.openInstaller()
                         }

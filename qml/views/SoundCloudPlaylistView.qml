@@ -125,7 +125,7 @@ Flickable {
                             }
                             StyledText {
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: "ПЛЕЙЛИСТ SOUNDCLOUD"
+                                text: "SOUNDCLOUD PLAYLIST"
                                 font.pixelSize: 10
                                 font.weight: Font.Bold
                                 color: Appearance.colors.onSecondaryContainer
@@ -143,7 +143,7 @@ Flickable {
                         color: Appearance.colors.onSurface
                     }
 
-                    // Capacity & Author line (Вместимость плейлиста)
+                    // Capacity & author line
                     Row {
                         spacing: 8
 
@@ -212,7 +212,7 @@ Flickable {
                         TextButton {
                             symbol: "play_arrow"
                             burst: "play"
-                            text: "Слушать плейлист"
+                            text: "Play playlist"
                             wavy: true
                             enabled: Library.playlistSongs.count > 0
                             onClicked: Player.playFromModel(Library.playlistSongs, 0)
@@ -221,7 +221,7 @@ Flickable {
                         TextButton {
                             symbol: "shuffle"
                             burst: "play"
-                            text: "Перемешать"
+                            text: "Shuffle"
                             variant: TextButton.Tonal
                             enabled: Library.playlistSongs.count > 0
                             onClicked: Player.shufflePlay(Library.playlistSongs)
@@ -254,7 +254,7 @@ Flickable {
                 LoadingSpinner { anchors.horizontalCenter: parent.horizontalCenter }
                 StyledText {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "Загружаю треки плейлиста…"
+                    text: "Loading playlist tracks…"
                     color: Appearance.colors.onSurfaceVariant
                 }
             }
@@ -269,7 +269,7 @@ Flickable {
             EmptyState {
                 anchors.centerIn: parent
                 symbol: "music_note"
-                title: "В этом плейлисте нет доступных треков"
+                title: "No playable tracks in this playlist"
             }
         }
 

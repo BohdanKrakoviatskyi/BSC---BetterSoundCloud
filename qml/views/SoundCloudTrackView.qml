@@ -136,7 +136,7 @@ Flickable {
                                 }
                                 StyledText {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: "SOUNDCLOUD ТРЕК"
+                                    text: "SOUNDCLOUD TRACK"
                                     font.pixelSize: 10
                                     font.weight: Font.Bold
                                     color: Appearance.colors.onPrimaryContainer
@@ -201,7 +201,7 @@ Flickable {
                         StyledText {
                             visible: root.details.artistFollowers > 0
                             anchors.verticalCenter: parent.verticalCenter
-                            text: "• " + Format.compactCount(root.details.artistFollowers) + " подписчиков"
+                            text: "• " + Format.compactCount(root.details.artistFollowers) + " followers"
                             font.pixelSize: Appearance.fontSize.smaller
                             color: Appearance.colors.onSurfaceVariant
                         }
@@ -215,7 +215,7 @@ Flickable {
                         TextButton {
                             symbol: root.isCurrent && Player.playing ? "pause" : "play_arrow"
                             burst: root.isCurrent && Player.playing ? "" : "play"
-                            text: root.isCurrent && Player.playing ? "Пауза" : "Слушать"
+                            text: root.isCurrent && Player.playing ? "Pause" : "Listen"
                             wavy: true
                             onClicked: {
                                 if (root.isCurrent && Player.hasSong) {
@@ -255,10 +255,10 @@ Flickable {
 
                 Repeater {
                     model: [
-                        { label: "Прослушиваний", value: root.details.playbackCount, icon: "headphones" },
-                        { label: "Лайков",         value: root.details.likesCount,   icon: "favorite" },
-                        { label: "Репостов",       value: root.details.repostsCount, icon: "repeat" },
-                        { label: "Комментариев",   value: root.details.commentCount, icon: "comment" }
+                        { label: "Plays",     value: root.details.playbackCount, icon: "headphones" },
+                        { label: "Likes",     value: root.details.likesCount,   icon: "favorite" },
+                        { label: "Reposts",   value: root.details.repostsCount, icon: "repeat" },
+                        { label: "Comments",  value: root.details.commentCount, icon: "comment" }
                     ]
 
                     delegate: Rectangle {
@@ -368,7 +368,7 @@ Flickable {
                 StyledText {
                     font.pixelSize: Appearance.fontSize.small
                     font.weight: Font.DemiBold
-                    text: "Описание"
+                    text: "Description"
                     color: Appearance.colors.onSurface
                 }
 
@@ -386,7 +386,7 @@ Flickable {
 
                 StyledText {
                     visible: descText.implicitHeight > descText.height || descText.descExpanded
-                    text: descText.descExpanded ? "Скрыть" : "Показать больше"
+                    text: descText.descExpanded ? "Show less" : "Show more"
                     font.pixelSize: Appearance.fontSize.smaller
                     color: Appearance.colors.primary
                     font.weight: Font.DemiBold
@@ -410,13 +410,13 @@ Flickable {
                 LoadingSpinner { anchors.horizontalCenter: parent.horizontalCenter }
                 StyledText {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "Загрузка информации о треке…"
+                    text: "Loading track information…"
                     color: Appearance.colors.onSurfaceVariant
                 }
             }
         }
 
-        // ── Related tracks CAROUSEL (Красивая горизонтальная карусель) ─────────
+        // ── Related tracks carousel ────────────────────────────────────────────
         Item {
             id: relatedCarouselArea
             width: root.width
@@ -448,7 +448,7 @@ Flickable {
 
                         TitleText {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: "Похожие треки"
+                            text: "Related tracks"
                             font.pixelSize: Appearance.fontSize.title
                             font.weight: Font.Bold
                         }
