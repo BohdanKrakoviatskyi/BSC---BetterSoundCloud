@@ -4,6 +4,7 @@
 #include "core/Async.h"
 
 #include <QDir>
+#include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -19,6 +20,8 @@
 #include <QCoroAbstractSocket>
 #include <QCoroNetworkReply>
 #include <QCoroTimer>
+
+#include <utility>
 
 namespace resonance {
 
@@ -115,8 +118,15 @@ QString SoundCloudBrowserLogin::findBrowser() const
     }
     candidates << QStringLiteral("/opt/google/chrome/chrome");
 #endif
-    candidates.removeAll(QString());
-    return candidates.value(0);
+    // the windows and mac branches above only assemble paths — keep the first
+    // one that actually exists, otherwise a missing Chrome masks an installed
+    // Edge and the sign-in never starts
+    for (const QString &candidate : std::as_const(candidates)) {
+        if (QFile::exists(candidate)) {
+            return candidate;
+        }
+    }
+    return {};
 }
 
 quint16 SoundCloudBrowserLogin::claimDebugPort() const
