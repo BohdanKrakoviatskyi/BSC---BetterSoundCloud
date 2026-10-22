@@ -1190,17 +1190,18 @@ impl SpotifyCore {
 
         let path = playback.path.clone();
 
-        // re-decode and fast-forward to the target position.
+        // re-decode and fast-forward to the target position. symphonia's own
+        // seek on an m4a/aac stream reports success without moving the decoder
+        // at all, so the target is reached by decoding up to it rather than by
+        // trusting the container's index.
         let mut decoder = Self::open_decoder(&path)?;
 
-        if decoder.try_seek(Duration::from_millis(target)).is_err() {
-            let target_samples = target * sample_rate as u64 / 1_000 * channels as u64;
-            let mut skipped: u64 = 0;
-            while skipped < target_samples {
-                match decoder.next() {
-                    Some(_) => skipped += 1,
-                    None => break,
-                }
+        let target_samples = target * sample_rate as u64 / 1_000 * channels as u64;
+        let mut skipped: u64 = 0;
+        while skipped < target_samples {
+            match decoder.next() {
+                Some(_) => skipped += 1,
+                None => break,
             }
         }
 
