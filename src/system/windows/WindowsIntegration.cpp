@@ -379,7 +379,7 @@ bool WindowsIntegration::nativeEventFilter(const QByteArray &eventType, void *me
         case kNext: m_player->skipForward(); break;
         default: return false;
         }
-        *result = 0;
+        if (result) *result = 0;
         return true;
     }
     return false;

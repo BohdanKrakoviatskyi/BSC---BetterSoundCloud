@@ -1085,7 +1085,13 @@ void PlaybackController::pollPlayback()
 void PlaybackController::syncPositionAndDuration()
 {
     const quint32 position = m_core->playbackPositionMs();
-    const quint32 duration = m_core->playbackDurationMs();
+    quint32 duration = m_core->playbackDurationMs();
+    // a streamed container that never says how long it is (an HLS fMP4
+    // stitched from segments) leaves the core blind: the service already
+    // told us, so the bar and the lyrics keep their time.
+    if (duration == 0 && m_currentSong && m_currentSong->durationMs > 0) {
+        duration = quint32(m_currentSong->durationMs);
+    }
     if (position != m_livePositionMs) {
         setLivePosition(position);
     }

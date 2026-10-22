@@ -821,8 +821,12 @@ impl SpotifyCore {
         if let Ok(state) = self.lock_state()
             && let Some(local) = &state.local_playback
         {
+            let position = local.position_ms();
             let duration = local.duration_ms.min(u32::MAX as u64) as u32;
-            return local.position_ms().min(duration);
+            // a container that never says how long it is (an HLS fMP4 stitched
+            // from segments) reports 0. clamping to that would park the bar,
+            // and the lyrics with it, at zero.
+            return if duration > 0 { position.min(duration) } else { position };
         }
         self.timeline
             .lock()
@@ -958,10 +962,12 @@ impl SpotifyCore {
             }
         }
         // a file whose header does not say how long it is (a variable rate
-        // mp3 without one) is measured, so it can still be seeked
+        // mp3 without one, an HLS fMP4 whose mvhd says 0) is measured, so it
+        // can still be seeked
         let duration_ms = decoder
             .total_duration()
             .map(|d| d.as_millis() as u64)
+            .filter(|duration| *duration > 0)
             .or_else(|| local::measure_duration_ms(&path))
             .unwrap_or(0);
         let channels = decoder.channels() as u32;
@@ -1164,7 +1170,13 @@ impl SpotifyCore {
         let duration = playback.duration_ms;
         let channels = playback.channels.max(1);
         let sample_rate = playback.sample_rate.max(1);
-        let target = (position_ms as u64).min(duration);
+        // a container that never said how long it is reports 0: clamping to
+        // that would make every seek land at the start of the song.
+        let target = if duration > 0 {
+            (position_ms as u64).min(duration)
+        } else {
+            position_ms as u64
+        };
 
         if let Ok(mut timeline) = self.timeline.lock() {
             timeline.end_of_track = false;
