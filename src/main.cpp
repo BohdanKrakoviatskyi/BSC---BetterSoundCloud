@@ -48,6 +48,7 @@
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
 #include <QSocketNotifier>
+#include <QtWebEngineQuick/qtwebenginequickglobal.h>
 #include <QtQml/qqmlextensionplugin.h>
 
 #ifdef Q_OS_UNIX
@@ -214,6 +215,8 @@ int main(int argc, char *argv[])
     // the wayland app id, which hyprland window rules and the .desktop file match.
     QGuiApplication::setDesktopFileName(QStringLiteral("resonance"));
     // the tray menu can fall back to widgets on linux
+    QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
+    QtWebEngineQuick::initialize();
 #if defined(Q_OS_LINUX) || defined(Q_OS_WIN)
     QApplication application(argc, argv);
 #else

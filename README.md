@@ -38,7 +38,7 @@ A high-performance, native desktop music player built with Qt 6 (QML / C++) and 
 
 ### Prerequisites
 
-- **Qt 6.9+**: Core, Gui, Network, Concurrent, Qml, Quick, QuickControls2, ShaderTools, Multimedia
+- **Qt 6.9+**: Core, Gui, Network, Concurrent, Qml, Quick, QuickControls2, ShaderTools, Multimedia, WebEngineCore, WebEngineQuick
 - **QCoro6** (0.10+) and **Qt6Keychain**
 - **CMake** (3.24+) and **Ninja**
 - **Rust Toolchain** (stable, via [rustup](https://rustup.rs))
@@ -52,7 +52,7 @@ A high-performance, native desktop music player built with Qt 6 (QML / C++) and 
 Install build tools and libraries via [Homebrew](https://brew.sh):
 
 ```bash
-brew install cmake ninja qt@6 qcoro6 qtkeychain
+brew install cmake ninja qt@6 qtwebengine qcoro6 qtkeychain
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 ```
@@ -146,7 +146,7 @@ instance is kept per user; launching `resonance --play-pause`, `--next`,
 
 ### Windows
 
-Install Qt 6.9+, CMake, Ninja, Rust, and Visual Studio 2022 C++ Build Tools or MinGW 64-bit:
+Install Qt 6.9+ with WebEngine, CMake, Ninja, Rust, and Visual Studio 2022 C++ Build Tools (Qt WebEngine does not support MinGW):
 
 ```powershell
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF

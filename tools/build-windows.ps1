@@ -166,9 +166,9 @@ function Invoke-WindowsBuild {
     if (-not $qtVersion -or [version]$qtVersion -lt [version]'6.9' -or $qtConfiguration -notmatch '(?m)^QT_ARCH\s*=\s*x86_64\s*$') {
         throw 'Resonance requires a Qt 6.9+ x64 kit.'
     }
-    foreach ($module in @('Qt6Core', 'Qt6Widgets', 'Qt6Quick', 'Qt6QuickControls2', 'Qt6ShaderTools')) {
+    foreach ($module in @('Qt6Core', 'Qt6Widgets', 'Qt6Quick', 'Qt6QuickControls2', 'Qt6ShaderTools', 'Qt6WebEngineCore', 'Qt6WebEngineQuick')) {
         if (-not (Test-Path -LiteralPath "$QtPath\lib\cmake\$module\${module}Config.cmake")) {
-            throw "The selected Qt kit is missing $module. Install Qt Base, Qt Declarative and Qt Shader Tools with the Qt installer."
+            throw "The selected Qt kit is missing $module. Install Qt Base, Qt Declarative, Qt Shader Tools and Qt WebEngine with the Qt installer."
         }
     }
     $qtTools = Join-Path (Split-Path -Parent (Split-Path -Parent $QtPath)) 'Tools'
@@ -187,23 +187,15 @@ function Invoke-WindowsBuild {
         $deployQt = Find-Application 'windeployqt.exe' @("$QtPath\bin\windeployqt.exe")
         $gccMajor = [regex]::Match($qtConfiguration, '(?m)^QT_GCC_MAJOR_VERSION\s*=\s*(\d+)')
         if ($gccMajor.Success) {
-            $gccMinor = [regex]::Match($qtConfiguration, '(?m)^QT_GCC_MINOR_VERSION\s*=\s*(\d+)').Groups[1].Value
-            $gccPatch = [regex]::Match($qtConfiguration, '(?m)^QT_GCC_PATCH_VERSION\s*=\s*(\d+)').Groups[1].Value
-            $mingw = Find-MingwCompiler $MingwPath $qtTools ([version]"$($gccMajor.Groups[1].Value).$gccMinor.$gccPatch")
-            $cCompiler = Join-Path $mingw.Directory 'gcc.exe'
-            $cxxCompiler = Join-Path $mingw.Directory 'g++.exe'
-            $compilerVersion = $mingw.Version.ToString()
-            $env:PATH = "$($mingw.Directory);$env:PATH"
-            $rustTarget = 'x86_64-pc-windows-gnu'
-        } else {
-            if ($MingwPath) {
-                throw '-MingwPath cannot be used with an MSVC Qt kit.'
-            }
-            $cCompiler = Initialize-Msvc
-            $cxxCompiler = $cCompiler
-            $compilerVersion = (Get-Item -LiteralPath $cCompiler).VersionInfo.FileVersion
-            $rustTarget = 'x86_64-pc-windows-msvc'
+            throw 'Qt WebEngine is not supported by the MinGW kit. Use an MSVC Qt kit for the Windows build.'
         }
+        if ($MingwPath) {
+            throw '-MingwPath cannot be used with the MSVC Qt WebEngine kit.'
+        }
+        $cCompiler = Initialize-Msvc
+        $cxxCompiler = $cCompiler
+        $compilerVersion = (Get-Item -LiteralPath $cCompiler).VersionInfo.FileVersion
+        $rustTarget = 'x86_64-pc-windows-msvc'
         $rustToolchain = "stable-$rustTarget"
         $installedToolchains = @(Invoke-Native $rustup @('toolchain', 'list'))
         if (-not ($installedToolchains -match "^$([regex]::Escape($rustToolchain))(\s|$)")) {

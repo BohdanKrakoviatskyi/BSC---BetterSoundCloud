@@ -877,7 +877,7 @@ Item {
                 }
                 NoteText {
                     visible: SoundCloud.browserLoginActive
-                    text: "Sign in to SoundCloud in the browser window that just opened — it closes itself once the session is in. Click the button again to cancel."
+                    text: "Sign in to SoundCloud in the secure window opened by the app. The app connects automatically when sign-in is complete. Click the button again to cancel."
                 }
                 Row {
                     x: 8

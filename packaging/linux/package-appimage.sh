@@ -95,7 +95,7 @@ cmake --install "$BUILD_DIR" --prefix "$APPDIR/usr" --config Release
 # and the artifact decides whether the step passes — not the plugin's opinion
 # of a module that cannot be deployed.
 export QML_SOURCES_PATHS="$REPO_ROOT/qml"
-export EXTRA_QT_MODULES="QtQuick;QtQuickControls2;QtQml;QtMultimedia;QtSvg"
+export EXTRA_QT_MODULES="QtQuick;QtQuickControls2;QtQml;QtMultimedia;QtSvg;QtWebEngine;QtWebEngineCore;QtWebEngineQuick"
 
 echo "==> Running linuxdeploy"
 DEPLOY_STATUS=0

@@ -116,7 +116,7 @@ jobs:
           host: linux
           target: desktop
           arch: linux_gcc_64
-          modules: 'qtmultimedia qtshadertools'
+          modules: 'qtmultimedia qtshadertools qtwebengine'
           cache: true
 
       - name: Build QCoro (Linux)
@@ -176,7 +176,7 @@ jobs:
         run: |
           set -euo pipefail
           brew update --quiet
-          brew install cmake ninja qt@6 qcoro6 qtkeychain
+          brew install cmake ninja qt@6 qtwebengine qcoro6 qtkeychain
           # One toolchain instead of two halves. The runner's default selection
           # is the standalone Command Line Tools, and its SDK is newer than the
           # linker that has to read it — the .tbd files list arm64e.x1, which
@@ -226,7 +226,7 @@ jobs:
           host: windows
           target: desktop
           arch: win64_msvc2022_64
-          modules: 'qtmultimedia qtshadertools'
+          modules: 'qtmultimedia qtshadertools qtwebengine'
           cache: true
 
       - name: Install Ninja (Windows)
@@ -349,6 +349,7 @@ jobs:
         run: |
           set -euo pipefail
           QT_PREFIX="$(brew --prefix qt@6)"
+          WEBENGINE_PREFIX="$(brew --prefix qtwebengine)"
           QCORO_PREFIX="$(brew --prefix qcoro6)"
           KEYCHAIN_PREFIX="$(brew --prefix qtkeychain)"
           export PATH="$QT_PREFIX/bin:$PATH"
@@ -356,7 +357,7 @@ jobs:
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=OFF \
-            -DCMAKE_PREFIX_PATH="$QT_PREFIX;$QCORO_PREFIX;$KEYCHAIN_PREFIX" \
+            -DCMAKE_PREFIX_PATH="$QT_PREFIX;$WEBENGINE_PREFIX;$QCORO_PREFIX;$KEYCHAIN_PREFIX" \
             -DRESONANCE_CODESIGN_IDENTITY="$SIGNING_IDENTITY"
 
           cmake --build build --target resonance
@@ -529,6 +530,7 @@ jobs:
             [ -e "$ROOT/$entry" ] || MISSING+=("$entry")
           done
           for pattern in "libQt6Core.so*" "libQt6Quick.so*" "libQt6Multimedia.so*" \
+                         "libQt6WebEngineCore.so*" "QtWebEngineProcess" \
                          "libqxcb.so" "libqt6keychain.so*"; do
             found=$(find "$ROOT" -name "$pattern" -print -quit 2>/dev/null)
             [ -n "$found" ] || MISSING+=("$pattern")
@@ -615,6 +617,8 @@ jobs:
             'Qt6Quick.dll',
             'Qt6Qml.dll',
             'Qt6Multimedia.dll',
+            'Qt6WebEngineCore.dll',
+            'Qt6WebEngineQuick.dll',
             'Qt6DBus.dll',
             'Qt6Network.dll',
             'Qt6Widgets.dll',
@@ -631,6 +635,11 @@ jobs:
             'staging actually contains:'
             Get-ChildItem $staging -Recurse -Name | Sort-Object | ForEach-Object { "  $_" }
             throw "the windows package is not self-contained ($($missing.Count) of $($required.Count) missing)"
+          }
+          foreach ($asset in @('QtWebEngineProcess.exe', 'qtwebengine_resources.pak', 'icudtl.dat')) {
+            if (-not (Get-ChildItem -LiteralPath $staging -Filter $asset -Recurse -File -ErrorAction SilentlyContinue)) {
+              throw "the Windows package is missing Qt WebEngine runtime asset $asset"
+            }
           }
           "package is self-contained: $($required.Count) required entries present"
           "{0:n1} MB staged" -f ((Get-ChildItem $staging -Recurse -File |

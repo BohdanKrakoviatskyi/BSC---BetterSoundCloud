@@ -2,6 +2,8 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.Basic
 import QtMultimedia
+import QtWebEngine
+import QtQuick.Window
 import Qt.labs.platform as Platform
 import Resonance
 
@@ -833,6 +835,26 @@ ApplicationWindow {
     }
 
     LoginDialog {}
+
+    Window {
+        id: soundCloudLoginWindow
+        width: 760
+        height: 680
+        minimumWidth: 480
+        minimumHeight: 420
+        title: "Sign in to SoundCloud"
+        visible: SoundCloud.browserLoginActive
+        color: "white"
+
+        onClosing: SoundCloud.cancelBrowserLogin()
+
+        WebEngineView {
+            id: soundCloudLoginView
+            anchors.fill: parent
+            url: soundCloudLoginWindow.visible ? "https://soundcloud.com" : "about:blank"
+            onNewWindowRequested: (request) => request.openIn(soundCloudLoginView)
+        }
+    }
 
     // dialogs seldom opened are built when asked for, and let go of once
     // they have closed

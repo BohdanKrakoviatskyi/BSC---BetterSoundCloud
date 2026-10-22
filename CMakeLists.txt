@@ -63,7 +63,8 @@ endif()
 option(RESONANCE_DESKTOP_INTEGRATION "Build the Linux desktop integration" ${RESONANCE_IS_LINUX})
 
 find_package(Qt6 6.9 REQUIRED COMPONENTS
-    Core Gui Network Concurrent Qml Quick QuickControls2 ShaderTools Multimedia)
+    Core Gui Network Concurrent Qml Quick QuickControls2 ShaderTools Multimedia
+    WebEngineCore WebEngineQuick)
 if(BUILD_TESTING)
     find_package(Qt6 6.9 REQUIRED COMPONENTS Test QuickTest)
 endif()
@@ -224,7 +225,7 @@ qt_add_qml_module(resonance_app
     SOURCES ${RESONANCE_SOURCES}
     QML_FILES ${RESONANCE_QML}
     RESOURCES resources/resonance-icon.png resources/cameo.png resources/spotify.svg resources/soundcloud.svg
-    DEPENDENCIES QtQuick)
+    DEPENDENCIES QtQuick QtWebEngine)
 # BATCHABLE: the spectrum's material can be merged into the scene graph's
 # batches, which needs the extra vertex input qsb adds for it.
 qt_add_shaders(resonance_app "resonance_shaders"
@@ -300,6 +301,7 @@ if(APPLE)
 endif()
 target_link_libraries(resonance_app PUBLIC
     Qt6::Core Qt6::Gui Qt6::Network Qt6::Concurrent Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Multimedia
+    Qt6::WebEngineCore Qt6::WebEngineQuick
     QCoro6::Core QCoro6::Network
     qt6keychain
     material_color_utilities

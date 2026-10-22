@@ -195,7 +195,7 @@ public:
     /// the sidecar's settings, the token is verified against /me and kept
     /// there. both are needed, and the client id is remembered by the app.
     Q_INVOKABLE void connectAccount(const QString &clientId, const QString &token);
-    /// opens a chromium-based browser window for the soundcloud sign-in and
+    /// opens the embedded chromium window for the soundcloud sign-in and
     /// lifts the client id and token off the requests the web client makes
     /// there; once both are captured, connectAccount runs on its own
     Q_INVOKABLE void loginWithBrowser();

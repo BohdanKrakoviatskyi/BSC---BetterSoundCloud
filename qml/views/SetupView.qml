@@ -249,7 +249,7 @@ Flickable {
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
-                text: "Sign in to SoundCloud in the browser window that just opened. Once you are in, the app grabs your session there by itself and closes the window. Click the button again to cancel."
+                text: "Sign in to SoundCloud in the secure window opened by the app. The app connects automatically when sign-in is complete. Click the button again to cancel."
                 font.pixelSize: Appearance.fontSize.smaller
                 color: Appearance.colors.onSurfaceVariant
             }
