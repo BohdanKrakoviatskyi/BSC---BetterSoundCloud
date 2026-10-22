@@ -15,7 +15,15 @@ $PSNativeCommandUseErrorActionPreference = $false
 function Invoke-Native {
     param([string]$FilePath, [string[]]$Arguments = @())
 
-    & $FilePath @Arguments
+    # Native tools can write informational messages to stderr while succeeding.
+    # Let the exit code decide whether the command failed.
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $FilePath @Arguments
+    } finally {
+        $ErrorActionPreference = $previousPreference
+    }
     if ($LASTEXITCODE -ne 0) {
         throw "$FilePath failed with exit code ${LASTEXITCODE}: $($Arguments -join ' ')"
     }
