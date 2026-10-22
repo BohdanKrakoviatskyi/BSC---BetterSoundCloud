@@ -227,7 +227,7 @@ This document outlines the data sources, RPC methods, parameters, and payloads e
 - **Parameters:** `{ "trackUrn": "soundcloud:tracks:..." }`
 - **Returns:** `{ "url": "https://...", "hls": true/false, "preview": false, "quality": "sq" }`
 - **Resonance Playback Strategy:**
-  - HLS streams fetched segment-by-segment and saved to a local `.mp3`/`.aac` in the cache directory (`~/Library/Caches__LEGACY_RESONANCE_IGNORE__soundcloud/`).
+  - HLS streams fetched segment-by-segment and saved to a local `.mp3`/`.aac` in the cache directory (`~/Library/Caches/soundcloud/`).
   - Progressive streams downloaded directly.
   - The local cached file is then passed to the core player engine.
 

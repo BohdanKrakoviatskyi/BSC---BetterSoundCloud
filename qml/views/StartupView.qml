@@ -43,7 +43,7 @@ Item {
 
             Image {
                 anchors.fill: parent
-                source: "qrc:/qt/qml__LEGACY_RESONANCE_IGNORE__resources/resonance-icon.png"
+                source: "qrc:/qt/qml/Resonance/resources/resonance-icon.png"
                 sourceSize: Qt.size(128, 128)
                 smooth: true
             }

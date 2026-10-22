@@ -1809,7 +1809,7 @@ private slots:
         Rig rig;
         // the tray's menu is native, and the platform tests run on has none
         rig.settings.setTrayIcon(false);
-        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml__LEGACY_RESONANCE_IGNORE__qml/Main.qml")));
+        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml/Resonance/qml/Main.qml")));
         std::unique_ptr<QObject> window(component.create());
         QVERIFY2(window, qPrintable(component.errorString()));
         Rig::settle();
@@ -2547,7 +2547,7 @@ private slots:
         Rig rig;
         rig.settings.setTrayIcon(false);
         rig.settings.setPerformanceMode(true);
-        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml__LEGACY_RESONANCE_IGNORE__qml/Main.qml")));
+        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml/Resonance/qml/Main.qml")));
         std::unique_ptr<QObject> object(component.create());
         QVERIFY2(object, qPrintable(component.errorString()));
         auto *window = qobject_cast<QQuickWindow *>(object.get());

@@ -114,7 +114,7 @@ private slots:
         rig.settings.setTrayIcon(trayEnabled);
         rig.settings.setNativeTitleBar(nativeTitleBar);
         if (playing) rig.playSomething();
-        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml__LEGACY_RESONANCE_IGNORE__qml/Main.qml")));
+        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml/Resonance/qml/Main.qml")));
         std::unique_ptr<QObject> object(component.create());
         QVERIFY2(object, qPrintable(component.errorString()));
         auto *window = qobject_cast<QQuickWindow *>(object.get());
@@ -151,7 +151,7 @@ private slots:
         QFETCH(int, panelWidth);
         ViewRig rig;
         rig.settings.setPerformanceMode(true);
-        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml__LEGACY_RESONANCE_IGNORE__qml/Main.qml")));
+        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml/Resonance/qml/Main.qml")));
         std::unique_ptr<QObject> object(component.create());
         QVERIFY2(object, qPrintable(component.errorString()));
         auto *window = qobject_cast<QQuickWindow *>(object.get());
@@ -186,7 +186,7 @@ private slots:
         QVERIFY(!rig.settings.nativeTitleBar());
         rig.settings.setShowWindowControls(false);
         rig.settings.setPerformanceMode(true);
-        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml__LEGACY_RESONANCE_IGNORE__qml/Main.qml")));
+        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml/Resonance/qml/Main.qml")));
         std::unique_ptr<QObject> object(component.create());
         QVERIFY2(object, qPrintable(component.errorString()));
         auto *window = qobject_cast<QQuickWindow *>(object.get());
@@ -272,7 +272,7 @@ private slots:
         rig.session.restoreSavedSessions();
         QTRY_VERIFY(!rig.session.isEvaluatingStoredLogin());
         WindowsIntegration integration(&rig.player, &rig.theme);
-        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml__LEGACY_RESONANCE_IGNORE__qml/Main.qml")));
+        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml/Resonance/qml/Main.qml")));
         const QRect available = screen->availableGeometry();
         const QSize size = QSize(1000, 650).boundedTo(available.size() - QSize(100, 100));
         std::unique_ptr<QObject> object(component.createWithInitialProperties({
@@ -413,7 +413,7 @@ private slots:
         rig.session.restoreSavedSessions();
         QTRY_VERIFY(!rig.session.isEvaluatingStoredLogin());
         WindowsIntegration integration(&rig.player, &rig.theme);
-        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml__LEGACY_RESONANCE_IGNORE__qml/Main.qml")));
+        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml/Resonance/qml/Main.qml")));
         const QRect available = screen->availableGeometry();
         const QSize size = QSize(1100, 700).boundedTo(available.size() - QSize(100, 100));
         const QVariantMap initial {
@@ -537,7 +537,7 @@ private slots:
     {
         ViewRig rig;
         rig.settings.setTrayIcon(false);
-        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml__LEGACY_RESONANCE_IGNORE__qml/Main.qml")));
+        QQmlComponent component(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml/Resonance/qml/Main.qml")));
         std::unique_ptr<QObject> object(component.create());
         QVERIFY2(object, qPrintable(component.errorString()));
         auto *window = qobject_cast<QQuickWindow *>(object.get());

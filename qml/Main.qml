@@ -805,7 +805,7 @@ ApplicationWindow {
         sourceComponent: Platform.SystemTrayIcon {
             objectName: "resonanceTrayIcon"
             visible: true
-            icon.source: "qrc:/qt/qml__LEGACY_RESONANCE_IGNORE__resources/resonance-icon.png"
+            icon.source: "qrc:/qt/qml/Resonance/resources/resonance-icon.png"
             tooltip: Player.hasSong ? Player.currentSong.name + " — " + Player.currentSong.artists : "Resonance"
             onActivated: (reason) => {
                 if (reason === Platform.SystemTrayIcon.Trigger || reason === Platform.SystemTrayIcon.DoubleClick) {

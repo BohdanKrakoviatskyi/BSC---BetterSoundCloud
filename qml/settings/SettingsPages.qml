@@ -1091,7 +1091,7 @@ Item {
                             anchors.centerIn: parent
                             width: 46
                             height: 46
-                            source: "qrc:/qt/qml__LEGACY_RESONANCE_IGNORE__resources/resonance-icon.png"
+                            source: "qrc:/qt/qml/Resonance/resources/resonance-icon.png"
                             sourceSize: Qt.size(96, 96)
                             smooth: true
                             mipmap: true
