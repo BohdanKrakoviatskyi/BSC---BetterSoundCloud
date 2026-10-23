@@ -98,14 +98,83 @@ func TestTrackLyricsFallsBackToPlainLRCLibText(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RPCTrackLyrics: %v", err)
 	}
-	// Plain text has no timestamps, so they are synthesised and the result is reported as
-	// synced; the sidebar follows playback off these. Duration 146.0 puts the intro gap at 14600ms
-	// and the step at 65700ms, giving 14600 and 80300.
-	if !result.IsSynced || len(result.Lines) != 2 || result.Lines[0].Text != "first" || result.Lines[1].Text != "second" {
+	// Plain text has no timestamps and none are invented for it: the response reports itself as
+	// unsynced so the panel shows the words without pretending to follow playback. An evenly
+	// spaced grid drifts one or two lines from the real vocals through every verse.
+	if result.IsSynced || len(result.Lines) != 2 || result.Lines[0].Text != "first" || result.Lines[1].Text != "second" {
 		t.Fatalf("plain lyric fallback failed: %#v", result)
 	}
-	if result.Lines[0].StartMs != 14600 || result.Lines[1].StartMs != 80300 {
-		t.Fatalf("synthetic timings are wrong: got %d and %d, want 14600 and 80300", result.Lines[0].StartMs, result.Lines[1].StartMs)
+	if result.Lines[0].StartMs != 0 || result.Lines[1].StartMs != 0 {
+		t.Fatalf("unsynced lines must carry no timings: got %d and %d", result.Lines[0].StartMs, result.Lines[1].StartMs)
+	}
+}
+
+// A slowed reupload keeps the words and their order but moves every line in time, so the matched
+// record's timestamps must be stretched by the ratio of the durations.
+func TestTrackLyricsStretchesSyncedLinesOntoSlowedCopy(t *testing.T) {
+	svc := newTestService(t, "")
+	svc.httpClient = &http.Client{Transport: testRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Host == "api.deezer.com" {
+			return lyricsJSONResponse(request, http.StatusOK, `{"data":[]}`), nil
+		}
+		if request.URL.Host == "lrclib.net" && request.URL.Path == "/api/search" {
+			query := request.URL.Query()
+			if query.Get("track_name") == "Same Song" {
+				return lyricsJSONResponse(request, http.StatusOK, `[{"trackName":"Same Song","artistName":"Same Artist","duration":100.0,"syncedLyrics":"[00:10.00]first\n[00:50.00]second"}]`), nil
+			}
+			return lyricsJSONResponse(request, http.StatusOK, `[]`), nil
+		}
+		t.Errorf("unexpected request: %s", request.URL)
+		return lyricsJSONResponse(request, http.StatusNotFound, `{}`), nil
+	})}
+
+	// 100s record against a 120s playing copy: every timestamp is scaled by 1.2.
+	result, err := svc.RPCTrackLyrics(trackLyricsParams{
+		TrackID:    43,
+		Title:      "Same Song (slowed)",
+		Artist:     "Same Artist",
+		DurationMs: 120_000,
+	})
+	if err != nil {
+		t.Fatalf("RPCTrackLyrics: %v", err)
+	}
+	if !result.IsSynced || len(result.Lines) != 2 {
+		t.Fatalf("expected 2 synchronized lines, got %#v", result)
+	}
+	if result.Lines[0].StartMs != 12_000 || result.Lines[1].StartMs != 60_000 {
+		t.Fatalf("timings were not stretched onto the playing copy: %d and %d", result.Lines[0].StartMs, result.Lines[1].StartMs)
+	}
+}
+
+// A chorus written as several timestamps on one line leaves the list out of order, and an
+// [offset:±ms] tag shifts every timestamp of the record. The client binary-searches the lines,
+// so both must be resolved server-side.
+func TestTrackLyricsSortsLinesAndAppliesOffsetTag(t *testing.T) {
+	svc := newTestService(t, "")
+	svc.httpClient = &http.Client{Transport: testRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Host == "api.deezer.com" {
+			return lyricsJSONResponse(request, http.StatusNotFound, `{}`), nil
+		}
+		if request.URL.Host == "lrclib.net" && request.URL.Path == "/api/search" {
+			return lyricsJSONResponse(request, http.StatusOK, `[{"trackName":"Offset Song","artistName":"Offset Artist","duration":100.0,"syncedLyrics":"[offset:-2000]\n[00:50.00]later\n[00:10.00]earlier"}]`), nil
+		}
+		t.Errorf("unexpected request: %s", request.URL)
+		return lyricsJSONResponse(request, http.StatusNotFound, `{}`), nil
+	})}
+
+	result, err := svc.RPCTrackLyrics(trackLyricsParams{TrackID: 44, Title: "Offset Song", Artist: "Offset Artist"})
+	if err != nil {
+		t.Fatalf("RPCTrackLyrics: %v", err)
+	}
+	if !result.IsSynced || len(result.Lines) != 2 {
+		t.Fatalf("expected 2 synchronized lines, got %#v", result)
+	}
+	// -2000ms offset: 10000-2000 and 50000-2000, ordered by time.
+	if result.Lines[0].Text != "earlier" || result.Lines[0].StartMs != 8_000 {
+		t.Fatalf("first line wrong: %#v", result.Lines[0])
+	}
+	if result.Lines[1].Text != "later" || result.Lines[1].StartMs != 48_000 {
+		t.Fatalf("second line wrong: %#v", result.Lines[1])
 	}
 }
 

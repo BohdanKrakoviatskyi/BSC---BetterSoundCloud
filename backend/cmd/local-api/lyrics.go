@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -241,7 +242,7 @@ func scoreDeezerCandidate(params trackLyricsParams, candidate deezerTrack, title
 
 func (s *service) findLyricsForQuery(params trackLyricsParams, query lyricsQuery, logs *[]string) (trackLyrics, bool) {
 	trackID := params.TrackID
-	lyrics, exactOK, exactErr := s.fetchLRCLibExact(trackID, query)
+	lyrics, exactOK, exactErr := s.fetchLRCLibExact(trackID, query, params.DurationMs)
 	if exactOK {
 		*logs = append(*logs, "LRCLIB: точный поиск нашёл текст")
 		return lyrics, true
@@ -281,7 +282,7 @@ func (s *service) findLyricsForQuery(params trackLyricsParams, query lyricsQuery
 		return trackLyrics{}, false
 	}
 	*logs = append(*logs, fmt.Sprintf("LRCLIB: совпадение — %s — %s", best.record.ArtistName, best.record.TrackName))
-	return lyricsFromLRCLibRecord(trackID, best.record)
+	return lyricsFromLRCLibRecord(trackID, best.record, params.DurationMs)
 }
 
 func (s *service) findLyricsByVariants(params trackLyricsParams, logs *[]string) (trackLyrics, bool) {
@@ -353,7 +354,7 @@ func (s *service) findLyricsByVariants(params trackLyricsParams, logs *[]string)
 		return trackLyrics{}, false
 	}
 	*logs = append(*logs, fmt.Sprintf("LRCLIB выбрал: %s — %s", best.record.ArtistName, best.record.TrackName))
-	return lyricsFromLRCLibRecord(params.TrackID, best.record)
+	return lyricsFromLRCLibRecord(params.TrackID, best.record, params.DurationMs)
 }
 
 type scoredLRCLibRecord struct {
@@ -425,7 +426,7 @@ func (s *service) searchLRCLib(query lyricsQuery) ([]lrclibRecord, error) {
 	return records, nil
 }
 
-func (s *service) fetchLRCLibExact(trackID int64, query lyricsQuery) (trackLyrics, bool, error) {
+func (s *service) fetchLRCLibExact(trackID int64, query lyricsQuery, playingDurationMs int64) (trackLyrics, bool, error) {
 	values := url.Values{}
 	values.Set("track_name", query.Title)
 	values.Set("artist_name", query.Artist)
@@ -443,7 +444,7 @@ func (s *service) fetchLRCLibExact(trackID int64, query lyricsQuery) (trackLyric
 	if _, ok := scoreLRCLibRecord(query, record, false); !ok {
 		return trackLyrics{}, false, nil
 	}
-	lyrics, ok := lyricsFromLRCLibRecord(trackID, record)
+	lyrics, ok := lyricsFromLRCLibRecord(trackID, record, playingDurationMs)
 	return lyrics, ok, nil
 }
 
@@ -481,31 +482,45 @@ func (s *service) getLyricsJSON(endpoint string, target any) error {
 	return lastErr
 }
 
-func lyricsFromLRCLibRecord(trackID int64, record lrclibRecord) (trackLyrics, bool) {
+func lyricsFromLRCLibRecord(trackID int64, record lrclibRecord, playingDurationMs int64) (trackLyrics, bool) {
 	lines := parseLRC(record.SyncedLyrics)
 	if len(lines) > 0 {
+		lines = scaleLyricsToPlayingCopy(lines, record.Duration, playingDurationMs)
 		return trackLyrics{TrackID: trackID, Lines: lines, SourceURL: "https://lrclib.net", IsSynced: true}, true
 	}
 	lines = parsePlainLyrics(record.PlainLyrics)
 	if len(lines) == 0 {
 		return trackLyrics{}, false
 	}
-	// Plain text arrives without timestamps, so they are spread evenly across the length of the
-	// matched record and the response reports itself as synced, which is what lets the sidebar
-	// follow playback.
-	//
-	// A record with no duration is left unsynced on purpose. Spreading across zero would keep every
-	// line at StartMs 0 while claiming to be synced, and the sidebar would then stay on the first
-	// line for the whole track.
-	if durationMs := int64(record.Duration * 1000); durationMs > 0 {
-		return trackLyrics{
-			TrackID:   trackID,
-			Lines:     syntheticTimings(lines, durationMs),
-			SourceURL: "https://lrclib.net",
-			IsSynced:  true,
-		}, true
-	}
+	// Plain text arrives without timestamps, and there is no honest way to invent them. An evenly
+	// spaced grid (the old syntheticTimings) drifts one or two lines from the real vocals through
+	// every verse — the sidebar would highlight a line the singer has not reached yet — so the
+	// text is handed over as unsynced: the panel shows it, but does not claim to follow playback.
 	return trackLyrics{TrackID: trackID, Lines: lines, SourceURL: "https://lrclib.net"}, true
+}
+
+// scaleLyricsToPlayingCopy adjusts synced lines to the copy that is actually playing. A slowed or
+// sped-up reupload keeps the words and their order but moves every line in time, and the matched
+// record usually belongs to the original release. The timestamps are stretched by the ratio of the
+// durations, so the highlight stays on the sung line.
+//
+// Records close to the playing copy are left untouched: a difference of a few seconds is an edit
+// of the intro or outro, and scaling would bend correct timestamps for nothing. The bounds reject
+// a record of a different song instead of smearing its lines over the wrong track.
+func scaleLyricsToPlayingCopy(lines []lyricsLine, recordDurationSec float64, playingDurationMs int64) []lyricsLine {
+	if recordDurationSec <= 0 || playingDurationMs <= 0 {
+		return lines
+	}
+	ratio := float64(playingDurationMs) / (recordDurationSec * 1000)
+	if math.Abs(ratio-1) < 0.04 || ratio < 0.7 || ratio > 1.6 {
+		return lines
+	}
+	scaled := make([]lyricsLine, len(lines))
+	for i, line := range lines {
+		scaled[i] = line
+		scaled[i].StartMs = int64(float64(line.StartMs) * ratio)
+	}
+	return scaled
 }
 
 func lyricsArtistHints(params trackLyricsParams, title string) []string {
@@ -662,29 +677,9 @@ func parsePlainLyrics(content string) []lyricsLine {
 	return lines
 }
 
-// syntheticTimings distributes plain lyrics evenly across the track duration.
-// A 10% intro gap is skipped so the first line does not appear at second zero.
-// The result has isSynced semantics so the sidebar can follow playback.
-func syntheticTimings(lines []lyricsLine, durationMs int64) []lyricsLine {
-	if len(lines) == 0 || durationMs <= 0 {
-		return lines
-	}
-	introMs := durationMs / 10
-	usableMs := durationMs - introMs
-	step := usableMs / int64(len(lines))
-	result := make([]lyricsLine, len(lines))
-	for i, line := range lines {
-		result[i] = lyricsLine{
-			ID:      line.ID,
-			Text:    line.Text,
-			StartMs: introMs + int64(i)*step,
-		}
-	}
-	return result
-}
-
 func parseLRC(content string) []lyricsLine {
 	lines := make([]lyricsLine, 0)
+	var offsetMs int64
 	for _, row := range strings.Split(strings.ReplaceAll(content, "\r", ""), "\n") {
 		row = strings.TrimSpace(row)
 		var timestamps []int64
@@ -693,14 +688,23 @@ func parseLRC(content string) []lyricsLine {
 			if end < 0 {
 				break
 			}
-			timestamp := row[1:end]
-			parts := strings.Split(timestamp, ":")
+			tag := row[1:end]
+			parts := strings.Split(tag, ":")
 			if len(parts) != 2 {
 				break
 			}
 			minutes, errMinutes := strconv.ParseInt(parts[0], 10, 64)
 			seconds, errSeconds := strconv.ParseFloat(parts[1], 64)
 			if errMinutes != nil || errSeconds != nil || seconds < 0 || seconds >= 60 {
+				// [offset:±ms] shifts every timestamp of the record; the tag is consumed so it is
+				// not mistaken for the text of the line.
+				if strings.EqualFold(parts[0], "offset") {
+					if value, errOffset := strconv.ParseInt(parts[1], 10, 64); errOffset == nil {
+						offsetMs = value
+						row = row[end+1:]
+						continue
+					}
+				}
 				break
 			}
 			timestamps = append(timestamps, minutes*60_000+int64(seconds*1000+0.5))
@@ -711,9 +715,16 @@ func parseLRC(content string) []lyricsLine {
 			continue
 		}
 		for _, startMs := range timestamps {
-			lines = append(lines, lyricsLine{ID: fmt.Sprintf("lrclib-%d", len(lines)), Text: text, StartMs: startMs})
+			adjusted := startMs + offsetMs
+			if adjusted < 0 {
+				adjusted = 0
+			}
+			lines = append(lines, lyricsLine{ID: fmt.Sprintf("lrclib-%d", len(lines)), Text: text, StartMs: adjusted})
 		}
 	}
+	// A chorus written as "[00:12][01:30] refrain" near the top of the file leaves the list out of
+	// order; the client binary-searches it, so the lines are sorted here.
+	sort.SliceStable(lines, func(i, j int) bool { return lines[i].StartMs < lines[j].StartMs })
 	return lines
 }
 
