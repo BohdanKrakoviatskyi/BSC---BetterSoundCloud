@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(Resonance
-    VERSION 0.2.6
+    VERSION 0.3.0
     DESCRIPTION "A native Spotify client"
     LANGUAGES C CXX)
 

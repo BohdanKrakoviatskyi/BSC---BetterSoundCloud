@@ -8,7 +8,7 @@
 ; tools/build-windows.ps1.
 
 #ifndef MyAppVersion
-  #define MyAppVersion "0.2.8"
+  #define MyAppVersion "0.3.0"
 #endif
 
 #ifndef SourceDir
