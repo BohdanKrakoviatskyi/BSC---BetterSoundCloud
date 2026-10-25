@@ -1,5 +1,6 @@
 #include "playback/PlaybackController.h"
 
+#include "LyricsManager.h"
 #include "app/ErrorCenter.h"
 #include "app/Settings.h"
 #include "core/PlaybackCore.h"
@@ -31,6 +32,12 @@ const QString kCatchphrase = QStringLiteral("i mean i guess bro");
 const QString kVolumeKey = QStringLiteral("playerVolume");
 const QString kVolumeBeforeMuteKey = QStringLiteral("playerVolumeBeforeMute");
 
+QString lyricsOffsetKey(const Song &song)
+{
+    return QStringLiteral("lyricsOffsets/")
+        + QString::fromLatin1(QCryptographicHash::hash(song.uri.toUtf8(), QCryptographicHash::Sha256).toHex());
+}
+
 /// a restart is offered after this much of a song has played
 constexpr quint32 kRestartThresholdMs = 3'000;
 
@@ -45,10 +52,47 @@ PlaybackController::PlaybackController(PlaybackCore *core, SpotifySession *sessi
     , m_errors(errors)
     , m_upNext(new SongListModel(this))
     , m_lyricsModel(new LyricsModel(this))
+    , m_onlineLyrics(new lyrics::LyricsManager(this))
 {
     if (!s_instance) {
         s_instance = this;
     }
+
+    connect(m_onlineLyrics, &lyrics::LyricsManager::lyricsReady, this,
+            [this](const QList<lyrics::LyricLine> &lines, bool synced) {
+        if (!m_currentSong || !m_loadingLyrics
+            || m_onlineLyrics->state() == lyrics::LyricsManager::State::Idle)
+            return;
+        m_loadingLyrics = false;
+        m_lyrics.reset();
+        if (!lines.isEmpty()) {
+            Lyrics result;
+            result.provider = m_onlineLyrics->source() == lyrics::LyricsManager::Genius
+                || (m_onlineLyrics->source() == lyrics::LyricsManager::Auto && !synced)
+                ? QStringLiteral("Genius") : QStringLiteral("LRCLIB");
+            result.synchronized = synced;
+            for (const auto &line : lines) {
+                result.lines.append({quint32(qMax<qint64>(0, line.timeMs)), 0, line.text});
+            }
+            for (qsizetype i = 0; synced && i < result.lines.size(); ++i) {
+                result.lines[i].endTimeMs = i + 1 < result.lines.size()
+                    ? result.lines.at(i + 1).startTimeMs : result.lines.at(i).startTimeMs + 5000;
+            }
+            m_lyrics = std::move(result);
+            m_lyricsModel->setLines(m_lyrics->lines);
+            m_lyricsMessage.clear();
+        } else if (m_lyricsSource == 0 && m_plainFallback) {
+            m_lyrics = std::move(m_plainFallback);
+            m_lyricsModel->setLines(m_lyrics->lines);
+            m_lyricsMessage.clear();
+        } else {
+            m_lyricsModel->setLines({});
+            m_lyricsMessage = m_onlineLyrics->statusMessage();
+        }
+        m_plainFallback.reset();
+        emit lyricsChanged();
+        updateActiveLyricLine();
+    });
 
     m_pollTimer.setInterval(250);
     connect(&m_pollTimer, &QTimer::timeout, this, &PlaybackController::pollPlayback);
@@ -125,6 +169,10 @@ void PlaybackController::setCurrentSong(const std::optional<Song> &song, quint32
     m_crossfadeMs = crossfadeMs;
     m_crossfadeDeadline.setRemainingTime(qint64(crossfadeMs));
     if (changed) {
+        m_lyricsOffsetMs = song && !song->uri.isEmpty()
+            ? qBound(-30'000, m_settings->value(lyricsOffsetKey(*song), 0).toInt(), 30'000)
+            : 0;
+        emit lyricsOffsetChanged();
         emit currentSongChanged();
     }
 }
@@ -1151,6 +1199,8 @@ void PlaybackController::handleEndOfTrack()
 
 void PlaybackController::clearLyrics()
 {
+    m_onlineLyrics->clear();
+    m_plainFallback.reset();
     m_lyrics.reset();
     m_lyricsModel->setLines({});
     m_lyricsMessage.clear();
@@ -1159,16 +1209,30 @@ void PlaybackController::clearLyrics()
     updateActiveLyricLine();
 }
 
+void PlaybackController::loadOnlineLyrics(const Song &song)
+{
+    m_onlineLyrics->load(song.name, song.artists,
+                         m_durationMs > 0 ? m_durationMs : song.durationMs,
+                         static_cast<lyrics::LyricsManager::LyricsSource>(m_lyricsSource));
+}
+
 void PlaybackController::loadLyrics(const Song &song)
 {
+    m_onlineLyrics->clear();
     const CancelToken token = m_lyricsRequest.renew();
+    m_plainFallback.reset();
     m_lyrics.reset();
     m_lyricsModel->setLines({});
     m_lyricsMessage.clear();
     m_loadingLyrics = true;
     emit lyricsChanged();
     updateActiveLyricLine();
-    detach(runLoadLyrics(song, token));
+    if (m_lyricsSource != 0 && !song.isLocalFile()) {
+        m_lyricsRequest.finish(token);
+        loadOnlineLyrics(song);
+    } else {
+        detach(runLoadLyrics(song, token));
+    }
 }
 
 QCoro::Task<> PlaybackController::runLoadLyrics(Song song, CancelToken token)
@@ -1207,6 +1271,13 @@ QCoro::Task<> PlaybackController::runLoadLyrics(Song song, CancelToken token)
     if (isCancelled(token) || !isCurrent(song)) {
         co_return;
     }
+    m_lyricsRequest.finish(token);
+    if (!song.isLocalFile() && (!lyrics || (song.isSoundCloud() && !lyrics->synchronized))) {
+        if (lyrics && !lyrics->synchronized)
+            m_plainFallback = std::move(lyrics);
+        loadOnlineLyrics(song);
+        co_return;
+    }
     m_loadingLyrics = false;
     if (lyrics) {
         m_lyrics = std::move(lyrics);
@@ -1214,18 +1285,60 @@ QCoro::Task<> PlaybackController::runLoadLyrics(Song song, CancelToken token)
     } else {
         m_lyricsMessage = kCatchphrase;
     }
-    m_lyricsRequest.finish(token);
     emit lyricsChanged();
     updateActiveLyricLine();
 }
 
 void PlaybackController::updateActiveLyricLine()
 {
-    const int index = m_lyrics ? m_lyrics->lineIndex(m_livePositionMs) : -1;
+    const qint64 adjusted = qMax<qint64>(0, qint64(m_livePositionMs) + m_lyricsOffsetMs);
+    const int index = m_lyrics ? m_lyrics->lineIndex(quint32(qMin<qint64>(adjusted, std::numeric_limits<quint32>::max()))) : -1;
     if (index != m_activeLyricIndex) {
         m_activeLyricIndex = index;
         emit activeLyricIndexChanged();
     }
+}
+
+void PlaybackController::setLyricsSource(int source)
+{
+    if (source < 0 || source > 2 || m_lyricsSource == source)
+        return;
+    m_lyricsSource = source;
+    emit lyricsSourceChanged();
+    if (m_currentSong)
+        loadLyrics(*m_currentSong);
+}
+
+bool PlaybackController::lyricsOffsetSaved() const
+{
+    if (!m_currentSong || m_currentSong->uri.isEmpty())
+        return false;
+    const QString key = lyricsOffsetKey(*m_currentSong);
+    return m_settings->contains(key) && m_settings->value(key).toInt() == m_lyricsOffsetMs;
+}
+
+void PlaybackController::saveLyricsOffset()
+{
+    if (!m_currentSong || m_currentSong->uri.isEmpty() || !lyricsSynchronized())
+        return;
+    m_settings->setValue(lyricsOffsetKey(*m_currentSong), m_lyricsOffsetMs);
+    m_settings->sync();
+    emit lyricsOffsetChanged();
+}
+
+void PlaybackController::adjustLyricsOffset(int deltaMs)
+{
+    setLyricsOffsetMs(m_lyricsOffsetMs + deltaMs);
+}
+
+void PlaybackController::setLyricsOffsetMs(int offsetMs)
+{
+    offsetMs = qBound(-30'000, offsetMs, 30'000);
+    if (m_lyricsOffsetMs == offsetMs)
+        return;
+    m_lyricsOffsetMs = offsetMs;
+    emit lyricsOffsetChanged();
+    updateActiveLyricLine();
 }
 
 void PlaybackController::seekToLyricLine(int index)
@@ -1234,7 +1347,7 @@ void PlaybackController::seekToLyricLine(int index)
     if (!m_lyrics || !m_lyrics->synchronized || index < 0 || index >= m_lyrics->lines.size()) {
         return;
     }
-    seek(int(m_lyrics->lines.at(index).startTimeMs));
+    seek(int(qMax<qint64>(0, qint64(m_lyrics->lines.at(index).startTimeMs) - m_lyricsOffsetMs)));
 }
 
 void PlaybackController::setShowingLyrics(bool showing)

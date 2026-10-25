@@ -20,6 +20,8 @@ class QJSEngine;
 
 namespace resonance {
 
+namespace lyrics { class LyricsManager; }
+
 class ErrorCenter;
 class PlaybackCore;
 class Settings;
@@ -61,6 +63,9 @@ class PlaybackController : public QObject {
     Q_PROPERTY(bool loadingLyrics READ isLoadingLyrics NOTIFY lyricsChanged FINAL)
     Q_PROPERTY(QString lyricsMessage READ lyricsMessage NOTIFY lyricsChanged FINAL)
     Q_PROPERTY(int activeLyricIndex READ activeLyricIndex NOTIFY activeLyricIndexChanged FINAL)
+    Q_PROPERTY(int lyricsSource READ lyricsSource NOTIFY lyricsSourceChanged FINAL)
+    Q_PROPERTY(int lyricsOffsetMs READ lyricsOffsetMs NOTIFY lyricsOffsetChanged FINAL)
+    Q_PROPERTY(bool lyricsOffsetSaved READ lyricsOffsetSaved NOTIFY lyricsOffsetChanged FINAL)
 
     Q_PROPERTY(bool showingLyrics READ isShowingLyrics WRITE setShowingLyrics NOTIFY panelsChanged FINAL)
     Q_PROPERTY(bool showingQueue READ isShowingQueue WRITE setShowingQueue NOTIFY panelsChanged FINAL)
@@ -120,6 +125,9 @@ public:
     bool isLoadingLyrics() const { return m_loadingLyrics; }
     QString lyricsMessage() const { return m_lyricsMessage; }
     int activeLyricIndex() const { return m_activeLyricIndex; }
+    int lyricsSource() const { return m_lyricsSource; }
+    int lyricsOffsetMs() const { return m_lyricsOffsetMs; }
+    bool lyricsOffsetSaved() const;
 
     bool isShowingLyrics() const { return m_showingLyrics; }
     bool isShowingQueue() const { return m_showingQueue; }
@@ -178,6 +186,10 @@ public:
     Q_INVOKABLE void toggleLyricsPanel();
     Q_INVOKABLE void toggleQueuePanel();
     Q_INVOKABLE void seekToLyricLine(int index);
+    Q_INVOKABLE void setLyricsSource(int source);
+    Q_INVOKABLE void adjustLyricsOffset(int deltaMs);
+    Q_INVOKABLE void setLyricsOffsetMs(int offsetMs);
+    Q_INVOKABLE void saveLyricsOffset();
     Q_INVOKABLE void startSleepTimer(int seconds, const QString &fade);
     Q_INVOKABLE void cancelSleepTimer();
 
@@ -202,6 +214,8 @@ signals:
     void queueChanged();
     void lyricsChanged();
     void activeLyricIndexChanged();
+    void lyricsSourceChanged();
+    void lyricsOffsetChanged();
     void panelsChanged();
     void sleepTimerChanged();
     void analysisActiveChanged();
@@ -228,6 +242,7 @@ private:
     void loadLyrics(const Song &song);
     void clearLyrics();
     void updateActiveLyricLine();
+    void loadOnlineLyrics(const Song &song);
     void sleepTimerTick();
     void updatePlaybackWorkers();
     void rebuildShuffledQueue(const std::optional<Song> &startingWith);
@@ -280,7 +295,11 @@ private:
     RepeatMode m_repeatMode = RepeatMode::Off;
 
     LyricsModel *m_lyricsModel;
+    lyrics::LyricsManager *m_onlineLyrics = nullptr;
+    int m_lyricsSource = 0;
+    int m_lyricsOffsetMs = 0;
     std::optional<Lyrics> m_lyrics;
+    std::optional<Lyrics> m_plainFallback;
     TaskSlot m_lyricsRequest;
     bool m_loadingLyrics = false;
     QString m_lyricsMessage;

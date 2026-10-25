@@ -5,10 +5,9 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     project(lyrics_widget LANGUAGES CXX)
 endif()
 
-# Standalone Qt Widgets lyric view for LRCLIB. The Resonance application is
-# built on Qt Quick, so this module is kept opt-in instead of being globbed
-# into the app's own sources: add_subdirectory() it from a widget application,
-# or copy the four files into an existing target.
+# Reusable Qt Widgets lyric view and async LRCLIB/Genius loader. Resonance
+# uses the loader in its Qt Quick playback controller; widget applications
+# can also link the view directly.
 #
 #   add_subdirectory(components/lyrics_widget)
 #   target_link_libraries(my_app PRIVATE lyrics_widget)

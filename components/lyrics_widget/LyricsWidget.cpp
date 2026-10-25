@@ -1,8 +1,8 @@
 #include "LyricsWidget.h"
 
-#include "LyricsManager.h"
-
 #include <QAbstractItemView>
+#include <QAction>
+#include <QActionGroup>
 #include <QBrush>
 #include <QColor>
 #include <QFont>
@@ -10,6 +10,7 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QListWidgetItem>
+#include <QMenu>
 #include <QPalette>
 #include <QVBoxLayout>
 
@@ -51,8 +52,21 @@ LyricsWidget::LyricsWidget(QWidget *parent)
     layout->addWidget(m_status);
     layout->addWidget(m_list, 1);
 
-    connect(m_manager, &LyricsManager::lyricsChanged, this, &LyricsWidget::rebuildLines);
-    connect(m_manager, &LyricsManager::activeLineChanged, this, &LyricsWidget::applyActiveLine);
+    m_list->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_list, &QWidget::customContextMenuRequested,
+            this, &LyricsWidget::showSourceMenu);
+
+    // When there are no lyrics the list is hidden and the status label is
+    // visible, so the source menu must be available there too.
+    m_status->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_status, &QWidget::customContextMenuRequested,
+            this, &LyricsWidget::showSourceMenu);
+
+    setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(this, &QWidget::customContextMenuRequested,
+            this, &LyricsWidget::showSourceMenu);
+
+    connect(m_manager, &LyricsManager::lyricsReady, this, &LyricsWidget::onLyricsReady);
     connect(m_manager, &LyricsManager::stateChanged, this, [this](LyricsManager::State) {
         switch (m_manager->state()) {
         case LyricsManager::State::Loading:
@@ -70,26 +84,75 @@ LyricsWidget::LyricsWidget(QWidget *parent)
 
 void LyricsWidget::load(const QString &trackName, const QString &artistName, qint64 durationMs)
 {
-    m_manager->load(trackName, artistName, durationMs);
-}
+    m_trackName = trackName;
+    m_artistName = artistName;
+    m_durationMs = durationMs;
+    m_hasTrack = true;
 
-void LyricsWidget::setPositionMs(qint64 positionMs)
-{
-    m_manager->setPositionMs(positionMs);
-}
-
-void LyricsWidget::setManualOffsetMs(qint64 offsetMs)
-{
-    m_manager->setManualOffsetMs(offsetMs);
-}
-
-void LyricsWidget::rebuildLines()
-{
+    // a new track starts from the top; the old lines must not flash
+    m_positionMs = 0;
+    m_currentIndex = -1;
+    m_isSynced = false;
+    m_lines.clear();
     m_list->clear();
-    m_activeRow = -1;
 
-    const QVector<LyricLine> &lines = m_manager->lines();
-    if (lines.isEmpty()) {
+    m_manager->load(m_trackName, m_artistName, m_durationMs, m_selectedSource);
+}
+
+void LyricsWidget::setSource(LyricsManager::LyricsSource source)
+{
+    if (m_selectedSource == source)
+        return;
+
+    m_selectedSource = source;
+
+    if (!m_hasTrack)
+        return;
+
+    // keep m_positionMs: the new provider should highlight the same moment,
+    // but the old provider's lines must not be treated as current anymore
+    m_currentIndex = -1;
+    m_isSynced = false;
+    m_lines.clear();
+    m_list->clear();
+    m_manager->load(m_trackName, m_artistName, m_durationMs, m_selectedSource);
+}
+
+void LyricsWidget::showSourceMenu(const QPoint &pos)
+{
+    auto *origin = qobject_cast<QWidget *>(sender());
+    if (!origin)
+        origin = this;
+
+    QMenu menu(this);
+    auto *group = new QActionGroup(&menu);
+    group->setExclusive(true);
+
+    const auto addAction = [&](const QString &text, LyricsManager::LyricsSource source) {
+        QAction *action = menu.addAction(text);
+        action->setCheckable(true);
+        action->setChecked(m_selectedSource == source);
+        group->addAction(action);
+        connect(action, &QAction::triggered, this, [this, source](bool) {
+            setSource(source);
+        });
+    };
+
+    addAction(tr("Source: Auto"), LyricsManager::Auto);
+    addAction(tr("Source: LRCLIB"), LyricsManager::LrcLib);
+    addAction(tr("Source: Genius"), LyricsManager::Genius);
+
+    menu.exec(origin->mapToGlobal(pos));
+}
+
+void LyricsWidget::onLyricsReady(const QList<LyricLine> &lyrics, bool isSynced)
+{
+    m_lines = lyrics;
+    m_isSynced = isSynced;
+    m_currentIndex = -1;
+
+    m_list->clear();
+    if (m_lines.isEmpty()) {
         m_list->hide();
         return;
     }
@@ -97,30 +160,80 @@ void LyricsWidget::rebuildLines()
     m_status->hide();
     m_list->show();
 
-    // plain lyrics are readable as they are; timed ones stay dimmed until a
-    // line becomes active
+    // timed lyrics stay dimmed until a line becomes active; plain text is
+    // readable as it is
     QColor dimColor = m_list->palette().color(QPalette::WindowText);
     dimColor.setAlphaF(0.55);
     const QBrush dimBrush(dimColor);
-    const bool synchronized = m_manager->isSynchronized();
 
     m_list->setUpdatesEnabled(false);
-    for (const LyricLine &line : lines) {
+    for (const LyricLine &line : m_lines) {
         auto *item = new QListWidgetItem(line.text, m_list);
-        if (synchronized)
+        if (m_isSynced)
             item->setForeground(dimBrush);
     }
     m_list->setUpdatesEnabled(true);
 
-    if (synchronized)
-        applyActiveLine(m_manager->activeLine());
+    if (m_isSynced) {
+        // the track may already be playing when the response arrives
+        onPositionChanged(m_positionMs);
+    } else {
+        // plain lyrics have no timeline and are never auto-scrolled
+        m_list->scrollToTop();
+    }
 }
 
-void LyricsWidget::applyActiveLine(int index)
+void LyricsWidget::onPositionChanged(qint64 positionMs)
 {
-    if (!m_manager->isSynchronized())
-        return; // plain lyrics have no timeline and must not scroll on their own
-    if (index == m_activeRow)
+    m_positionMs = positionMs;
+
+    // plain lyrics have no timeline: no highlight and no scrolling
+    if (!m_isSynced || m_lines.isEmpty())
+        return;
+
+    const qint64 effectiveMs = positionMs + m_manualOffsetMs;
+
+    // lyrics are sorted, so the current line is found from the end
+    int index = -1;
+    for (int i = int(m_lines.size()) - 1; i >= 0; --i) {
+        if (m_lines.at(i).timeMs <= effectiveMs) {
+            index = i;
+            break;
+        }
+    }
+
+    if (index == m_currentIndex)
+        return;
+
+    applyCurrentIndex(index);
+}
+
+void LyricsWidget::increaseOffset()
+{
+    setManualOffsetMs(m_manualOffsetMs + 500);
+}
+
+void LyricsWidget::decreaseOffset()
+{
+    setManualOffsetMs(m_manualOffsetMs - 500);
+}
+
+void LyricsWidget::setManualOffsetMs(qint64 offsetMs)
+{
+    if (m_manualOffsetMs == offsetMs)
+        return;
+
+    m_manualOffsetMs = offsetMs;
+    setToolTip(tr("Lyrics offset: %1 ms").arg(m_manualOffsetMs));
+
+    // recalibrate immediately instead of waiting for the next position tick
+    if (m_isSynced)
+        onPositionChanged(m_positionMs);
+}
+
+void LyricsWidget::applyCurrentIndex(int index)
+{
+    if (!m_isSynced)
         return;
     if (index < -1 || index >= m_list->count())
         return;
@@ -133,16 +246,21 @@ void LyricsWidget::applyActiveLine(int index)
     QFont active = base;
     active.setBold(true);
 
-    if (QListWidgetItem *previous = m_list->item(m_activeRow)) {
+    if (QListWidgetItem *previous = m_list->item(m_currentIndex)) {
         previous->setFont(base);
         previous->setForeground(dimColor);
     }
 
-    m_activeRow = index;
+    m_currentIndex = index;
     if (index < 0)
         return;
 
     QListWidgetItem *current = m_list->item(index);
+    if (!current) {
+        m_currentIndex = -1;
+        return;
+    }
+
     current->setFont(active);
     current->setForeground(textColor);
     m_list->scrollToItem(current, QAbstractItemView::PositionAtCenter);

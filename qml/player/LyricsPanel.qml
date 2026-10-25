@@ -13,6 +13,102 @@ Item {
     property bool suspended: false
     property MaterialScheme scheme: Appearance.colors
 
+    TapHandler {
+        acceptedButtons: Qt.RightButton
+        onTapped: (point) => {
+            sourceMenu.x = point.position.x
+            sourceMenu.y = point.position.y
+            sourceMenu.open()
+        }
+    }
+
+    StyledMenu {
+        id: sourceMenu
+        width: 320
+        StyledMenuItem { text: "Source: Auto"; checkmark: true; checked: Player.lyricsSource === 0; onTriggered: Player.setLyricsSource(0) }
+        StyledMenuItem { text: "Source: LRCLIB"; checkmark: true; checked: Player.lyricsSource === 1; onTriggered: Player.setLyricsSource(1) }
+        StyledMenuItem { text: "Source: Genius"; checkmark: true; checked: Player.lyricsSource === 2; onTriggered: Player.setLyricsSource(2) }
+
+        StyledMenuItem {
+            objectName: "lyricsTimingMenuItem"
+            visible: Player.lyricsSynchronized && !Player.loadingLyrics
+            height: visible ? implicitHeight : 0
+            implicitWidth: 280
+            implicitHeight: 62
+
+            contentItem: Item {
+                StyledText {
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    text: "Lyrics timing"
+                    font.pixelSize: Appearance.fontSize.smaller
+                    color: root.scheme.onSurfaceVariant
+                }
+                StyledText {
+                    anchors.top: parent.top
+                    anchors.right: parent.right
+                    text: Player.lyricsOffsetMs === 0 ? "0.00 s"
+                          : (Math.abs(Player.lyricsOffsetMs) / 1000).toFixed(2) + " s "
+                            + (Player.lyricsOffsetMs > 0 ? "earlier" : "later")
+                    font.pixelSize: Appearance.fontSize.smaller
+                    color: root.scheme.onSurface
+                }
+                StyledSlider {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: 4
+                    scheme: root.scheme
+                    trackThickness: 8
+                    activeColor: root.scheme.secondaryContainer
+                    inactiveColor: root.scheme.secondaryContainer
+                    handleColor: root.scheme.primary
+                    showStopIndicator: false
+                    from: -10
+                    to: 10
+                    stepSize: 0.25
+                    snapMode: Slider.SnapAlways
+                    value: Player.lyricsOffsetMs / 1000
+                    onMoved: Player.setLyricsOffsetMs(Math.round(value * 4) * 250)
+                }
+            }
+        }
+        StyledMenuItem {
+            visible: Player.lyricsSynchronized && !Player.loadingLyrics
+            height: visible ? implicitHeight : 0
+            text: "Reset timing to 0"
+            symbol: "restart_alt"
+            enabled: Player.lyricsOffsetMs !== 0
+            onTriggered: Player.setLyricsOffsetMs(0)
+        }
+        StyledMenuItem {
+            visible: Player.lyricsSynchronized && !Player.loadingLyrics
+            height: visible ? implicitHeight : 0
+            text: Player.lyricsOffsetSaved ? "Saved for this song" : "Save timing for this song"
+            checkmark: true
+            checked: Player.lyricsOffsetSaved
+            onTriggered: Player.saveLyricsOffset()
+        }
+    }
+
+    IconButton {
+        id: sourceBtn
+        anchors.top: parent.top
+        anchors.right: fullscreenBtn.left
+        anchors.margins: 10
+        z: 10
+        scheme: root.scheme
+        symbol: "more_vert"
+        size: 32
+        iconSize: 18
+        tooltip: "Lyrics source and timing"
+        onClicked: {
+            sourceMenu.x = sourceBtn.x
+            sourceMenu.y = sourceBtn.y + sourceBtn.height
+            sourceMenu.open()
+        }
+    }
+
     IconButton {
         id: fullscreenBtn
         anchors.top: parent.top
@@ -27,6 +123,7 @@ Item {
         visible: Player.hasLyrics && !Player.loadingLyrics
         onClicked: UiState.openFullscreenLyrics()
     }
+
 
     Column {
         anchors.centerIn: parent
@@ -139,7 +236,7 @@ Item {
                     return
                 }
 
-                const now = Player.livePositionMs
+                const now = Player.livePositionMs + Player.lyricsOffsetMs
                 const start = line.startTimeMs
                 const end = line.endTimeMs > line.startTimeMs ? line.endTimeMs : (start + Math.max(1200, line.words.length * 75))
                 const totalDuration = Math.max(400, end - start)
@@ -215,11 +312,14 @@ Item {
                         const start = line.startTimeMs
                         const end = line.endTimeMs > start ? line.endTimeMs : (start + Math.max(1200, line.words.length * 75))
                         const total = Math.max(400, end - start)
-                        const expectedProgress = Math.min(1.0, Math.max(0.0, (Player.livePositionMs - start) / total))
+                        const expectedProgress = Math.min(1.0, Math.max(0.0, (Player.livePositionMs + Player.lyricsOffsetMs - start) / total))
                         if (Math.abs(line.fillProgress - expectedProgress) > 0.18) {
                             line.startFillAnimation()
                         }
                     }
+                }
+                function onLyricsOffsetChanged() {
+                    if (line.active && Player.lyricsSynchronized) line.startFillAnimation()
                 }
                 function onPlayingChanged() {
                     if (line.active && Player.lyricsSynchronized) {

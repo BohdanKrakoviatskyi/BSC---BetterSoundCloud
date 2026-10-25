@@ -1,4 +1,5 @@
 #include "FakeCore.h"
+#include "LyricsManager.h"
 
 #include "app/ErrorCenter.h"
 #include "app/Settings.h"
@@ -7,7 +8,9 @@
 #include "spotify/CredentialStore.h"
 #include "spotify/SpotifySession.h"
 
+#include <QCryptographicHash>
 #include <QFile>
+#include <QJsonObject>
 #include <QNetworkAccessManager>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -379,13 +382,114 @@ private slots:
         lyrics.write("[00:01.00]one\n[00:05.00]two\n");
         lyrics.close();
         rig.player.play(song, {song});
-        rig.settle();
+        rig.finishLoading();
         QVERIFY(rig.player.hasLyrics());
         QCOMPARE(rig.player.activeLyricIndex(), -1);
-        rig.finishLoading();
         rig.core.duration = 200'000;
         rig.core.position = 5'500;
         QTRY_COMPARE_WITH_TIMEOUT(rig.player.activeLyricIndex(), 1, 2000);
+    }
+
+    void geniusResultMustMatchTheOriginalTitleAndArtist()
+    {
+        using resonance::lyrics::LyricsManager;
+        const QJsonObject translated{{"title", "Rights"},
+                                     {"primary_artist", QJsonObject{{"name", "ooes"}}}};
+        QVERIFY(!LyricsManager::matchesGeniusResult(QStringLiteral("права"),
+                                                    QStringLiteral("ooes"), translated));
+        const QJsonObject differentArtist{{"title", "права"},
+                                          {"primary_artist", QJsonObject{{"name", "another"}}}};
+        QVERIFY(!LyricsManager::matchesGeniusResult(QStringLiteral("права"),
+                                                    QStringLiteral("ooes"), differentArtist));
+        const QJsonObject correct{{"title", "Права"},
+                                  {"primary_artist", QJsonObject{{"name", "ooes"}}}};
+        QVERIFY(LyricsManager::matchesGeniusResult(QStringLiteral("права"),
+                                                  QStringLiteral("ooes"), correct));
+    }
+
+    void lyricsOffsetRecalculatesTheCurrentLineImmediately()
+    {
+        Rig rig;
+        Song song = makeSong(QStringLiteral("offset"));
+        song.uri = QUrl::fromLocalFile(rig.directory.filePath(QStringLiteral("offset.flac"))).toString();
+        QFile file(rig.directory.filePath(QStringLiteral("offset.lrc")));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("[00:01.00]one\n[00:05.00]two\n");
+        file.close();
+        rig.player.play(song, {song});
+        rig.settle();
+        rig.finishLoading();
+        rig.core.duration = 200'000;
+        rig.core.position = 4'500;
+        QTRY_COMPARE_WITH_TIMEOUT(rig.player.activeLyricIndex(), 0, 2000);
+        rig.player.adjustLyricsOffset(500);
+        QCOMPARE(rig.player.activeLyricIndex(), 1);
+        rig.player.adjustLyricsOffset(-500);
+        QCOMPARE(rig.player.activeLyricIndex(), 0);
+        rig.player.setLyricsOffsetMs(500);
+        QCOMPARE(rig.player.activeLyricIndex(), 1);
+        rig.player.setLyricsOffsetMs(0);
+        QCOMPARE(rig.player.activeLyricIndex(), 0);
+        rig.player.setLyricsOffsetMs(250);
+        QCOMPARE(rig.player.lyricsOffsetMs(), 250);
+        QCOMPARE(rig.player.activeLyricIndex(), 0);
+        rig.player.setLyricsOffsetMs(500);
+        QCOMPARE(rig.player.activeLyricIndex(), 1);
+    }
+
+    void savedLyricsTimingBelongsToTheSongAndSurvivesReload()
+    {
+        Rig rig;
+        auto first = makeSong(QStringLiteral("first"));
+        auto second = makeSong(QStringLiteral("second"));
+        first.uri = QUrl::fromLocalFile(rig.directory.filePath(QStringLiteral("first.flac"))).toString();
+        second.uri = QUrl::fromLocalFile(rig.directory.filePath(QStringLiteral("second.flac"))).toString();
+        for (const auto &name : {QStringLiteral("first"), QStringLiteral("second")}) {
+            QFile file(rig.directory.filePath(name + QStringLiteral(".lrc")));
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.write("[00:01.00]one\n[00:05.00]two\n");
+        }
+
+        rig.player.play(first, {first});
+        rig.finishLoading();
+        rig.player.setLyricsOffsetMs(750);
+        rig.player.saveLyricsOffset();
+        QVERIFY(rig.player.lyricsOffsetSaved());
+        rig.player.setLyricsOffsetMs(250);
+        QVERIFY(!rig.player.lyricsOffsetSaved());
+
+        rig.player.play(second, {second});
+        rig.finishLoading();
+        QCOMPARE(rig.player.lyricsOffsetMs(), 0);
+        rig.player.setLyricsOffsetMs(-500);
+        rig.player.play(first, {first});
+        rig.finishLoading();
+        QCOMPARE(rig.player.lyricsOffsetMs(), 750);
+        QVERIFY(rig.player.lyricsOffsetSaved());
+        rig.player.play(second, {second});
+        rig.finishLoading();
+        QCOMPARE(rig.player.lyricsOffsetMs(), 0);
+        rig.player.setLyricsOffsetMs(-500);
+        rig.player.saveLyricsOffset();
+        rig.player.play(first, {first});
+        rig.finishLoading();
+        QCOMPARE(rig.player.lyricsOffsetMs(), 750);
+        rig.player.setLyricsOffsetMs(0);
+        QCOMPARE(rig.player.lyricsOffsetMs(), 0);
+        QVERIFY(!rig.player.lyricsOffsetSaved());
+        rig.player.play(second, {second});
+        rig.finishLoading();
+        QCOMPARE(rig.player.lyricsOffsetMs(), -500);
+        rig.player.play(first, {first});
+        rig.finishLoading();
+        QCOMPARE(rig.player.lyricsOffsetMs(), 750);
+        QVERIFY(rig.player.lyricsOffsetSaved());
+
+        rig.settings.sync();
+        Settings reopened(rig.directory.filePath(QStringLiteral("resonance.conf")));
+        const QString key = QStringLiteral("lyricsOffsets/")
+            + QString::fromLatin1(QCryptographicHash::hash(first.uri.toUtf8(), QCryptographicHash::Sha256).toHex());
+        QCOMPARE(reopened.value(key).toInt(), 750);
     }
 
     void missingLyricsShowThePhrase()
@@ -393,7 +497,7 @@ private slots:
         Rig rig;
         const QList<Song> queue = makeQueue(1);
         rig.player.play(queue[0], queue);
-        rig.settle();
+        rig.finishLoading();
         QVERIFY(!rig.player.hasLyrics());
         QCOMPARE(rig.player.lyricsMessage(), QStringLiteral("i mean i guess bro"));
     }

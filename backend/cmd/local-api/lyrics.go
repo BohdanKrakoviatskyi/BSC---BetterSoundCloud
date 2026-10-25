@@ -504,15 +504,15 @@ func lyricsFromLRCLibRecord(trackID int64, record lrclibRecord, playingDurationM
 // record usually belongs to the original release. The timestamps are stretched by the ratio of the
 // durations, so the highlight stays on the sung line.
 //
-// Records close to the playing copy are left untouched: a difference of a few seconds is an edit
-// of the intro or outro, and scaling would bend correct timestamps for nothing. The bounds reject
-// a record of a different song instead of smearing its lines over the wrong track.
+// A difference of up to two seconds can be metadata rounding or an outro edit.
+// Larger differences, including a three-second drift on a short recording, are
+// adjusted. The bounds avoid stretching a clearly unrelated version.
 func scaleLyricsToPlayingCopy(lines []lyricsLine, recordDurationSec float64, playingDurationMs int64) []lyricsLine {
 	if recordDurationSec <= 0 || playingDurationMs <= 0 {
 		return lines
 	}
 	ratio := float64(playingDurationMs) / (recordDurationSec * 1000)
-	if math.Abs(ratio-1) < 0.04 || ratio < 0.7 || ratio > 1.6 {
+	if math.Abs(float64(playingDurationMs)-recordDurationSec*1000) <= 2000 || ratio < 0.7 || ratio > 1.6 {
 		return lines
 	}
 	scaled := make([]lyricsLine, len(lines))

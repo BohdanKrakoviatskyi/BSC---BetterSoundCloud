@@ -299,6 +299,9 @@ if(APPLE)
     set_source_files_properties(src/system/macos/NowPlaying.mm src/system/macos/MacWindow.mm
         PROPERTIES COMPILE_OPTIONS -fobjc-arc)
 endif()
+add_subdirectory(components/lyrics_widget)
+target_link_libraries(resonance_app PUBLIC lyrics_widget)
+
 target_link_libraries(resonance_app PUBLIC
     Qt6::Core Qt6::Gui Qt6::Network Qt6::Concurrent Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Multimedia
     Qt6::WebEngineCore Qt6::WebEngineQuick

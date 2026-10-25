@@ -108,6 +108,11 @@ public:
         co_await await(QStringLiteral("crossfadeTrack"), uri);
         sounding = true;
     }
+    QCoro::Task<> crossfadeFile(QString path, quint32) override
+    {
+        co_await await(QStringLiteral("crossfadeFile"), path);
+        sounding = true;
+    }
     QCoro::Task<> playFile(QString path) override
     {
         co_await await(QStringLiteral("playFile"), path);

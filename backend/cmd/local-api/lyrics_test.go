@@ -111,6 +111,14 @@ func TestTrackLyricsFallsBackToPlainLRCLibText(t *testing.T) {
 
 // A slowed reupload keeps the words and their order but moves every line in time, so the matched
 // record's timestamps must be stretched by the ratio of the durations.
+func TestSyncedLyricsAdjustThreeSecondDurationDifference(t *testing.T) {
+	lines := []lyricsLine{{Text: "first", StartMs: 96_000}, {Text: "second", StartMs: 180_000}}
+	adjusted := scaleLyricsToPlayingCopy(lines, 192, 195_000)
+	if adjusted[0].StartMs != 97_500 || adjusted[1].StartMs != 182_812 {
+		t.Fatalf("three-second mismatch should follow the playing copy: %+v", adjusted)
+	}
+}
+
 func TestTrackLyricsStretchesSyncedLinesOntoSlowedCopy(t *testing.T) {
 	svc := newTestService(t, "")
 	svc.httpClient = &http.Client{Transport: testRoundTripper(func(request *http.Request) (*http.Response, error) {
