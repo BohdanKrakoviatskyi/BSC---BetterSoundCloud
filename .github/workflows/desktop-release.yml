@@ -552,8 +552,6 @@ jobs:
           base="$GITHUB_SERVER_URL/$REPOSITORY/releases/download/$tag"
           notes="$RUNNER_TEMP/release-notes.md"
           cat > "$notes" <<EOF
-          # Resonance v$version
-
           A native desktop SoundCloud client for Linux, Windows, and macOS.
 
           ## Downloads
