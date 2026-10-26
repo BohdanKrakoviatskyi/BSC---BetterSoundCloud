@@ -408,10 +408,9 @@ if(APPLE)
         OUTPUT_VARIABLE RESONANCE_ACTOOL OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
     if(RESONANCE_ACTOOL AND RESONANCE_ICON_ASSET_CATALOG)
         # actool is only trusted with the .icon bundle once it has compiled it
-        # here, at configure time. the first release runs died at the last build
-        # step with 'Could not open "resonance.icon"' — a build-machine xcode
-        # that would not take the bundle — and probing is the difference between
-        # falling back to the png icon and failing the build.
+        # here, at configure time and produced both files. Some Xcode versions
+        # report success without creating the catalog, so the exit code alone
+        # is not enough to select this path.
         file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/icon-probe)
         execute_process(
             COMMAND ${RESONANCE_ACTOOL} --compile ${CMAKE_CURRENT_BINARY_DIR}/icon-probe
@@ -420,7 +419,9 @@ if(APPLE)
                 ${RESONANCE_ICON_SOURCE}/resonance.icon
             RESULT_VARIABLE RESONANCE_ACTOOL_RESULT
             OUTPUT_QUIET ERROR_QUIET)
-        if(NOT RESONANCE_ACTOOL_RESULT STREQUAL "0")
+        if(NOT RESONANCE_ACTOOL_RESULT STREQUAL "0"
+                OR NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/icon-probe/Assets.car"
+                OR NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/icon-probe/resonance.icns")
             message(STATUS "actool cannot compile resonance.icon; the png icon is used instead")
             set(RESONANCE_ACTOOL "")
         endif()
@@ -436,8 +437,9 @@ if(APPLE)
             COMMAND ${RESONANCE_ACTOOL} --compile ${RESONANCE_ICON_OUTPUT} --platform macosx
                 --minimum-deployment-target 13.0 --app-icon resonance
                 --output-partial-info-plist ${RESONANCE_ICON_OUTPUT}/icon.plist
-                ${RESONANCE_ICON_SOURCE}/resonance.icon > /dev/null
+                ${RESONANCE_ICON_SOURCE}/resonance.icon
             DEPENDS ${RESONANCE_ICON_PARTS}
+            VERBATIM
             COMMENT "Compiling the app icon")
         set(RESONANCE_ICON_FILES ${RESONANCE_ICON_OUTPUT}/Assets.car ${RESONANCE_ICON_OUTPUT}/resonance.icns)
     else()
