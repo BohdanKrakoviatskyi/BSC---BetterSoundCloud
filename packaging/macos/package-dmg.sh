@@ -30,11 +30,15 @@ OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
 # Resolve macdeployqt
 MACDEPLOYQT="$(which macdeployqt 2>/dev/null || true)"
 if [ -z "$MACDEPLOYQT" ]; then
-    BREW_QT_BIN="$(brew --prefix qt@6 2>/dev/null)/bin/macdeployqt"
-    if [ -x "$BREW_QT_BIN" ]; then
-        MACDEPLOYQT="$BREW_QT_BIN"
+    if [ -n "${QT_ROOT_DIR:-}" ] && [ -x "$QT_ROOT_DIR/bin/macdeployqt" ]; then
+        MACDEPLOYQT="$QT_ROOT_DIR/bin/macdeployqt"
     else
-        MACDEPLOYQT="/opt/homebrew/bin/macdeployqt"
+        BREW_QT_BIN="$(brew --prefix qt 2>/dev/null)/bin/macdeployqt"
+        if [ -x "$BREW_QT_BIN" ]; then
+            MACDEPLOYQT="$BREW_QT_BIN"
+        else
+            MACDEPLOYQT="/opt/homebrew/bin/macdeployqt"
+        fi
     fi
 fi
 

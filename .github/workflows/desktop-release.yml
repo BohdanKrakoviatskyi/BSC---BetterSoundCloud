@@ -1,0 +1,587 @@
+name: Build and publish desktop release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to build and publish (for example, v0.3.1)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate release tag
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - name: Resolve and validate tag
+        id: meta
+        shell: bash
+        env:
+          DISPATCH_TAG: ${{ inputs.tag }}
+          PUSH_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            tag="$DISPATCH_TAG"
+          else
+            tag="$PUSH_TAG"
+          fi
+
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Expected a stable version tag like v0.3.1; got '$tag'."
+            exit 1
+          fi
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "Building all desktop packages for $tag."
+
+  build:
+    name: Build ${{ matrix.platform }}
+    needs: validate
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Linux
+            runner: ubuntu-24.04
+            qt_host: linux
+            qt_arch: linux_gcc_64
+          - platform: Windows
+            runner: windows-2022
+            qt_host: windows
+            qt_arch: win64_msvc2022_64
+          - platform: macOS
+            runner: macos-15
+            qt_host: mac
+            qt_arch: clang_64
+    env:
+      RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+      RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+    steps:
+      - name: Check out the source ref
+        uses: actions/checkout@v7
+        with:
+          # Tag pushes build the tagged commit; manual runs keep the selected
+          # branch ref and sync its version to the requested release tag.
+          ref: ${{ github.ref }}
+          path: resonance
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: resonance/backend/go.mod
+          cache-dependency-path: resonance/backend/go.sum
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: actions/cache@v6
+        with:
+          path: resonance/build/cargo
+          key: resonance-rust-${{ runner.os }}-${{ matrix.platform }}-${{ hashFiles('resonance/spotify-core/Cargo.lock') }}
+          restore-keys: |
+            resonance-rust-${{ runner.os }}-${{ matrix.platform }}-
+
+      - name: Synchronize version from tag
+        working-directory: resonance
+        shell: bash
+        run: node scripts/sync-release-version.mjs "$RELEASE_TAG"
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential cmake ninja-build pkg-config file wget curl git ca-certificates \
+            clang-18 libgl1-mesa-dev libvulkan-dev libxkbcommon-dev \
+            libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 \
+            libwayland-dev libdbus-1-dev libpulse-dev libasound2-dev \
+            libsecret-1-dev libsecret-1-0 libssl-dev libfuse2t64 patchelf
+
+      - name: Select Xcode SDK
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          XCODE_APP="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          SDKROOT_PATH="$(xcrun --sdk macosx --show-sdk-path)"
+          echo "SDKROOT=$SDKROOT_PATH" >> "$GITHUB_ENV"
+          echo "Using $XCODE_APP with $SDKROOT_PATH"
+
+      - name: Set up MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install Qt 6.9.3
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.9.3'
+          host: ${{ matrix.qt_host }}
+          target: desktop
+          arch: ${{ matrix.qt_arch }}
+          modules: 'qtmultimedia qtshadertools qtwebchannel qtpositioning qtserialport qtwebengine'
+          cache: true
+
+      - name: Cache release dependencies
+        id: dependency-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/resonance-deps
+          key: resonance-deps-${{ runner.os }}-${{ matrix.platform }}-qt-6.9.3-qcoro-0.11.0-qtkeychain-0.14.0-v1
+
+      - name: Build QCoro and QtKeychain (Linux and macOS)
+        if: runner.os != 'Windows' && steps.dependency-cache.outputs.cache-hit != 'true'
+        working-directory: resonance
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEPS_PREFIX="$RUNNER_TEMP/resonance-deps"
+
+          git clone --depth 1 --branch v0.11.0 \
+            https://github.com/danvratil/qcoro.git "$RUNNER_TEMP/qcoro"
+          cmake -S "$RUNNER_TEMP/qcoro" -B "$RUNNER_TEMP/qcoro/build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$DEPS_PREFIX" \
+            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
+            -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF \
+            -DQCORO_WITH_QTWEBSOCKETS=OFF -DQCORO_WITH_QTTEST=OFF \
+            -DQCORO_BUILD_TESTING=OFF -DQCORO_BUILD_EXAMPLES=OFF \
+            -DQCORO_ENABLE_COMPAT_METHOD_TESTS=OFF
+          cmake --build "$RUNNER_TEMP/qcoro/build" --parallel
+          cmake --install "$RUNNER_TEMP/qcoro/build"
+
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            libsecret_support=ON
+          else
+            libsecret_support=OFF
+          fi
+
+          git clone --depth 1 --branch v0.14.0 \
+            https://github.com/frankosterfeld/qtkeychain.git "$RUNNER_TEMP/qtkeychain"
+          cmake -S "$RUNNER_TEMP/qtkeychain" -B "$RUNNER_TEMP/qtkeychain/build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$DEPS_PREFIX" \
+            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
+            -DBUILD_WITH_QT6=ON -DBUILD_TEST_APPLICATION=OFF \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DLIBSECRET_SUPPORT="$libsecret_support"
+          cmake --build "$RUNNER_TEMP/qtkeychain/build" --parallel
+          cmake --install "$RUNNER_TEMP/qtkeychain/build"
+
+      - name: Build QCoro and QtKeychain (Windows)
+        if: runner.os == 'Windows' && steps.dependency-cache.outputs.cache-hit != 'true'
+        working-directory: resonance
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $deps = Join-Path $env:RUNNER_TEMP 'resonance-deps'
+          $qt = $env:QT_ROOT_DIR
+          if (-not $qt) { throw 'QT_ROOT_DIR is missing after the Qt install step.' }
+          $env:PATH = "$qt\bin;$env:PATH"
+
+          git clone --depth 1 --branch v0.11.0 https://github.com/danvratil/qcoro.git "$env:RUNNER_TEMP\qcoro"
+          cmake -S "$env:RUNNER_TEMP\qcoro" -B "$env:RUNNER_TEMP\qcoro\build" -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            "-DCMAKE_INSTALL_PREFIX=$deps" `
+            "-DCMAKE_PREFIX_PATH=$qt" `
+            -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF `
+            -DQCORO_WITH_QTWEBSOCKETS=OFF -DQCORO_WITH_QTTEST=OFF `
+            -DQCORO_BUILD_TESTING=OFF -DQCORO_BUILD_EXAMPLES=OFF `
+            -DQCORO_ENABLE_COMPAT_METHOD_TESTS=OFF
+          cmake --build "$env:RUNNER_TEMP\qcoro\build" --parallel
+          cmake --install "$env:RUNNER_TEMP\qcoro\build"
+
+          git clone --depth 1 --branch v0.14.0 https://github.com/frankosterfeld/qtkeychain.git "$env:RUNNER_TEMP\qtkeychain"
+          cmake -S "$env:RUNNER_TEMP\qtkeychain" -B "$env:RUNNER_TEMP\qtkeychain\build" -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            "-DCMAKE_INSTALL_PREFIX=$deps" `
+            "-DCMAKE_PREFIX_PATH=$qt" `
+            -DBUILD_WITH_QT6=ON -DBUILD_TEST_APPLICATION=OFF `
+            -DBUILD_SHARED_LIBS=OFF -DLIBSECRET_SUPPORT=OFF
+          cmake --build "$env:RUNNER_TEMP\qtkeychain\build" --parallel
+          cmake --install "$env:RUNNER_TEMP\qtkeychain\build"
+
+      - name: Check for Apple signing credentials
+        if: runner.os == 'macOS'
+        id: apple
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [[ -n "$APPLE_CERTIFICATE" && -n "$APPLE_CERTIFICATE_PASSWORD" && -n "$APPLE_SIGNING_IDENTITY" && -n "$APPLE_KEYCHAIN_PASSWORD" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "identity=$APPLE_SIGNING_IDENTITY" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "identity=-" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [[ "$APPLE_SIGNING_IDENTITY" != "" && -n "$APPLE_CERTIFICATE" && -n "$APPLE_CERTIFICATE_PASSWORD" && -n "$APPLE_KEYCHAIN_PASSWORD" && -n "$APPLE_ID" && -n "$APPLE_PASSWORD" && -n "$APPLE_TEAM_ID" ]]; then
+            echo "notarize=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "notarize=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Import Apple Developer certificate
+        if: runner.os == 'macOS' && steps.apple.outputs.enabled == 'true'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/build.keychain"
+          security create-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: \
+            -s -k "$APPLE_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychain -d user -s "$KEYCHAIN" login.keychain-db
+          rm -f "$RUNNER_TEMP/cert.p12"
+
+      - name: Configure and build (Linux and macOS)
+        if: runner.os != 'Windows'
+        working-directory: resonance
+        shell: bash
+        env:
+          SIGNING_IDENTITY: ${{ steps.apple.outputs.identity }}
+        run: |
+          set -euo pipefail
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
+            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR;$RUNNER_TEMP/resonance-deps" \
+            -DRESONANCE_CODESIGN_IDENTITY="${SIGNING_IDENTITY:--}" \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++
+          cmake --build build --target resonance --parallel
+
+      - name: Configure and build (Windows)
+        if: runner.os == 'Windows'
+        working-directory: resonance
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $deps = Join-Path $env:RUNNER_TEMP 'resonance-deps'
+          cmake -S . -B build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DBUILD_TESTING=OFF `
+            "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR;$deps"
+          cmake --build build --target resonance --parallel
+
+      - name: Check SoundCloud sidecar
+        working-directory: resonance
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$RUNNER_OS" in
+            Windows) sidecar=build/sidecar/local-api.exe ;;
+            *) sidecar=build/sidecar/local-api ;;
+          esac
+          if [[ ! -s "$sidecar" ]]; then
+            echo "::error::The SoundCloud sidecar is missing: $sidecar"
+            exit 1
+          fi
+          ls -lh "$sidecar"
+
+      - name: Package macOS application
+        if: runner.os == 'macOS'
+        working-directory: resonance
+        shell: bash
+        env:
+          SIGNING_IDENTITY: ${{ steps.apple.outputs.identity }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-artifacts
+          ./packaging/macos/package-dmg.sh \
+            build/resonance.app release-artifacts "$RELEASE_VERSION" "${SIGNING_IDENTITY:--}"
+
+          CHECK="$(mktemp -d)"
+          ditto -x -k "release-artifacts/Resonance-${RELEASE_VERSION}-macOS.zip" "$CHECK"
+          BUNDLE="$CHECK/Resonance.app/Contents"
+          REQUIRED=(
+            "MacOS/resonance"
+            "MacOS/local-api"
+            "Frameworks/QtCore.framework/Versions/A/QtCore"
+            "Frameworks/QtQuick.framework/Versions/A/QtQuick"
+            "Frameworks/QtMultimedia.framework/Versions/A/QtMultimedia"
+            "PlugIns/platforms/libqcocoa.dylib"
+          )
+          for entry in "${REQUIRED[@]}"; do
+            if [[ ! -e "$BUNDLE/$entry" ]]; then
+              echo "::error::The macOS bundle is missing $entry"
+              find "$BUNDLE" -maxdepth 3 -print | head -60
+              exit 1
+            fi
+          done
+          if otool -L "$BUNDLE/MacOS/resonance" | grep -F "$QT_ROOT_DIR"; then
+            echo "::error::The macOS app links to build-machine libraries:"
+            exit 1
+          fi
+          echo "The macOS archive contains the app, Qt frameworks, and sidecar."
+
+      - name: Notarize macOS disk image
+        if: runner.os == 'macOS' && steps.apple.outputs.notarize == 'true'
+        working-directory: resonance
+        shell: bash
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          DMG="release-artifacts/Resonance-${RELEASE_VERSION}-macOS.dmg"
+          xcrun notarytool submit "$DMG" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+          xcrun stapler staple "$DMG"
+
+      - name: Package Linux AppImage
+        if: runner.os == 'Linux'
+        working-directory: resonance
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-artifacts
+          export QMAKE="$QT_ROOT_DIR/bin/qmake6"
+          export LD_LIBRARY_PATH="$QT_ROOT_DIR/lib:$RUNNER_TEMP/resonance-deps/lib:$RUNNER_TEMP/resonance-deps/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
+          ./packaging/linux/package-appimage.sh build release-artifacts "$RELEASE_VERSION"
+
+          CHECK="$RUNNER_TEMP/appimage-check"
+          mkdir -p "$CHECK"
+          APPIMAGE="$GITHUB_WORKSPACE/resonance/release-artifacts/Resonance-${RELEASE_VERSION}-Linux.AppImage"
+          (cd "$CHECK" && APPIMAGE_EXTRACT_AND_RUN=1 "$APPIMAGE" --appimage-extract >/dev/null)
+          ROOT="$CHECK/squashfs-root"
+          REQUIRED=(
+            "usr/bin/resonance"
+            "usr/bin/local-api"
+            "usr/share/applications/resonance.desktop"
+          )
+          for entry in "${REQUIRED[@]}"; do
+            if [[ ! -e "$ROOT/$entry" ]]; then
+              echo "::error::The AppImage is missing $entry"
+              exit 1
+            fi
+          done
+          for pattern in \
+            'libQt6Core.so*' 'libQt6Quick.so*' 'libQt6Multimedia.so*' \
+            'libQt6WebEngineCore.so*' 'libQt6SerialPort.so*' \
+            'QtWebEngineProcess' 'libqxcb.so'; do
+            if ! find "$ROOT" -name "$pattern" -print -quit | grep -q .; then
+              echo "::error::The AppImage is missing Qt runtime component $pattern"
+              exit 1
+            fi
+          done
+          echo "AppImage is self-contained ($(du -h "$APPIMAGE" | cut -f1))."
+
+      - name: Package Windows archive and installer
+        if: runner.os == 'Windows'
+        working-directory: resonance
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $stage = Join-Path $env:RUNNER_TEMP 'windows-package'
+          $bin = Join-Path $stage 'bin'
+          $outputDir = Join-Path $PWD 'release-artifacts'
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          cmake --install build --prefix $stage --config Release
+
+          $exe = Join-Path $bin 'resonance.exe'
+          $sidecar = Join-Path $bin 'local-api.exe'
+          if (-not (Test-Path $exe)) { throw "CMake install did not produce $exe" }
+          if (-not (Test-Path $sidecar)) { throw "CMake install did not produce $sidecar" }
+
+          & "$env:QT_ROOT_DIR/bin/windeployqt.exe" --release --compiler-runtime `
+            --qmldir (Join-Path $PWD 'qml') `
+            --no-translations --no-system-d3d-compiler `
+            $exe
+          if ($LASTEXITCODE -ne 0) { throw "windeployqt exited with $LASTEXITCODE" }
+
+          Invoke-WebRequest -Uri 'https://aka.ms/vs/17/release/vc_redist.x64.exe' `
+            -OutFile (Join-Path $bin 'vc_redist.x64.exe')
+          if ((Get-AuthenticodeSignature (Join-Path $bin 'vc_redist.x64.exe')).Status -ne 'Valid') {
+            throw 'The downloaded Visual C++ redistributable did not have a valid signature.'
+          }
+
+          $required = @(
+            'resonance.exe', 'local-api.exe', 'Qt6Core.dll', 'Qt6Gui.dll',
+            'Qt6Qml.dll', 'Qt6Quick.dll', 'Qt6QuickControls2.dll',
+            'Qt6Multimedia.dll', 'Qt6WebEngineCore.dll', 'Qt6WebEngineQuick.dll',
+            'Qt6Positioning.dll', 'platforms/qwindows.dll',
+            'iconengines/qsvgicon.dll', 'imageformats/qjpeg.dll', 'imageformats/qsvg.dll'
+          )
+          $missing = @($required | Where-Object { -not (Test-Path (Join-Path $bin $_)) })
+          if ($missing) { throw "Windows package is missing: $($missing -join ', ')" }
+          foreach ($asset in @('QtWebEngineProcess.exe', 'qtwebengine_resources.pak', 'icudtl.dat')) {
+            if (-not (Get-ChildItem -LiteralPath $bin -Filter $asset -Recurse -File -ErrorAction SilentlyContinue)) {
+              throw "Windows package is missing Qt WebEngine runtime asset $asset"
+            }
+          }
+
+          New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
+          $zip = Join-Path $outputDir "Resonance-$env:RELEASE_VERSION-Windows.zip"
+          if (Get-Command 7z.exe -ErrorAction SilentlyContinue) {
+            & 7z.exe a -tzip -mx=1 $zip (Join-Path $stage '*')
+            if ($LASTEXITCODE -ne 0) { throw "7-Zip exited with $LASTEXITCODE" }
+          } else {
+            Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -CompressionLevel Fastest
+          }
+
+          $iscc = @(
+            'C:\Program Files (x86)\Inno Setup 6\ISCC.exe',
+            'C:\Program Files\Inno Setup 6\ISCC.exe'
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) {
+            choco install innosetup --no-progress -y
+            $iscc = @(
+              'C:\Program Files (x86)\Inno Setup 6\ISCC.exe',
+              'C:\Program Files\Inno Setup 6\ISCC.exe'
+            ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          if (-not $iscc) { throw 'Inno Setup 6 was not installed.' }
+
+          Push-Location (Join-Path $PWD 'packaging/windows')
+          try {
+            & $iscc "/DMyAppVersion=$env:RELEASE_VERSION" "/DSourceDir=$stage" "/O$outputDir" 'resonance.iss'
+            if ($LASTEXITCODE -ne 0) { throw "Inno Setup exited with $LASTEXITCODE" }
+          } finally {
+            Pop-Location
+          }
+
+          foreach ($name in @(
+            "Resonance-$env:RELEASE_VERSION-Windows.zip",
+            "Resonance-Setup-$env:RELEASE_VERSION.exe"
+          )) {
+            $artifact = Join-Path $outputDir $name
+            if (-not (Test-Path $artifact)) { throw "Windows packaging did not produce $artifact" }
+            Get-Item $artifact | Select-Object Name, Length
+          }
+
+      - name: Upload platform packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.platform }}
+          path: resonance/release-artifacts/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  publish:
+    name: Publish complete release
+    needs:
+      - validate
+      - build
+    if: ${{ needs.build.result == 'success' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+      RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Download all platform packages
+        uses: actions/download-artifact@v8
+        with:
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Verify release packages and write checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release-artifacts
+          expected=(
+            "Resonance-${RELEASE_VERSION}-Linux.AppImage"
+            "Resonance-${RELEASE_VERSION}-Windows.zip"
+            "Resonance-Setup-${RELEASE_VERSION}.exe"
+            "Resonance-${RELEASE_VERSION}-macOS.dmg"
+            "Resonance-${RELEASE_VERSION}-macOS.zip"
+          )
+          for file in "${expected[@]}"; do
+            if [[ ! -s "$file" ]]; then
+              echo "::error::A platform package is missing: $file"
+              exit 1
+            fi
+          done
+          sha256sum "${expected[@]}" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Publish assets and polished release notes
+        shell: bash
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tag="$RELEASE_TAG"
+          version="$RELEASE_VERSION"
+          base="$GITHUB_SERVER_URL/$REPOSITORY/releases/download/$tag"
+          notes="$RUNNER_TEMP/release-notes.md"
+          cat > "$notes" <<EOF
+          # Resonance v$version
+
+          A native desktop SoundCloud client for Linux, Windows, and macOS.
+
+          ## Downloads
+
+          - **Linux:** [AppImage](<${base}/Resonance-${version}-Linux.AppImage>)
+          - **Windows:** [Installer](<${base}/Resonance-Setup-${version}.exe>) · [Portable ZIP](<${base}/Resonance-${version}-Windows.zip>)
+          - **macOS:** [DMG](<${base}/Resonance-${version}-macOS.dmg>) · [ZIP](<${base}/Resonance-${version}-macOS.zip>)
+          - [SHA-256 checksums](<${base}/SHA256SUMS.txt>)
+
+          ## Install notes
+
+          - Linux: mark the AppImage executable with `chmod +x Resonance-${version}-Linux.AppImage` before opening it.
+          - Windows: extract the ZIP and run `bin/resonance.exe`, or use the installer.
+          - macOS: builds are ad-hoc signed when Apple signing credentials are not configured. If Gatekeeper blocks the app, open it from Finder with **Control-click → Open**.
+          EOF
+
+          title="Resonance v$version"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" \
+              --title "$title" \
+              --notes-file "$notes" \
+              --latest \
+              --verify-tag
+          else
+            gh release create "$tag" \
+              --title "$title" \
+              --notes-file "$notes" \
+              --latest \
+              --verify-tag
+          fi
+          gh release upload "$tag" release-artifacts/* --clobber

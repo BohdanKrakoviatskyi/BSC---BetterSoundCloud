@@ -35,6 +35,10 @@ OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
 # linuxdeploy and its qt plugin are appimages themselves; running them through
 # the extract-and-run path keeps them working on runners without fuse
 export APPIMAGE_EXTRACT_AND_RUN=1
+# Fedora's newer ELF files use .relr.dyn, which the strip bundled in the
+# continuous Qt plugin does not understand. Stripping is optional for a valid
+# AppImage, and Qt's release libraries are already optimized.
+export NO_STRIP="${NO_STRIP:-1}"
 
 TOOLS_DIR="${LINUXDEPLOY_DIR:-$PWD/.linuxdeploy}"
 mkdir -p "$TOOLS_DIR"
@@ -99,7 +103,8 @@ export EXTRA_QT_MODULES="QtQuick;QtQuickControls2;QtQml;QtMultimedia;QtSvg;QtWeb
 
 echo "==> Running linuxdeploy"
 DEPLOY_STATUS=0
-OUTPUT="Resonance-${VERSION}-Linux.AppImage" \
+APPIMAGE_NAME="Resonance-${VERSION}-Linux.AppImage"
+OUTPUT="$APPIMAGE_NAME" \
     linuxdeploy \
     --appdir "$APPDIR" \
     --desktop-file "$APPDIR/usr/share/applications/resonance.desktop" \
@@ -109,12 +114,12 @@ OUTPUT="Resonance-${VERSION}-Linux.AppImage" \
 echo "==> linuxdeploy exited $DEPLOY_STATUS"
 
 # linuxdeploy writes into the current directory
-if [ -f "$OUTPUT" ]; then
-    mv "$OUTPUT" "$OUTPUT_DIR/"
+if [ -f "$APPIMAGE_NAME" ]; then
+    mv "$APPIMAGE_NAME" "$OUTPUT_DIR/"
 fi
 
-ARTIFACT="$(find "$OUTPUT_DIR" -maxdepth 1 -name 'Resonance-*-Linux*.AppImage' -print -quit)"
-if [ -z "$ARTIFACT" ]; then
+ARTIFACT="$OUTPUT_DIR/$APPIMAGE_NAME"
+if [ ! -f "$ARTIFACT" ]; then
     echo "Error: linuxdeploy produced no AppImage (it exited $DEPLOY_STATUS)."
     exit 1
 fi

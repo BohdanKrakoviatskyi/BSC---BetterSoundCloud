@@ -12,7 +12,7 @@
 #endif
 
 #ifndef SourceDir
-  #define SourceDir "C:\Users\krako\AppData\Local\Temp\opencode\resonance-pkg"
+  #define SourceDir "build\windows-package"
 #endif
 
 [Setup]
