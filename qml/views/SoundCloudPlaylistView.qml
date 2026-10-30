@@ -125,7 +125,7 @@ Flickable {
                             }
                             StyledText {
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: "SOUNDCLOUD PLAYLIST"
+                                text: root.playlist.isYouTubeMusic ? "YOUTUBE MUSIC PLAYLIST" : "SOUNDCLOUD PLAYLIST"
                                 font.pixelSize: 10
                                 font.weight: Font.Bold
                                 color: Appearance.colors.onSecondaryContainer
@@ -156,7 +156,7 @@ Flickable {
 
                         StyledText {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: root.playlist.ownerDisplayName.length > 0 ? root.playlist.ownerDisplayName : "SoundCloud"
+                            text: root.playlist.ownerDisplayName.length > 0 ? root.playlist.ownerDisplayName : (root.playlist.isYouTubeMusic ? "YouTube Music" : "SoundCloud")
                             font.pixelSize: Appearance.fontSize.small
                             font.weight: Font.DemiBold
                             color: Appearance.colors.onSurface

@@ -27,6 +27,7 @@ class PlaybackCore;
 class Settings;
 class SpotifySession;
 class SoundCloud;
+class YouTubeMusic;
 
 /// the player: queue, transport, volume, lyrics and the sleep timer. the
 /// transport half of PlayerModel.swift, with the same rule underneath it all:
@@ -200,6 +201,7 @@ public:
     void prepareForSleep();
 
     void attachSoundCloud(SoundCloud *soundcloud);
+    void attachYouTubeMusic(YouTubeMusic *youtubeMusic);
 
 signals:
     void currentSongChanged();
@@ -315,6 +317,7 @@ private:
 
     bool m_visualizersEnabled = true;
     SoundCloud *m_soundcloud = nullptr;
+    YouTubeMusic *m_youtubeMusic = nullptr;
     bool m_presentationActive = true;
     bool m_analysisActive = false;
     bool m_loadingPulseWasVisible = true;

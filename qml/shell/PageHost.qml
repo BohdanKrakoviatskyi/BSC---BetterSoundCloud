@@ -30,10 +30,14 @@ Item {
         case Library.Page.Playlists: return playlistsPage
         case Library.Page.PinnedPlaylists: return pinnedPage
         case Library.Page.Playlist:
-            return (Library.source === "soundcloud" || Library.selectedPlaylist.isSoundCloud) ? soundcloudPlaylistPage : playlistPage
+            return (Library.source === "soundcloud" || Library.source === "youtube-music"
+                    || Library.selectedPlaylist.isSoundCloud || Library.selectedPlaylist.isYouTubeMusic)
+                   ? soundcloudPlaylistPage : playlistPage
         case Library.Page.Album: return albumPage
         case Library.Page.Artist:
-            return Library.source === "soundcloud" ? soundcloudArtistPage : artistPage
+            return (Library.source === "soundcloud" || Library.source === "youtube-music"
+                    || Library.currentArtist.isSoundCloud || Library.currentArtist.isYouTubeMusic)
+                   ? soundcloudArtistPage : artistPage
         case Library.Page.ArtistLikes: return soundcloudArtistLikesPage
         case Library.Page.ArtistTracks: return soundcloudArtistTracksPage
         case Library.Page.TrackDetails: return trackDetailsPage

@@ -212,7 +212,7 @@ T.AbstractButton {
                 text: Format.joined([root.song.artists, root.song.albumName], " — ")
                 elide: Text.ElideRight
                 font.pixelSize: Appearance.fontSize.smaller
-                color: artistRowHover.hovered && Library.source === "soundcloud"
+                color: artistRowHover.hovered && (Library.source === "soundcloud" || Library.source === "youtube-music")
                        ? Appearance.colors.primary
                        : Appearance.colors.onSurfaceVariant
 
@@ -222,11 +222,11 @@ T.AbstractButton {
 
                 HoverHandler {
                     id: artistRowHover
-                    cursorShape: Library.source === "soundcloud" && root.song.artists.length > 0
+                    cursorShape: (Library.source === "soundcloud" || Library.source === "youtube-music") && root.song.artists.length > 0
                                  ? Qt.PointingHandCursor : Qt.ArrowCursor
                 }
                 TapHandler {
-                    enabled: Library.source === "soundcloud" && root.song.artists.length > 0
+                    enabled: (Library.source === "soundcloud" || Library.source === "youtube-music") && root.song.artists.length > 0
                     onTapped: UiState.goToArtist(root.song)
                 }
             }

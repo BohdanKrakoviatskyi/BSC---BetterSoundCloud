@@ -19,6 +19,7 @@ struct Artist {
     Q_PROPERTY(bool valid READ isValid FINAL)
     Q_PROPERTY(QString source MEMBER source FINAL)
     Q_PROPERTY(bool isSoundCloud READ isSoundCloud FINAL)
+    Q_PROPERTY(bool isYouTubeMusic READ isYouTubeMusic FINAL)
 
 public:
     QString id;
@@ -29,6 +30,7 @@ public:
 
     bool isValid() const { return !id.isEmpty(); }
     bool isSoundCloud() const { return source == QLatin1StringView("soundcloud") || uri.startsWith(QLatin1StringView("soundcloud:")); }
+    bool isYouTubeMusic() const { return source == QLatin1StringView("youtube-music") || uri.startsWith(QLatin1StringView("youtube:")); }
     bool operator==(const Artist &) const = default;
 
     QJsonObject toJson() const;
@@ -80,11 +82,12 @@ struct Song {
     /// nothing spotify knows can be done with it
     Q_PROPERTY(bool isLocalFile READ isLocalFile FINAL)
     Q_PROPERTY(bool isSoundCloud READ isSoundCloud FINAL)
-    /// which service it comes from: "spotify", "soundcloud", or "local". the
+    Q_PROPERTY(bool isYouTubeMusic READ isYouTubeMusic FINAL)
+    /// which service it comes from: "spotify", "soundcloud", "youtube-music", or "local". the
     /// uri stays the single identity the whole app passes around, and this is
     /// what says who can answer for it
     Q_PROPERTY(QString source MEMBER source FINAL)
-    /// the service's own id: spotify's base62, soundcloud's numeric id
+    /// the service's own id: spotify's base62, soundcloud's numeric id, youtube's video id
     Q_PROPERTY(QString nativeId MEMBER nativeId FINAL)
     /// where the service's own client opens it, for a link out of the app
     Q_PROPERTY(QUrl permalink MEMBER permalink FINAL)
@@ -114,6 +117,8 @@ public:
     QString localPath() const { return isLocalFile() ? QUrl(uri).toLocalFile() : QString(); }
     /// a soundcloud track: its stream is fetched by id before it can play
     bool isSoundCloud() const { return source == QLatin1StringView("soundcloud"); }
+    /// a youtube music track: its stream is resolved by video id before it can play
+    bool isYouTubeMusic() const { return source == QLatin1StringView("youtube-music") || uri.startsWith(QLatin1StringView("youtube:")); }
     /// a spotify track, which librespot plays from its uri
     bool isSpotify() const { return source == QLatin1StringView("spotify"); }
     /// the service's id, whatever it is
@@ -153,8 +158,10 @@ struct Playlist {
     /// not a spotify playlist
     Q_PROPERTY(bool isLocal READ isLocal FINAL)
     Q_PROPERTY(bool isSoundCloud READ isSoundCloud FINAL)
-    /// whose playlist it is: "spotify" or "soundcloud"
+    Q_PROPERTY(bool isYouTubeMusic READ isYouTubeMusic FINAL)
+    /// whose playlist it is: "spotify", "soundcloud" or "youtube-music"
     Q_PROPERTY(QString source MEMBER source FINAL)
+    Q_PROPERTY(QUrl permalink MEMBER permalink FINAL)
 
 public:
     QString id;
@@ -168,16 +175,21 @@ public:
     bool isCollaborative = false;
     QString uri;
     QString source = QStringLiteral("spotify");
+    QUrl permalink;
 
     bool isValid() const { return !id.isEmpty(); }
     bool isLocal() const { return id.startsWith(QLatin1StringView("local:")); }
     /// one the soundcloud sidecar reads: only plain listing and playing
     bool isSoundCloud() const { return source == QLatin1StringView("soundcloud"); }
+    bool isYouTubeMusic() const { return source == QLatin1StringView("youtube-music") || uri.startsWith(QLatin1StringView("youtube:")); }
     bool operator==(const Playlist &) const = default;
     QString ownerDisplayName() const
     {
         if (!ownerName.isEmpty()) {
             return ownerName;
+        }
+        if (isYouTubeMusic()) {
+            return QStringLiteral("YouTube Music");
         }
         return isSoundCloud() ? QStringLiteral("SoundCloud") : QStringLiteral("Spotify");
     }

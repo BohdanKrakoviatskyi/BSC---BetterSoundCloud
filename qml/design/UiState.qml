@@ -180,11 +180,19 @@ QtObject {
     /// the setup shows rather than the library
     readonly property bool needsSetup: (Library.source === "soundcloud")
         ? !SoundCloud.connected
-        : (!Session.libraryConnected || (setupUnderway && !Session.connected))
+        : (Library.source === "youtube-music")
+            ? !YouTubeMusic.connected
+            : (!Session.libraryConnected || (setupUnderway && !Session.connected))
 
     function followSetup() {
         if (Library.source === "soundcloud") {
             if (SoundCloud.connected) {
+                setupUnderway = false
+            }
+            return
+        }
+        if (Library.source === "youtube-music") {
+            if (YouTubeMusic.connected) {
                 setupUnderway = false
             }
             return
@@ -204,6 +212,10 @@ QtObject {
     }
     readonly property Connections soundCloudFollower: Connections {
         target: SoundCloud
+        function onAccountChanged() { root.followSetup() }
+    }
+    readonly property Connections youTubeMusicFollower: Connections {
+        target: YouTubeMusic
         function onAccountChanged() { root.followSetup() }
     }
     readonly property Connections librarySourceFollower: Connections {

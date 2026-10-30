@@ -5,6 +5,7 @@
 #include "library/LocalLibrary.h"
 #include "playback/PlaybackController.h"
 #include "provider/SoundCloud.h"
+#include "provider/YouTubeMusic.h"
 #include "spotify/SpotifySession.h"
 
 #include <QCollator>
@@ -184,6 +185,30 @@ void LibraryStore::attachSoundCloud(SoundCloud *soundcloud)
     }
 }
 
+void LibraryStore::attachYouTubeMusic(YouTubeMusic *youtubeMusic)
+{
+    m_youtubeMusic = youtubeMusic;
+    if (m_youtubeMusic != nullptr) {
+        connect(m_youtubeMusic, &YouTubeMusic::accountChanged, this, [this] {
+            if (m_settings->musicSource() == QLatin1StringView("youtube-music")) {
+                emit profileChanged();
+                if (m_youtubeMusic->connected()) {
+                    m_hasLoadedHome = false;
+                    m_hasLoadedSavedSongs = false;
+                    detach(loadHome());
+                    detach(loadPlaylists());
+                } else {
+                    setPlaylistList({});
+                    m_savedSongs->clear();
+                    m_savedUris.clear();
+                    emit savedSongTotalChanged();
+                    emit savedChanged();
+                }
+            }
+        });
+    }
+}
+
 QString LibraryStore::source() const
 {
     return m_settings->musicSource();
@@ -191,8 +216,9 @@ QString LibraryStore::source() const
 
 void LibraryStore::setSource(const QString &raw)
 {
-    // anything but "soundcloud" is spotify, the way settings reads it
-    const QString value = raw == QLatin1StringView("soundcloud") ? QStringLiteral("soundcloud") : QStringLiteral("spotify");
+    const QString value = raw == QLatin1StringView("soundcloud")
+        ? QStringLiteral("soundcloud")
+        : (raw == QLatin1StringView("youtube-music") ? QStringLiteral("youtube-music") : QStringLiteral("spotify"));
     if (value == m_settings->musicSource()) {
         return;
     }
@@ -234,6 +260,9 @@ QString LibraryStore::profileId() const
     if (m_settings->musicSource() == QLatin1StringView("soundcloud") && m_soundcloud) {
         return m_soundcloud->userId();
     }
+    if (m_settings->musicSource() == QLatin1StringView("youtube-music") && m_youtubeMusic) {
+        return m_youtubeMusic->userId();
+    }
     return m_profile.id;
 }
 
@@ -242,6 +271,9 @@ QString LibraryStore::profileName() const
     if (m_settings->musicSource() == QLatin1StringView("soundcloud") && m_soundcloud) {
         return m_soundcloud->userName();
     }
+    if (m_settings->musicSource() == QLatin1StringView("youtube-music") && m_youtubeMusic) {
+        return m_youtubeMusic->userName();
+    }
     return m_profile.displayName;
 }
 
@@ -249,6 +281,9 @@ QUrl LibraryStore::profileArtworkUrl() const
 {
     if (m_settings->musicSource() == QLatin1StringView("soundcloud") && m_soundcloud) {
         return m_soundcloud->avatarUrl();
+    }
+    if (m_settings->musicSource() == QLatin1StringView("youtube-music") && m_youtubeMusic) {
+        return m_youtubeMusic->avatarUrl();
     }
     return m_profile.artworkUrl;
 }
@@ -304,7 +339,7 @@ Playlist LibraryStore::selectedPlaylist() const
 bool LibraryStore::isSelectedPlaylistEditable() const
 {
     const Playlist playlist = selectedPlaylist();
-    if (playlist.isSoundCloud()) {
+    if (playlist.isSoundCloud() || playlist.isYouTubeMusic()) {
         // the sidecar only lists and plays: nothing here can be edited
         return false;
     }
@@ -348,9 +383,10 @@ void LibraryStore::setPlaylistList(const QList<Playlist> &playlists)
 
 void LibraryStore::refreshPinnedPlaylists()
 {
-    // soundcloud has no pins: the pages that show them are spotify's, so the
+    // soundcloud and youtube-music have no pins: the pages that show them are spotify's, so the
     // model stays empty there without forgetting what was pinned
-    if (m_settings->musicSource() == QLatin1StringView("soundcloud")) {
+    if (m_settings->musicSource() == QLatin1StringView("soundcloud")
+        || m_settings->musicSource() == QLatin1StringView("youtube-music")) {
         m_pinnedPlaylists->setItems({});
         return;
     }
@@ -464,8 +500,9 @@ bool LibraryStore::canReorderPlaylist() const
 
 void LibraryStore::refreshRecommendations()
 {
-    // soundcloud has no recently-played feed of its own to build shelves from
-    if (m_settings->musicSource() == QLatin1StringView("soundcloud")) {
+    // soundcloud and youtube-music have no recently-played feed of their own to build shelves from
+    if (m_settings->musicSource() == QLatin1StringView("soundcloud")
+        || m_settings->musicSource() == QLatin1StringView("youtube-music")) {
         return;
     }
     QList<Artist> artists;
@@ -594,7 +631,9 @@ void LibraryStore::showPlaylists()
 {
     cancelDetailLoads();
     navigate({Page::Playlists});
-    if (m_settings->musicSource() == QLatin1StringView("soundcloud") && m_playlistList.isEmpty() && !m_loadingPlaylists) {
+    if ((m_settings->musicSource() == QLatin1StringView("soundcloud")
+         || m_settings->musicSource() == QLatin1StringView("youtube-music"))
+        && m_playlistList.isEmpty() && !m_loadingPlaylists) {
         detach(loadPlaylists());
     }
 }
@@ -660,6 +699,14 @@ void LibraryStore::selectPlaylist(const Playlist &playlist)
         detach(runPlaylistLoad(playlist, m_songLoad.renew()));
         return;
     }
+    if (playlist.isYouTubeMusic()) {
+        if (!m_youtubeMusic || !m_youtubeMusic->connected()) {
+            return;
+        }
+        setLoading(m_loadingSongs, opened == nullptr);
+        detach(runPlaylistLoad(playlist, m_songLoad.renew()));
+        return;
+    }
     if (!m_session->hasLibraryToken()) {
         return;
     }
@@ -676,6 +723,29 @@ QCoro::Task<> LibraryStore::runPlaylistLoad(Playlist playlist, CancelToken token
         }
         try {
             const QList<Song> loaded = co_await m_soundcloud->playlistSongs(playlist);
+            throwIfCancelled(token);
+            if (!(m_destination == target)) {
+                co_return;
+            }
+            setSongs(loaded);
+            setLoading(m_loadingSongs, false);
+            m_songLoad.finish(token);
+        } catch (const Cancelled &) {
+        } catch (const SpotifyError &error) {
+            if (m_destination == target && !isCancelled(token)) {
+                setLoading(m_loadingSongs, false);
+                reportError(QStringLiteral("Loading songs from \"%1\"").arg(playlist.name), error.message());
+            }
+        }
+        m_songLoad.finish(token);
+        co_return;
+    }
+    if (playlist.isYouTubeMusic()) {
+        if (!m_youtubeMusic || !m_youtubeMusic->connected()) {
+            co_return;
+        }
+        try {
+            const QList<Song> loaded = co_await m_youtubeMusic->playlistSongs(playlist);
             throwIfCancelled(token);
             if (!(m_destination == target)) {
                 co_return;
@@ -760,6 +830,12 @@ void LibraryStore::selectArtist(const Artist &artist)
     m_artistAlbums->setItems(opened ? opened->albums : QList<Album> {});
     m_artistTopSongs->setSongs(opened ? opened->topSongs : QList<Song> {});
     m_errors->clear();
+    if (m_settings->musicSource() == QLatin1StringView("youtube-music") || artist.isYouTubeMusic()) {
+        if (m_youtubeMusic && m_youtubeMusic->connected()) {
+            m_youtubeMusic->openArtist(artist.id);
+        }
+        return;
+    }
     if (m_settings->musicSource() == QLatin1StringView("soundcloud") || artist.isSoundCloud()) {
         if (m_soundcloud && m_soundcloud->connected()) {
             m_soundcloud->openArtist(artist.id);
@@ -778,6 +854,12 @@ void LibraryStore::selectTrack(const Song &song)
     cancelDetailLoads();
     navigate({Page::TrackDetails, {}, {}, {}, {}, song});
     m_errors->clear();
+    if (song.isYouTubeMusic() || m_settings->musicSource() == QLatin1StringView("youtube-music")) {
+        if (m_youtubeMusic && m_youtubeMusic->connected()) {
+            m_youtubeMusic->openTrackDetails(song);
+        }
+        return;
+    }
     if (m_soundcloud && m_soundcloud->connected()) {
         m_soundcloud->openTrackDetails(song);
     }
@@ -808,6 +890,12 @@ void LibraryStore::selectArtistTracks(const Artist &artist)
     cancelDetailLoads();
     navigate({Page::ArtistTracks, {}, {}, artist});
     m_errors->clear();
+    if (artist.isYouTubeMusic() || m_settings->musicSource() == QLatin1StringView("youtube-music")) {
+        if (m_youtubeMusic && m_youtubeMusic->connected()) {
+            m_youtubeMusic->openArtist(artist.id);
+        }
+        return;
+    }
     if (m_soundcloud && m_soundcloud->connected()) {
         m_soundcloud->openArtist(artist.id);
     }
@@ -877,7 +965,8 @@ QCoro::Task<> LibraryStore::runSongNavigation(Song song, bool toAlbum)
 {
     try {
         if (toAlbum) {
-            if (m_settings->musicSource() == QLatin1StringView("soundcloud") || song.isSoundCloud()) {
+            if (m_settings->musicSource() == QLatin1StringView("soundcloud") || song.isSoundCloud()
+                || m_settings->musicSource() == QLatin1StringView("youtube-music") || song.isYouTubeMusic()) {
                 co_return;
             }
             Album album = song.albumDestination();
@@ -891,6 +980,15 @@ QCoro::Task<> LibraryStore::runSongNavigation(Song song, bool toAlbum)
             }
             selectAlbum(album);
         } else {
+            if (m_settings->musicSource() == QLatin1StringView("youtube-music") || song.isYouTubeMusic()) {
+                if (m_youtubeMusic) {
+                    Artist artist = co_await m_youtubeMusic->artistFromSong(song);
+                    if (artist.isValid()) {
+                        selectArtist(artist);
+                    }
+                }
+                co_return;
+            }
             if (m_settings->musicSource() == QLatin1StringView("soundcloud") || song.isSoundCloud()) {
                 if (m_soundcloud) {
                     Artist artist = co_await m_soundcloud->artistFromSong(song);
@@ -956,6 +1054,13 @@ void LibraryStore::setSearchQuery(const QString &query)
         } else {
             m_errors->show(QStringLiteral("Connect your SoundCloud account to search."));
         }
+    } else if (m_settings->musicSource() == QLatin1StringView("youtube-music")) {
+        if (m_youtubeMusic && m_youtubeMusic->connected()) {
+            setLoading(m_searching, true);
+            detach(runSearch(trimmed, m_search.renew()));
+        } else {
+            m_errors->show(QStringLiteral("Connect your YouTube Music account to search."));
+        }
     } else if (!m_session->hasLibraryToken()) {
         m_errors->show(QStringLiteral("Connect your Spotify library to search the catalog."));
     } else {
@@ -967,6 +1072,35 @@ void LibraryStore::setSearchQuery(const QString &query)
 
 QCoro::Task<> LibraryStore::runSearch(QString query, CancelToken token)
 {
+    if (m_settings->musicSource() == QLatin1StringView("youtube-music")) {
+        if (!m_youtubeMusic || !m_youtubeMusic->connected()) {
+            co_return;
+        }
+        try {
+            co_await QCoro::sleepFor(std::chrono::milliseconds(350));
+            throwIfCancelled(token);
+            const QList<Song> songs = co_await m_youtubeMusic->searchSongs(query);
+            throwIfCancelled(token);
+            if (m_searchQuery.trimmed() != query) {
+                co_return;
+            }
+            m_searchSongs->setSongs(songs);
+            m_searchAlbums->setItems({});
+            m_searchArtists->setItems({});
+            m_searchPlaylists->setItems({});
+            setLoading(m_searching, false);
+            emit searchChanged();
+            m_search.finish(token);
+        } catch (const Cancelled &) {
+        } catch (const SpotifyError &error) {
+            if (!isCancelled(token)) {
+                setLoading(m_searching, false);
+                reportError(QStringLiteral("Searching for \"%1\"").arg(query), error.message());
+            }
+        }
+        m_search.finish(token);
+        co_return;
+    }
     if (m_settings->musicSource() == QLatin1StringView("soundcloud")) {
         // soundcloud search answers with tracks only: there are no album,
         // artist or playlist results to fill
@@ -1062,8 +1196,8 @@ void LibraryStore::persistSearchHistory()
 
 void LibraryStore::togglePinned(const Playlist &playlist)
 {
-    // pins are a spotify-library idea, and a soundcloud playlist is not one
-    if (playlist.isSoundCloud()) {
+    // pins are a spotify-library idea, and a soundcloud or youtube playlist is not one
+    if (playlist.isSoundCloud() || playlist.isYouTubeMusic()) {
         return;
     }
     if (m_pinnedIds.contains(playlist.id)) {
@@ -1082,6 +1216,36 @@ void LibraryStore::toggleSaved(const Song &song)
     // soundcloud's liked list is the app's own; a music file of the person's
     // own still toggles through this path, so leave those alone
     if (m_settings->musicSource() == QLatin1StringView("soundcloud") && !song.isLocalFile()) {
+        return;
+    }
+    if ((m_settings->musicSource() == QLatin1StringView("youtube-music") || song.isYouTubeMusic()) && !song.isLocalFile()) {
+        if (!m_youtubeMusic || !m_youtubeMusic->connected()) {
+            m_errors->show(QStringLiteral("Connect your YouTube Music account to save songs."));
+            return;
+        }
+        if (m_pendingSavedUris.contains(song.uri)) {
+            return;
+        }
+        m_pendingSavedUris.insert(song.uri);
+        ++m_savedStatusRevision;
+
+        const bool shouldSave = !m_savedUris.contains(song.uri);
+        if (shouldSave) {
+            m_savedUris.insert(song.uri);
+            const QList<Song> &saved = m_savedSongs->songs();
+            if (std::none_of(saved.begin(), saved.end(), [&](const Song &item) { return item.uri == song.uri; })) {
+                QList<Song> updated = saved;
+                updated.prepend(song);
+                m_savedSongs->setSongs(updated);
+            }
+        } else {
+            m_savedUris.remove(song.uri);
+            m_savedSongs->removeAll([&](const Song &item) { return item.uri == song.uri; });
+        }
+        adjustSavedSongTotal(shouldSave ? 1 : -1);
+        ++m_savedRevision;
+        emit savedChanged();
+        detach(runToggleSaved(song, shouldSave, m_session->generation()));
         return;
     }
     if (!m_session->hasFullLibraryAccess()) {
@@ -1120,9 +1284,31 @@ void LibraryStore::toggleSaved(const Song &song)
 
 QCoro::Task<> LibraryStore::runToggleSaved(Song song, bool shouldSave, quint64 generation)
 {
-    // the guard in toggleSaved keeps this out of soundcloud's way; this is
-    // belt and braces for a call that slipped past it
     if (m_settings->musicSource() == QLatin1StringView("soundcloud") && !song.isLocalFile()) {
+        co_return;
+    }
+    if ((m_settings->musicSource() == QLatin1StringView("youtube-music") || song.isYouTubeMusic()) && !song.isLocalFile()) {
+        bool ok = false;
+        if (m_youtubeMusic) {
+            ok = co_await m_youtubeMusic->rateTrack(song, shouldSave);
+        }
+        if (!ok) {
+            if (shouldSave) {
+                m_savedUris.remove(song.uri);
+                m_savedSongs->removeAll([&](const Song &item) { return item.uri == song.uri; });
+            } else {
+                m_savedUris.insert(song.uri);
+                QList<Song> updated = m_savedSongs->songs();
+                updated.prepend(song);
+                m_savedSongs->setSongs(updated);
+            }
+            adjustSavedSongTotal(shouldSave ? -1 : 1);
+            ++m_savedRevision;
+            emit savedChanged();
+        }
+        if (generation == m_session->generation()) {
+            m_pendingSavedUris.remove(song.uri);
+        }
         co_return;
     }
     try {
@@ -1152,9 +1338,10 @@ QCoro::Task<> LibraryStore::runToggleSaved(Song song, bool shouldSave, quint64 g
 
 QCoro::Task<> LibraryStore::loadSavedStatuses(QList<Song> songs)
 {
-    // soundcloud's liked songs list is the whole truth: there is no per-track
+    // soundcloud's and youtube's liked songs list is the whole truth: there is no per-track
     // saved status to ask about
-    if (m_settings->musicSource() == QLatin1StringView("soundcloud")) {
+    if (m_settings->musicSource() == QLatin1StringView("soundcloud")
+        || m_settings->musicSource() == QLatin1StringView("youtube-music")) {
         co_return;
     }
     if (m_session->libraryNeedsAuthorizationUpgrade() || !m_session->hasLibraryToken() || songs.isEmpty()) {
@@ -1198,6 +1385,13 @@ QCoro::Task<> LibraryStore::loadSavedStatuses(QList<Song> songs)
 
 QCoro::Task<> LibraryStore::loadInitialLibrary()
 {
+    if (m_settings->musicSource() == QLatin1StringView("youtube-music")) {
+        if (!m_youtubeMusic || !m_youtubeMusic->connected()) {
+            co_return;
+        }
+        co_await loadHome();
+        co_return;
+    }
     if (m_settings->musicSource() == QLatin1StringView("soundcloud")) {
         // no sidecar, or nobody signed in: resolve rather than leave the app
         // waiting on a library that cannot answer. loadHome fills playlists
@@ -1230,6 +1424,20 @@ QCoro::Task<> LibraryStore::loadInitialLibrary()
 
 QCoro::Task<> LibraryStore::loadPlaylists()
 {
+    if (m_settings->musicSource() == QLatin1StringView("youtube-music")) {
+        if (!m_youtubeMusic || !m_youtubeMusic->connected() || m_loadingPlaylists) {
+            co_return;
+        }
+        setLoading(m_loadingPlaylists, true);
+        try {
+            setPlaylistList(co_await m_youtubeMusic->playlists());
+        } catch (const Cancelled &) {
+        } catch (const SpotifyError &error) {
+            reportError(QStringLiteral("Loading playlists"), error.message());
+        }
+        setLoading(m_loadingPlaylists, false);
+        co_return;
+    }
     if (m_settings->musicSource() == QLatin1StringView("soundcloud")) {
         if (!m_soundcloud || !m_soundcloud->connected() || m_loadingPlaylists) {
             co_return;
@@ -1270,6 +1478,21 @@ void LibraryStore::retryLoadingPlaylists()
 
 QCoro::Task<> LibraryStore::loadHome()
 {
+    if (m_settings->musicSource() == QLatin1StringView("youtube-music")) {
+        if (!m_youtubeMusic || !m_youtubeMusic->connected() || m_loadingHome) {
+            co_return;
+        }
+        setLoading(m_loadingHome, true);
+        m_recentlyPlayed->setSongs({});
+        m_recommendedArtists->setItems({});
+        m_recommendedAlbums->setItems({});
+        m_youtubeMusic->loadDiscover();
+        co_await loadPlaylists();
+        co_await loadSavedSongs();
+        m_hasLoadedHome = true;
+        setLoading(m_loadingHome, false);
+        co_return;
+    }
     if (m_settings->musicSource() == QLatin1StringView("soundcloud")) {
         if (!m_soundcloud || !m_soundcloud->connected() || m_loadingHome) {
             co_return;
@@ -1311,6 +1534,28 @@ QCoro::Task<> LibraryStore::loadHome()
 
 QCoro::Task<> LibraryStore::loadSavedSongs()
 {
+    if (m_settings->musicSource() == QLatin1StringView("youtube-music")) {
+        if (!m_youtubeMusic || !m_youtubeMusic->connected() || m_loadingSavedSongs) {
+            co_return;
+        }
+        setLoading(m_loadingSavedSongs, true);
+        try {
+            const QList<Song> loaded = co_await m_youtubeMusic->likedSongs();
+            m_savedSongs->setSongs(loaded);
+            for (const Song &song : loaded) {
+                m_savedUris.insert(song.uri);
+            }
+            m_hasLoadedSavedSongs = true;
+            ++m_savedRevision;
+            emit savedChanged();
+            emit savedSongTotalChanged();
+        } catch (const Cancelled &) {
+        } catch (const SpotifyError &error) {
+            reportError(QStringLiteral("Loading saved songs"), error.message());
+        }
+        setLoading(m_loadingSavedSongs, false);
+        co_return;
+    }
     if (m_settings->musicSource() == QLatin1StringView("soundcloud")) {
         if (!m_soundcloud || !m_soundcloud->connected() || m_loadingSavedSongs) {
             co_return;
@@ -1378,8 +1623,9 @@ QCoro::Task<> LibraryStore::loadSavedSongs()
 
 QCoro::Task<> LibraryStore::loadSavedSongTotal()
 {
-    if (m_settings->musicSource() == QLatin1StringView("soundcloud")) {
-        // soundcloud has no cheap total, and loadSavedSongs fills the whole
+    if (m_settings->musicSource() == QLatin1StringView("soundcloud")
+        || m_settings->musicSource() == QLatin1StringView("youtube-music")) {
+        // soundcloud and youtube have no cheap total, and loadSavedSongs fills the whole
         // list anyway, so -1 ("unknown") is what the count waits on
         co_return;
     }
@@ -1425,7 +1671,7 @@ void LibraryStore::adjustPlaylistSongCount(const QString &id, int delta)
 
 void LibraryStore::addToPlaylist(const Song &song, const Playlist &playlist)
 {
-    if (playlist.isSoundCloud()) {
+    if (playlist.isSoundCloud() || playlist.isYouTubeMusic()) {
         // the sidecar lists and plays: adding to one is not something it does
         return;
     }
@@ -1443,7 +1689,7 @@ void LibraryStore::addToPlaylist(const Song &song, const Playlist &playlist)
 
 QCoro::Task<> LibraryStore::runAdd(Song song, Playlist playlist)
 {
-    if (playlist.isSoundCloud()) {
+    if (playlist.isSoundCloud() || playlist.isYouTubeMusic()) {
         co_return;
     }
     if (!m_session->hasFullLibraryAccess()) {
@@ -1475,7 +1721,7 @@ void LibraryStore::removeFromSelectedPlaylist(const Song &song)
     const Playlist playlist = selectedPlaylist();
     if (playlist.isLocal()) {
         removeFromLocalPlaylist(song, playlist);
-    } else if (playlist.isSoundCloud()) {
+    } else if (playlist.isSoundCloud() || playlist.isYouTubeMusic()) {
         // nothing to remove from: the sidecar's playlists are read-only
         return;
     } else if (playlist.isValid()) {
@@ -1485,7 +1731,7 @@ void LibraryStore::removeFromSelectedPlaylist(const Song &song)
 
 void LibraryStore::removeFromPlaylist(const Song &song, const Playlist &playlist)
 {
-    if (playlist.isSoundCloud()) {
+    if (playlist.isSoundCloud() || playlist.isYouTubeMusic()) {
         return;
     }
     if (playlist.isLocal()) {
@@ -1504,7 +1750,7 @@ void LibraryStore::removeFromLocalPlaylist(const Song &song, const Playlist &pla
 
 QCoro::Task<> LibraryStore::runRemove(Song song, Playlist playlist)
 {
-    if (playlist.isSoundCloud()) {
+    if (playlist.isSoundCloud() || playlist.isYouTubeMusic()) {
         co_return;
     }
     if (!m_session->hasFullLibraryAccess()) {
@@ -1552,8 +1798,8 @@ void LibraryStore::moveSongs(int from, int count, int to)
 {
     // a playlist made here is the person's own, and spotify has no say in it
     const Playlist playlist = selectedPlaylist();
-    if (playlist.isSoundCloud()) {
-        // the sidecar also has no say in a soundcloud playlist's order
+    if (playlist.isSoundCloud() || playlist.isYouTubeMusic()) {
+        // the sidecar also has no say in a soundcloud or youtube playlist's order
         return;
     }
     const bool local = playlist.isLocal();
@@ -1614,7 +1860,7 @@ void LibraryStore::moveSongs(int from, int count, int to)
 
 QCoro::Task<> LibraryStore::runMove(Playlist playlist, int from, int count, int to, QList<Song> previous, QList<Song> reordered)
 {
-    if (playlist.isSoundCloud()) {
+    if (playlist.isSoundCloud() || playlist.isYouTubeMusic()) {
         co_return;
     }
     QString failure;
@@ -1646,7 +1892,7 @@ QCoro::Task<> LibraryStore::runMove(Playlist playlist, int from, int count, int 
 
 void LibraryStore::deletePlaylist(const Playlist &playlist)
 {
-    if (playlist.isSoundCloud()) {
+    if (playlist.isSoundCloud() || playlist.isYouTubeMusic()) {
         return;
     }
     if (playlist.isLocal()) {

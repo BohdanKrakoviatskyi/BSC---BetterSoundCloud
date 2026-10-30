@@ -18,22 +18,31 @@ quint64 nextInstanceId()
 
 QJsonObject Artist::toJson() const
 {
-    return {
+    QJsonObject obj {
         {QStringLiteral("id"), id},
         {QStringLiteral("name"), name},
         {QStringLiteral("artworkURL"), artworkUrl.toString()},
         {QStringLiteral("uri"), uri},
     };
+    if (!source.isEmpty() && source != QLatin1StringView("spotify")) {
+        obj.insert(QStringLiteral("source"), source);
+    }
+    return obj;
 }
 
 Artist Artist::fromJson(const QJsonObject &object)
 {
-    return {
+    Artist artist {
         object.value(QStringLiteral("id")).toString(),
         object.value(QStringLiteral("name")).toString(),
         QUrl(object.value(QStringLiteral("artworkURL")).toString()),
         object.value(QStringLiteral("uri")).toString(),
     };
+    const QString src = object.value(QStringLiteral("source")).toString();
+    if (!src.isEmpty()) {
+        artist.source = src;
+    }
+    return artist;
 }
 
 Song::Song()

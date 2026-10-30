@@ -725,13 +725,14 @@ Item {
 
                 ConfigSelection {
                     text: "Active Service"
-                    currentIndex: Library.source === "soundcloud" ? 1 : 0
+                    currentIndex: Library.source === "soundcloud" ? 1 : (Library.source === "youtube-music" ? 2 : 0)
                     segments: [
                         Segment { text: "Spotify" },
-                        Segment { text: "SoundCloud" }
+                        Segment { text: "SoundCloud" },
+                        Segment { text: "YouTube Music" }
                     ]
                     onActivated: (index) => {
-                        Library.setSource(index === 1 ? "soundcloud" : "spotify")
+                        Library.setSource(index === 1 ? "soundcloud" : (index === 2 ? "youtube-music" : "spotify"))
                     }
                 }
             }
@@ -777,18 +778,22 @@ Item {
 
                         StyledText {
                             width: parent.width
-                            text: Library.profileName.length > 0 ? Library.profileName : (Library.source === "soundcloud" ? "SoundCloud" : "Spotify")
+                            text: Library.profileName.length > 0
+                                  ? Library.profileName
+                                  : (Library.source === "youtube-music" ? "YouTube Music" : (Library.source === "soundcloud" ? "SoundCloud" : "Spotify"))
                             elide: Text.ElideRight
                             font.pixelSize: Appearance.fontSize.larger
                             font.weight: Font.DemiBold
                         }
                         StyledText {
                             width: parent.width
-                            text: Library.source === "soundcloud"
-                                ? (SoundCloud.connected ? "SoundCloud connected" : "SoundCloud not connected")
-                                : (Session.libraryConnected && Session.connected ? "Library and playback connected"
-                                    : Session.libraryConnected ? "Library connected"
-                                    : Session.connected ? "Playback connected" : "Not signed in")
+                            text: Library.source === "youtube-music"
+                                ? (YouTubeMusic.connected ? "YouTube Music connected" : "YouTube Music not connected")
+                                : (Library.source === "soundcloud"
+                                    ? (SoundCloud.connected ? "SoundCloud connected" : "SoundCloud not connected")
+                                    : (Session.libraryConnected && Session.connected ? "Library and playback connected"
+                                        : Session.libraryConnected ? "Library connected"
+                                        : Session.connected ? "Playback connected" : "Not signed in"))
                             elide: Text.ElideRight
                             color: Appearance.colors.onSurfaceVariant
                         }
@@ -806,24 +811,30 @@ Item {
                         colBackground: Appearance.colors.error
                         colBackgroundHover: Appearance.colors.errorHover
                         labelColor: Appearance.colors.onError
-                        enabled: Library.source === "soundcloud" ? SoundCloud.connected : (Session.libraryConnected || Session.connected)
+                        enabled: Library.source === "youtube-music" ? YouTubeMusic.connected
+                               : (Library.source === "soundcloud" ? SoundCloud.connected : (Session.libraryConnected || Session.connected))
                         onClicked: logOutDialog.open()
                     }
                 }
                 NoteText {
-                    text: Library.source === "soundcloud"
-                        ? "forgets the soundcloud login on this computer, local files stay of course"
-                        : "forgets both logins on this computer, local files stay of course"
+                    text: Library.source === "youtube-music"
+                        ? "forgets the youtube music login on this computer, local files stay of course"
+                        : (Library.source === "soundcloud"
+                            ? "forgets the soundcloud login on this computer, local files stay of course"
+                            : "forgets both logins on this computer, local files stay of course")
                 }
 
                 StyledDialog {
                     id: logOutDialog
-                    headline: Library.source === "soundcloud" ? "Log Out of SoundCloud?" : "Log Out of Spotify?"
+                    headline: Library.source === "youtube-music" ? "Log Out of YouTube Music?"
+                            : (Library.source === "soundcloud" ? "Log Out of SoundCloud?" : "Log Out of Spotify?")
                     symbol: "logout"
                     iconShape: "ghostish"
-                    body: Library.source === "soundcloud"
-                        ? "Resonance forgets your soundcloud login on this computer. you can connect again any time."
-                        : "Resonance forgets your library and playback logins on this computer. you can connect again any time."
+                    body: Library.source === "youtube-music"
+                        ? "Resonance forgets your YouTube Music login on this computer. You can connect again any time."
+                        : (Library.source === "soundcloud"
+                            ? "Resonance forgets your soundcloud login on this computer. you can connect again any time."
+                            : "Resonance forgets your library and playback logins on this computer. you can connect again any time.")
 
                     buttons: [
                         TextButton {
@@ -832,7 +843,9 @@ Item {
                             colBackgroundHover: Appearance.colors.errorHover
                             labelColor: Appearance.colors.onError
                             onClicked: {
-                                if (Library.source === "soundcloud") {
+                                if (Library.source === "youtube-music") {
+                                    YouTubeMusic.logOut()
+                                } else if (Library.source === "soundcloud") {
                                     SoundCloud.logOut()
                                 } else {
                                     Session.logOut()
@@ -850,6 +863,91 @@ Item {
             }
 
             ContentSection {
+                visible: Library.source === "youtube-music"
+                title: "YouTube Music"
+                symbol: "play_circle"
+
+                StatusRow {
+                    label: "Status"
+                    value: YouTubeMusic.connected
+                         ? ("Connected as " + (YouTubeMusic.userName.length > 0 ? YouTubeMusic.userName : "User"))
+                         : (YouTubeMusic.available ? "Not connected" : "Sidecar not available")
+                    good: YouTubeMusic.connected
+                }
+                TextButton {
+                    x: 8
+                    variant: (YouTubeMusic.browserLoginActive || YouTubeMusic.busy) ? TextButton.Tonal : TextButton.Filled
+                    symbol: (YouTubeMusic.browserLoginActive || YouTubeMusic.busy) ? "" : "play_circle"
+                    busy: YouTubeMusic.browserLoginActive || YouTubeMusic.busy
+                    text: YouTubeMusic.busy
+                          ? "Connecting…"
+                          : (YouTubeMusic.browserLoginActive
+                              ? "Waiting for Google sign-in"
+                              : (YouTubeMusic.connected ? "Reconnect YouTube Music" : "Login with YouTube Music"))
+                    onClicked: {
+                        if (YouTubeMusic.browserLoginActive) {
+                            YouTubeMusic.cancelBrowserLogin()
+                        } else {
+                            YouTubeMusic.loginWithBrowser(ytSettingsClientIdField.text, ytSettingsClientSecretField.text)
+                        }
+                    }
+                }
+                OutlinedTextField {
+                    id: ytSettingsClientIdField
+                    x: 8
+                    width: Math.min(460, parent.width - 16)
+                    placeholder: "Optional: Custom Google OAuth Client ID"
+                    text: YouTubeMusic.clientId
+                    onTextEdited: YouTubeMusic.clientId = text
+                }
+                OutlinedTextField {
+                    id: ytSettingsClientSecretField
+                    x: 8
+                    width: Math.min(460, parent.width - 16)
+                    placeholder: "Optional: Custom Google OAuth Client Secret"
+                    text: YouTubeMusic.clientSecret
+                    onTextEdited: YouTubeMusic.clientSecret = text
+                }
+                Flow {
+                    x: 8
+                    width: parent.width - 16
+                    spacing: 8
+                    topPadding: 4
+
+                    TextButton {
+                        visible: YouTubeMusic.connected
+                        symbol: "logout"
+                        text: "Disconnect"
+                        colBackground: Appearance.colors.error
+                        colBackgroundHover: Appearance.colors.errorHover
+                        labelColor: Appearance.colors.onError
+                        enabled: !YouTubeMusic.busy
+                        onClicked: {
+                            YouTubeMusic.logOut()
+                        }
+                    }
+
+                    TextButton {
+                        visible: YouTubeMusic.connected && Library.source !== "youtube-music"
+                        variant: TextButton.Filled
+                        symbol: "swap_horiz"
+                        text: "Switch to YouTube Music"
+                        onClicked: {
+                            Library.setSource("youtube-music")
+                        }
+                    }
+                }
+                NoteText {
+                    visible: YouTubeMusic.statusMessage.length > 0
+                    text: YouTubeMusic.statusMessage
+                }
+                NoteText {
+                    text: "Sign in with one click using the built-in OAuth credentials, or paste your own Google Cloud Desktop OAuth keys above."
+                }
+            }
+
+            ContentSection {
+                visible: Library.source === "soundcloud"
                 title: "SoundCloud"
                 symbol: "cloud"
 
@@ -967,6 +1065,7 @@ Item {
             }
 
             ContentSection {
+                visible: Library.source === "spotify"
                 title: "Library"
                 symbol: "library_music"
 
@@ -1004,6 +1103,7 @@ Item {
             }
 
             ContentSection {
+                visible: Library.source === "spotify"
                 title: "Playback"
                 symbol: "play_circle"
 

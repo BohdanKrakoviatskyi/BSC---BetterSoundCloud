@@ -195,9 +195,26 @@ Item {
                             }
                         }
 
+                        Image {
+                            id: youtubeMusicIcon
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: root.iconSize
+                            height: root.iconSize
+                            sourceSize.width: root.iconSize * 2
+                            sourceSize.height: root.iconSize * 2
+                            fillMode: Image.PreserveAspectFit
+                            visible: segment.modelData.symbol === "youtube_music"
+                            source: "qrc:/qt/qml/Resonance/resources/youtube-music.svg"
+                            opacity: segment.selected ? 1.0 : 0.65
+
+                            Behavior on opacity {
+                                NumberAnimation { duration: Appearance.duration(150) }
+                            }
+                        }
+
                         MaterialSymbol {
                             anchors.verticalCenter: parent.verticalCenter
-                            visible: segment.modelData.symbol.length > 0 && segment.modelData.symbol !== "spotify" && segment.modelData.symbol !== "soundcloud" && segment.modelData.symbol !== "cloud"
+                            visible: segment.modelData.symbol.length > 0 && segment.modelData.symbol !== "spotify" && segment.modelData.symbol !== "soundcloud" && segment.modelData.symbol !== "cloud" && segment.modelData.symbol !== "youtube_music"
                             text: segment.modelData.symbol
                             iconSize: root.iconSize
                             fill: segment.selected ? 1 : 0

@@ -836,6 +836,48 @@ ApplicationWindow {
 
     LoginDialog {}
 
+    StyledDialog {
+        id: youtubeLoginDialog
+
+        Connections {
+            target: YouTubeMusic
+            function onBrowserLoginActiveChanged() {
+                if (YouTubeMusic.browserLoginActive && !youtubeLoginDialog.opened) {
+                    youtubeLoginDialog.open()
+                } else if (!YouTubeMusic.browserLoginActive && youtubeLoginDialog.opened) {
+                    youtubeLoginDialog.accept()
+                }
+            }
+        }
+
+        headline: "Waiting for your browser…"
+        symbol: "key"
+        iconShape: "clover4"
+        body: "Sign in to your Google account in the browser window that just opened to connect YouTube Music."
+        onRejected: YouTubeMusic.cancelBrowserLogin()
+
+        buttons: [
+            TextButton {
+                variant: TextButton.Text
+                text: "Cancel"
+                onClicked: YouTubeMusic.cancelBrowserLogin()
+            },
+            TextButton {
+                variant: TextButton.Text
+                text: "Copy Link"
+                onClicked: {
+                    App.copyToClipboard(YouTubeMusic.authorizationUrl.toString())
+                    UiState.toastRequested("Login link copied")
+                }
+            },
+            TextButton {
+                variant: TextButton.Tonal
+                text: "Open Again"
+                onClicked: YouTubeMusic.reopenLoginPage()
+            }
+        ]
+    }
+
     Window {
         id: soundCloudLoginWindow
         width: 760

@@ -15,6 +15,7 @@ StyledMenu {
     property var editablePlaylists: []
     readonly property bool local: song ? song.isLocalFile : false
     readonly property bool soundcloud: song ? song.isSoundCloud : false
+    readonly property bool youtubeMusic: song ? song.isYouTubeMusic : false
 
     function openFor(target: song, allowsRemoval: bool) {
         song = target
@@ -51,18 +52,18 @@ StyledMenu {
         onTriggered: App.openUrl(root.song.uri.substring(0, root.song.uri.lastIndexOf("/")))
     }
     StyledMenuItem {
-        visible: root.soundcloud && root.song.permalink.toString().length > 0
+        visible: (root.soundcloud || root.youtubeMusic) && root.song.permalink.toString().length > 0
         height: visible ? implicitHeight : 0
-        text: "Open in SoundCloud"
+        text: root.youtubeMusic ? "Open in YouTube" : "Open in SoundCloud"
         symbol: "open_in_new"
         onTriggered: App.openUrl(root.song.permalink.toString())
     }
     StyledMenuSeparator {
-        visible: !root.local && !root.soundcloud
+        visible: !root.local && !root.soundcloud && !root.youtubeMusic
         height: visible ? implicitHeight : 0
     }
     StyledMenuItem {
-        visible: !root.local && !root.soundcloud && root.song.albumName.length > 0
+        visible: !root.local && !root.soundcloud && !root.youtubeMusic && root.song.albumName.length > 0
         height: visible ? implicitHeight : 0
         text: "Go to Album"
         symbol: "album"
@@ -76,7 +77,7 @@ StyledMenu {
         onTriggered: UiState.goToArtist(root.song)
     }
     StyledMenuItem {
-        visible: root.soundcloud
+        visible: root.soundcloud || root.youtubeMusic
         height: visible ? implicitHeight : 0
         text: "Track Details"
         symbol: "info"
@@ -97,7 +98,7 @@ StyledMenu {
     StyledMenu {
         id: addMenu
         title: "Add to Playlist"
-        visible: !root.soundcloud
+        visible: !root.soundcloud && !root.youtubeMusic
 
         Instantiator {
             model: root.editablePlaylists

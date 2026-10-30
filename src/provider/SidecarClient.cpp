@@ -19,19 +19,24 @@ namespace {
 /// app's copy: two sidecars writing one directory would step on each other
 QString dataDirectory()
 {
+    const auto hasStoredData = [](const QString &dir) {
+        return QFileInfo::exists(dir + QStringLiteral("/auth.json"))
+            || QFileInfo::exists(dir + QStringLiteral("/youtube.json"))
+            || QFileInfo::exists(dir + QStringLiteral("/settings.json"));
+    };
     const QString base = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     const QString appDir = base + QStringLiteral("/soundcloud");
-    if (QFileInfo::exists(appDir + QStringLiteral("/auth.json"))) {
+    if (hasStoredData(appDir)) {
         return appDir;
     }
     const QString genericDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
         + QStringLiteral("/Resonance");
-    if (QFileInfo::exists(genericDir + QStringLiteral("/auth.json"))) {
+    if (hasStoredData(genericDir)) {
         return genericDir;
     }
     const QString legacyDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
         + QStringLiteral("/BetterSoundCloud");
-    if (QFileInfo::exists(legacyDir + QStringLiteral("/auth.json"))) {
+    if (hasStoredData(legacyDir)) {
         return legacyDir;
     }
     return appDir;

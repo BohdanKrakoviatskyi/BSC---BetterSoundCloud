@@ -22,6 +22,7 @@ class LocalLibrary;
 class PlaybackController;
 class Settings;
 class SoundCloud;
+class YouTubeMusic;
 class SpotifySession;
 
 /// the last few things of a kind that were opened, keyed by id. bounded on
@@ -162,6 +163,7 @@ public:
     /// soundcloud, browsed like spotify: the same pages, filled from the
     /// sidecar instead. null when this build has no sidecar
     void attachSoundCloud(SoundCloud *soundcloud);
+    void attachYouTubeMusic(YouTubeMusic *youtubeMusic);
 
     QString source() const;
     Q_INVOKABLE void setSource(const QString &source);
@@ -359,6 +361,7 @@ private:
     ErrorCenter *m_errors;
     LocalLibrary *m_localFiles = nullptr;
     SoundCloud *m_soundcloud = nullptr;
+    YouTubeMusic *m_youtubeMusic = nullptr;
 
     Destination m_destination;
     QList<Destination> m_history;

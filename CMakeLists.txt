@@ -224,7 +224,7 @@ qt_add_qml_module(resonance_app
     VERSION 1.0
     SOURCES ${RESONANCE_SOURCES}
     QML_FILES ${RESONANCE_QML}
-    RESOURCES resources/resonance-icon.png resources/cameo.png resources/spotify.svg resources/soundcloud.svg
+    RESOURCES resources/resonance-icon.png resources/cameo.png resources/spotify.svg resources/soundcloud.svg resources/youtube-music.svg
     DEPENDENCIES QtQuick QtWebEngine)
 # BATCHABLE: the spectrum's material can be merged into the scene graph's
 # batches, which needs the extra vertex input qsb adds for it.
@@ -280,6 +280,18 @@ target_include_directories(resonance_app PRIVATE tools/shape_atlas)
 target_compile_definitions(resonance_app PUBLIC RESONANCE_VERSION="${PROJECT_VERSION}")
 target_compile_definitions(resonance_app PRIVATE
     RESONANCE_BUILD_FONT_DIRECTORY="${RESONANCE_FONT_DIRECTORY}")
+# the YouTube Music OAuth app credentials never enter git: they sit in
+# cmake/YoutubeOAuth.local.cmake, which .gitignore keeps out of the tree. a
+# clone without that file builds with empty defaults, and the login then asks
+# for credentials in Settings (or reads BSC_YOUTUBE_CLIENT_ID/SECRET)
+set(RESONANCE_YOUTUBE_CLIENT_ID "")
+set(RESONANCE_YOUTUBE_CLIENT_SECRET "")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/YoutubeOAuth.local.cmake")
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/YoutubeOAuth.local.cmake")
+endif()
+target_compile_definitions(resonance_app PRIVATE
+    RESONANCE_YOUTUBE_CLIENT_ID="${RESONANCE_YOUTUBE_CLIENT_ID}"
+    RESONANCE_YOUTUBE_CLIENT_SECRET="${RESONANCE_YOUTUBE_CLIENT_SECRET}")
 # public, because main.cpp is the executable's own source rather than part of
 # this library: a private definition would leave it out, and the desktop
 # integration and mpris guards in it would compile away on the platform they

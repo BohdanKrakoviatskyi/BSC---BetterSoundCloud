@@ -12,6 +12,7 @@
 #include "playback/PlaybackController.h"
 #include "provider/SidecarClient.h"
 #include "provider/SoundCloud.h"
+#include "provider/YouTubeMusic.h"
 #include "render/SpectrumSource.h"
 #include "spotify/CredentialStore.h"
 #include "spotify/SpotifySession.h"
@@ -276,6 +277,10 @@ int main(int argc, char *argv[])
     library.attachSoundCloud(&soundcloud);
     player.attachSoundCloud(&soundcloud);
     soundcloud.refreshStatus();
+    YouTubeMusic youtubeMusic(&sidecar, &settings, &network, &errors);
+    library.attachYouTubeMusic(&youtubeMusic);
+    player.attachYouTubeMusic(&youtubeMusic);
+    youtubeMusic.refreshStatus();
     // a song whose tags were edited shows as it is now wherever it is queued
     QObject::connect(&localFiles, &LocalLibrary::scanned, &player,
                      [&] { player.refreshSongDetails(localFiles.allSongs()); });

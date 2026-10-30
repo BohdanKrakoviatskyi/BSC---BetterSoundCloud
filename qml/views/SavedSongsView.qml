@@ -8,7 +8,8 @@ SongListPage {
 
     songs: Library.savedSongs
     loading: Library.loadingSavedSongs && Library.savedSongs.count === 0
-    loadingMore: Library.source === "soundcloud" && SoundCloud.loadingMoreLikes
+    loadingMore: (Library.source === "soundcloud" && SoundCloud.loadingMoreLikes)
+                 || (Library.source === "youtube-music" && YouTubeMusic.loadingMoreLikes)
     showsEmpty: Library.savedSongs.count === 0
     emptySymbol: "star"
     emptyTitle: "No Saved Songs"
@@ -17,6 +18,8 @@ SongListPage {
     onLoadMoreRequested: {
         if (Library.source === "soundcloud" && SoundCloud.hasMoreLikedSongs && !SoundCloud.loadingMoreLikes) {
             SoundCloud.loadMoreLikedSongs()
+        } else if (Library.source === "youtube-music" && YouTubeMusic.hasMoreLikedSongs && !YouTubeMusic.loadingMoreLikes) {
+            YouTubeMusic.loadMoreLikedSongs()
         }
     }
 
@@ -24,7 +27,7 @@ SongListPage {
         kind: "PLAYLIST"
         title: "Favourite Songs"
         themeTinted: true
-        artworkUrl: (Library.source === "soundcloud" && Library.savedSongs.count > 0)
+        artworkUrl: ((Library.source === "soundcloud" || Library.source === "youtube-music") && Library.savedSongs.count > 0)
                     ? Library.savedSongs.at(0).artworkUrl : ""
         facts: Format.joined([Format.songCount(Library.savedSongs.count), Format.totalDuration(Library.savedSongs.totalDurationMs)], "  •  ")
 

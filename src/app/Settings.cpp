@@ -139,9 +139,11 @@ void Settings::load()
     m_debuggingEnabled = stored<bool>(m_store, "debuggingEnabled", m_debuggingEnabled);
     {
         const QString raw = stored<QString>(m_store, "musicSource", m_musicSource);
-        m_musicSource = raw == QLatin1StringView("soundcloud") ? QStringLiteral("soundcloud") : QStringLiteral("spotify");
+        m_musicSource = oneOf(raw, {QStringLiteral("spotify"), QStringLiteral("soundcloud"), QStringLiteral("youtube-music")}, QStringLiteral("spotify"));
     }
     m_soundcloudClientId = stored<QString>(m_store, "soundcloudClientId", m_soundcloudClientId);
+    m_youtubeClientId = stored<QString>(m_store, "youtubeClientId", m_youtubeClientId);
+    m_youtubeClientSecret = stored<QString>(m_store, "youtubeClientSecret", m_youtubeClientSecret);
     m_pinnedPlaylistsExpanded = stored<bool>(m_store, "pinnedPlaylistsExpanded", m_pinnedPlaylistsExpanded);
     m_allPlaylistsExpanded = stored<bool>(m_store, "allPlaylistsExpanded", m_allPlaylistsExpanded);
     {
@@ -232,7 +234,7 @@ void Settings::setVisualizerShape(const QString &raw)
 
 void Settings::setMusicSource(const QString &raw)
 {
-    const QString value = raw == QLatin1StringView("soundcloud") ? QStringLiteral("soundcloud") : QStringLiteral("spotify");
+    const QString value = oneOf(raw, {QStringLiteral("spotify"), QStringLiteral("soundcloud"), QStringLiteral("youtube-music")}, QStringLiteral("spotify"));
     if (m_musicSource == value) {
         return;
     }
@@ -249,6 +251,26 @@ void Settings::setSoundcloudClientId(const QString &value)
     m_soundcloudClientId = value;
     m_store.setValue(QStringLiteral("soundcloudClientId"), value);
     emit soundcloudClientIdChanged();
+}
+
+void Settings::setYoutubeClientId(const QString &value)
+{
+    if (m_youtubeClientId == value) {
+        return;
+    }
+    m_youtubeClientId = value;
+    m_store.setValue(QStringLiteral("youtubeClientId"), value);
+    emit youtubeClientIdChanged();
+}
+
+void Settings::setYoutubeClientSecret(const QString &value)
+{
+    if (m_youtubeClientSecret == value) {
+        return;
+    }
+    m_youtubeClientSecret = value;
+    m_store.setValue(QStringLiteral("youtubeClientSecret"), value);
+    emit youtubeClientSecretChanged();
 }
 
 void Settings::setVisualizerSensitivity(double raw)

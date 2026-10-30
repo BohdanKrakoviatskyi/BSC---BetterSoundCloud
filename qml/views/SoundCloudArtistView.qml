@@ -16,9 +16,12 @@ Flickable {
     }
 
     readonly property real margin: Appearance.sizes.pageMargin
-    readonly property soundCloudArtistProfile artist: SoundCloud.currentArtist
-    readonly property bool loading: SoundCloud.loadingArtist
+    readonly property bool isYouTube: Library.source === "youtube-music" || Library.currentArtist.isYouTubeMusic
+    readonly property soundCloudArtistProfile artist: isYouTube ? YouTubeMusic.currentArtist : SoundCloud.currentArtist
+    readonly property bool loading: isYouTube ? YouTubeMusic.loadingArtist : SoundCloud.loadingArtist
     readonly property bool hasData: artist.valid
+    readonly property SongListModel artistTracksModel: isYouTube ? YouTubeMusic.artistTracks : SoundCloud.artistTracks
+    readonly property PlaylistListModel artistPlaylistsModel: isYouTube ? YouTubeMusic.artistPlaylists : SoundCloud.artistPlaylists
 
     /// whether something `top` down the page and `height` tall is in sight,
     /// or within `slack` of it
@@ -251,13 +254,13 @@ Flickable {
                     burst: "play"
                     text: "Play"
                     wavy: true
-                    enabled: SoundCloud.artistTracks.count > 0
-                    onClicked: Player.playFromModel(SoundCloud.artistTracks, 0)
+                    enabled: root.artistTracksModel.count > 0
+                    onClicked: Player.playFromModel(root.artistTracksModel, 0)
                 }
 
                 TextButton {
                     symbol: "open_in_new"
-                    text: "SoundCloud"
+                    text: root.isYouTube ? "YouTube" : "SoundCloud"
                     variant: TextButton.Tonal
                     visible: root.artist.permalink.toString().length > 0
                     onClicked: Qt.openUrlExternally(root.artist.permalink)
@@ -338,7 +341,7 @@ Flickable {
             x: root.margin
             width: root.width - 2 * root.margin
             height: visible ? tracksTitleRow.implicitHeight + 26 : 0
-            visible: SoundCloud.artistTracks.count > 0
+            visible: root.artistTracksModel.count > 0
 
             Row {
                 id: tracksTitleRow
@@ -362,7 +365,7 @@ Flickable {
                     variant: TextButton.Text
                     symbol: "arrow_forward"
                     text: "All"
-                    visible: SoundCloud.artistTracks.count > 0
+                    visible: root.artistTracksModel.count > 0
                     onClicked: UiState.goToArtistTracks(Library.currentArtist)
                 }
             }
@@ -370,20 +373,20 @@ Flickable {
 
         EmptyState {
             anchors.horizontalCenter: parent.horizontalCenter
-            visible: !root.loading && root.hasData && SoundCloud.artistTracks.count === 0
+            visible: !root.loading && root.hasData && root.artistTracksModel.count === 0
             height: visible ? implicitHeight : 0
             symbol: "music_note"
             title: "No tracks found"
         }
 
         Repeater {
-            model: Math.min(20, SoundCloud.artistTracks.count)
+            model: Math.min(20, root.artistTracksModel.count)
 
             SongRow {
                 x: root.margin
                 width: root.width - 2 * root.margin
-                songs: SoundCloud.artistTracks
-                song: SoundCloud.artistTracks.at(index)
+                songs: root.artistTracksModel
+                song: root.artistTracksModel.at(index)
             }
         }
 
@@ -391,7 +394,7 @@ Flickable {
         Item {
             width: root.width
             height: visible ? playlistsShelf.implicitHeight : 0
-            visible: SoundCloud.artistPlaylists.count > 0
+            visible: root.artistPlaylistsModel.count > 0
 
             Shelf {
                 id: playlistsShelf
@@ -399,7 +402,7 @@ Flickable {
                 title: "Playlists"
                 symbol: "playlist_play"
                 iconShape: "cookie9"
-                model: SoundCloud.artistPlaylists
+                model: root.artistPlaylistsModel
                 onScreen: root.reaches(column.y + y, height, root.height)
                 nearScreen: root.reaches(column.y + y, height, root.height * 1.5)
 
@@ -433,7 +436,7 @@ Flickable {
             x: root.margin
             width: root.width - 2 * root.margin
             height: visible ? likesTitleRow.implicitHeight + 26 : 0
-            visible: SoundCloud.artistLikes.count > 0
+            visible: !root.isYouTube && SoundCloud.artistLikes.count > 0
 
             Row {
                 id: likesTitleRow
@@ -463,7 +466,7 @@ Flickable {
         }
 
         Repeater {
-            model: SoundCloud.artistLikes.count > 0 ? Math.min(20, SoundCloud.artistLikes.count) : 0
+            model: (!root.isYouTube && SoundCloud.artistLikes.count > 0) ? Math.min(20, SoundCloud.artistLikes.count) : 0
 
             SongRow {
                 x: root.margin

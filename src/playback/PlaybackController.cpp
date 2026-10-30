@@ -5,6 +5,7 @@
 #include "app/Settings.h"
 #include "core/PlaybackCore.h"
 #include "provider/SoundCloud.h"
+#include "provider/YouTubeMusic.h"
 #include "spotify/SpotifySession.h"
 
 #include <QLoggingCategory>
@@ -157,6 +158,11 @@ void PlaybackController::setStatus(const QString &status)
 void PlaybackController::attachSoundCloud(SoundCloud *soundcloud)
 {
     m_soundcloud = soundcloud;
+}
+
+void PlaybackController::attachYouTubeMusic(YouTubeMusic *youtubeMusic)
+{
+    m_youtubeMusic = youtubeMusic;
 }
 
 // --- state ---------------------------------------------------------------------------
@@ -399,7 +405,7 @@ void PlaybackController::preloadNextTrack()
     if (!next) {
         return;
     }
-    if (!next->isLocalFile() && !next->isSoundCloud()) {
+    if (!next->isLocalFile() && !next->isSoundCloud() && !next->isYouTubeMusic()) {
         try {
             m_core->preloadTrack(next->uri, m_settings->crossfadeEnabled());
         } catch (const SpotifyError &error) {
@@ -412,6 +418,13 @@ void PlaybackController::preloadNextTrack()
             } catch (...) {
             }
         }(m_soundcloud, *next));
+    } else if (next->isYouTubeMusic() && m_youtubeMusic && m_settings->crossfadeEnabled()) {
+        detach([](YouTubeMusic *yt, Song s) -> QCoro::Task<> {
+            try {
+                co_await yt->streamPath(s);
+            } catch (...) {
+            }
+        }(m_youtubeMusic, *next));
     }
 }
 
@@ -658,6 +671,30 @@ QCoro::Task<> PlaybackController::runStartPlayback(Song song, CancelToken token,
                 throwIfCancelled(token);
                 co_await m_core->playFile(path);
             }
+        } else if (song.isYouTubeMusic()) {
+            if (m_youtubeMusic == nullptr) {
+                throw SpotifyError(SpotifyError::Kind::Core,
+                                   QStringLiteral("YouTube Music is not available in this build."));
+            }
+            const QString path = co_await m_youtubeMusic->streamPath(song);
+            throwIfCancelled(token);
+            bool retry = false;
+            try {
+                if (crossfadeDurationMs > 0) {
+                    co_await m_core->crossfadeFile(path, crossfadeDurationMs);
+                } else {
+                    co_await m_core->playFile(path);
+                }
+            } catch (const SpotifyError &error) {
+                if (error.kind() != SpotifyError::Kind::Superseded) {
+                    throw;
+                }
+                retry = true;
+            }
+            if (retry) {
+                throwIfCancelled(token);
+                co_await m_core->playFile(path);
+            }
         } else {
             co_await m_session->ensureFreshPlaybackConnection();
             // another song may have been chosen while the connection was
@@ -872,6 +909,14 @@ QCoro::Task<> PlaybackController::restartAudioOutput(CancelToken token)
                                    QStringLiteral("SoundCloud is not available in this build."));
             }
             const QString path = co_await m_soundcloud->streamPath(song);
+            throwIfCancelled(token);
+            co_await m_core->playFile(path);
+        } else if (song.isYouTubeMusic()) {
+            if (m_youtubeMusic == nullptr) {
+                throw SpotifyError(SpotifyError::Kind::Core,
+                                   QStringLiteral("YouTube Music is not available in this build."));
+            }
+            const QString path = co_await m_youtubeMusic->streamPath(song);
             throwIfCancelled(token);
             co_await m_core->playFile(path);
         } else {
@@ -1253,6 +1298,15 @@ QCoro::Task<> PlaybackController::runLoadLyrics(Song song, CancelToken token)
             } catch (const SpotifyError &) {
             }
         }
+    } else if (song.isYouTubeMusic()) {
+        if (m_youtubeMusic != nullptr) {
+            try {
+                lyrics = co_await m_youtubeMusic->lyrics(song);
+            } catch (const Cancelled &) {
+                co_return;
+            } catch (const SpotifyError &) {
+            }
+        }
     } else {
         try {
             lyrics = Lyrics::fromJson((co_await m_core->lyricsJson(song.uri)).toUtf8());
@@ -1272,7 +1326,7 @@ QCoro::Task<> PlaybackController::runLoadLyrics(Song song, CancelToken token)
         co_return;
     }
     m_lyricsRequest.finish(token);
-    if (!song.isLocalFile() && (!lyrics || (song.isSoundCloud() && !lyrics->synchronized))) {
+    if (!song.isLocalFile() && (!lyrics || ((song.isSoundCloud() || song.isYouTubeMusic()) && !lyrics->synchronized))) {
         if (lyrics && !lyrics->synchronized)
             m_plainFallback = std::move(lyrics);
         loadOnlineLyrics(song);

@@ -262,6 +262,16 @@ function Invoke-WindowsBuild {
         if (Test-Path -LiteralPath $dependencyPrefix\bin) {
             Copy-Item -Path "$dependencyPrefix\bin\*.dll" -Destination $installBin -Force
         }
+        $ytdlpCandidates = @(
+            "$env:LOCALAPPDATA\Resonance\yt-dlp.exe",
+            (Join-Path $sourceRoot 'third_party\yt-dlp\yt-dlp.exe')
+        )
+        foreach ($ytdlpCandidate in $ytdlpCandidates) {
+            if (Test-Path -LiteralPath $ytdlpCandidate -PathType Leaf) {
+                Copy-Item -LiteralPath $ytdlpCandidate -Destination (Join-Path $installBin 'yt-dlp.exe') -Force
+                break
+            }
+        }
         if ($rustTarget -eq 'x86_64-pc-windows-gnu') {
             foreach ($runtime in @('libstdc++-6.dll', 'libgcc_s_seh-1.dll', 'libwinpthread-1.dll')) {
                 $runtimePath = Join-Path $mingw.Directory $runtime

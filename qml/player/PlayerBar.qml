@@ -322,11 +322,11 @@ Item {
 
                     HoverHandler {
                         id: pbTitleHover
-                        cursorShape: Library.source === "soundcloud" && Player.hasSong
+                        cursorShape: (Library.source === "soundcloud" || Library.source === "youtube-music") && Player.hasSong
                                      ? Qt.PointingHandCursor : Qt.ArrowCursor
                     }
                     TapHandler {
-                        enabled: Library.source === "soundcloud" && Player.hasSong
+                        enabled: (Library.source === "soundcloud" || Library.source === "youtube-music") && Player.hasSong
                         onTapped: UiState.goToTrack(Player.currentSong)
                     }
                 }
@@ -335,7 +335,7 @@ Item {
                     text: Player.hasSong ? Player.currentSong.artists : "Choose something to play"
                     elide: Text.ElideRight
                     font.pixelSize: Appearance.fontSize.smaller
-                    color: pbArtistHover.hovered && Library.source === "soundcloud" && Player.hasSong
+                    color: pbArtistHover.hovered && (Library.source === "soundcloud" || Library.source === "youtube-music") && Player.hasSong
                            ? root.scheme.primary
                            : root.scheme.onSurfaceVariant
 
@@ -345,11 +345,11 @@ Item {
 
                     HoverHandler {
                         id: pbArtistHover
-                        cursorShape: Library.source === "soundcloud" && Player.hasSong
+                        cursorShape: (Library.source === "soundcloud" || Library.source === "youtube-music") && Player.hasSong
                                      ? Qt.PointingHandCursor : Qt.ArrowCursor
                     }
                     TapHandler {
-                        enabled: Library.source === "soundcloud" && Player.hasSong
+                        enabled: (Library.source === "soundcloud" || Library.source === "youtube-music") && Player.hasSong
                         onTapped: UiState.goToArtist(Player.currentSong)
                     }
                 }

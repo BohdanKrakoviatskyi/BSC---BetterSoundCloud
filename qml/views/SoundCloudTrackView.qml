@@ -16,9 +16,11 @@ Flickable {
     }
 
     readonly property real margin: Appearance.sizes.pageMargin
-    readonly property soundCloudTrackDetails details: SoundCloud.currentTrackDetails
     readonly property song track: Library.currentTrack
-    readonly property bool loading: SoundCloud.loadingTrackDetails
+    readonly property bool isYouTube: track.isYouTubeMusic || Library.source === "youtube-music"
+    readonly property soundCloudTrackDetails details: isYouTube ? YouTubeMusic.currentTrackDetails : SoundCloud.currentTrackDetails
+    readonly property bool loading: isYouTube ? YouTubeMusic.loadingTrackDetails : SoundCloud.loadingTrackDetails
+    readonly property SongListModel relatedModel: isYouTube ? YouTubeMusic.relatedTracks : SoundCloud.relatedTracks
     readonly property bool isCurrent: Player.currentSong.uri === root.track.uri
 
     function reaches(top: real, height: real, slack: real): bool {
@@ -136,7 +138,7 @@ Flickable {
                                 }
                                 StyledText {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: "SOUNDCLOUD TRACK"
+                                    text: root.isYouTube ? "YOUTUBE MUSIC TRACK" : "SOUNDCLOUD TRACK"
                                     font.pixelSize: 10
                                     font.weight: Font.Bold
                                     color: Appearance.colors.onPrimaryContainer
@@ -219,16 +221,16 @@ Flickable {
                             wavy: true
                             onClicked: {
                                 if (root.isCurrent && Player.hasSong) {
-                                    Player.playPause()
+                                    Player.togglePlayback()
                                 } else {
-                                    Player.play(root.track)
+                                    Player.playSong(root.track)
                                 }
                             }
                         }
 
                         TextButton {
                             symbol: "open_in_new"
-                            text: "SoundCloud"
+                            text: root.isYouTube ? "YouTube" : "SoundCloud"
                             variant: TextButton.Tonal
                             visible: root.details.permalink.toString().length > 0
                             onClicked: Qt.openUrlExternally(root.details.permalink)
@@ -421,7 +423,7 @@ Flickable {
             id: relatedCarouselArea
             width: root.width
             height: carouselColumn.implicitHeight + 10
-            visible: SoundCloud.relatedTracks.count > 0 || root.loading
+            visible: root.relatedModel.count > 0 || root.loading
 
             Column {
                 id: carouselColumn
@@ -455,7 +457,7 @@ Flickable {
 
                         StyledText {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: "(" + SoundCloud.relatedTracks.count + ")"
+                            text: "(" + root.relatedModel.count + ")"
                             font.pixelSize: Appearance.fontSize.small
                             color: Appearance.colors.onSurfaceVariant
                         }
@@ -496,7 +498,7 @@ Flickable {
                     rightMargin: root.margin
                     boundsBehavior: Flickable.StopAtBounds
                     clip: false
-                    model: SoundCloud.relatedTracks
+                    model: root.relatedModel
 
                     Behavior on contentX {
                         NumberAnimation { duration: Appearance.duration(300); easing.type: Easing.OutCubic }
@@ -505,7 +507,7 @@ Flickable {
                     delegate: Item {
                         id: cardDelegate
                         required property int index
-                        readonly property song track: SoundCloud.relatedTracks.at(index)
+                        readonly property song track: root.relatedModel.at(index)
                         readonly property song modelData: track
 
                         readonly property bool isCurrentTrack: Player.currentSong.uri === modelData.uri
@@ -577,9 +579,9 @@ Flickable {
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: {
                                                 if (cardDelegate.isCurrentTrack) {
-                                                    Player.playPause()
+                                                    Player.togglePlayback()
                                                 } else {
-                                                    Player.playFromModel(SoundCloud.relatedTracks, cardDelegate.index)
+                                                    Player.playFromModel(root.relatedModel, cardDelegate.index)
                                                 }
                                             }
                                         }

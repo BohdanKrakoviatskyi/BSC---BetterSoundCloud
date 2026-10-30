@@ -446,6 +446,34 @@ Flickable {
             }
         }
 
+        Repeater {
+            model: Library.source === "youtube-music" ? YouTubeMusic.discoverRows : []
+
+            Shelf {
+                id: ytShelf
+                required property youTubeDiscoverRow modelData
+                width: root.width
+                onScreen: root.reaches(column.y + y, height, 0)
+                nearScreen: root.reaches(column.y + y, height, root.height / 2)
+                Reveal.shown: ytShelf.modelData.tracks.length > 0
+                title: ytShelf.modelData.title
+                symbol: "music_video"
+                iconShape: "clover4"
+                model: ytShelf.modelData.tracks
+                delegate: MediaCard {
+                    required property int index
+                    required property song modelData
+                    artworkUrl: modelData.artworkUrl
+                    title: modelData.name
+                    subtitle: modelData.artists
+                    current: Player.hasSong && Player.currentSong.uri === modelData.uri
+                    badgeSymbol: current && Player.playing ? "graphic_eq" : "play_arrow"
+                    onClicked: Player.playSong(modelData)
+                    onSecondaryClicked: SongMenus.open(modelData, false)
+                }
+            }
+        }
+
         Shelf {
             width: root.width
             onScreen: root.reaches(column.y + y, height, 0)

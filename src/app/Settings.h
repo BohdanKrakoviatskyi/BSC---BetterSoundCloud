@@ -54,12 +54,14 @@ class Settings : public QObject {
     Q_PROPERTY(bool showWindowControls READ showWindowControls WRITE setShowWindowControls NOTIFY showWindowControlsChanged FINAL)
     Q_PROPERTY(bool nativeTitleBar READ nativeTitleBar WRITE setNativeTitleBar NOTIFY nativeTitleBarChanged FINAL)
     Q_PROPERTY(bool trayIcon READ trayIcon WRITE setTrayIcon NOTIFY trayIconChanged FINAL)
-    /// the service the library pages are showing: "spotify" or "soundcloud".
+    /// the service the library pages are showing: "spotify", "soundcloud", or "youtube-music".
     /// kept so the app opens on the one that was last used
     Q_PROPERTY(QString musicSource READ musicSource WRITE setMusicSource NOTIFY musicSourceChanged FINAL)
     /// the app's own soundcloud client id, which the sidecar needs to sign a
     /// stream url. the access token is not kept here: the sidecar holds it
     Q_PROPERTY(QString soundcloudClientId READ soundcloudClientId WRITE setSoundcloudClientId NOTIFY soundcloudClientIdChanged FINAL)
+    Q_PROPERTY(QString youtubeClientId READ youtubeClientId WRITE setYoutubeClientId NOTIFY youtubeClientIdChanged FINAL)
+    Q_PROPERTY(QString youtubeClientSecret READ youtubeClientSecret WRITE setYoutubeClientSecret NOTIFY youtubeClientSecretChanged FINAL)
     Q_PROPERTY(QString customBackgroundPath READ customBackgroundPath WRITE setCustomBackgroundPath NOTIFY customBackgroundPathChanged FINAL)
     /// the same path as a url an Image or AnimatedImage can load. built here
     /// rather than in qml, where "file://" + "C:/..." makes the drive letter a
@@ -152,12 +154,15 @@ public:
     bool trayIcon() const { return m_trayIcon; }
     void setTrayIcon(bool value);
 
-    /// which service the library pages show. anything but "soundcloud" is
-    /// spotify, so a settings file with something odd in it still works
+    /// which service the library pages show: "spotify", "soundcloud" or "youtube-music".
     QString musicSource() const { return m_musicSource; }
     void setMusicSource(const QString &value);
     QString soundcloudClientId() const { return m_soundcloudClientId; }
     void setSoundcloudClientId(const QString &value);
+    QString youtubeClientId() const { return m_youtubeClientId; }
+    void setYoutubeClientId(const QString &value);
+    QString youtubeClientSecret() const { return m_youtubeClientSecret; }
+    void setYoutubeClientSecret(const QString &value);
     QString customBackgroundPath() const { return m_customBackgroundPath; }
     void setCustomBackgroundPath(const QString &value);
     QUrl customBackgroundUrl() const;
@@ -201,6 +206,8 @@ signals:
     void trayIconChanged();
     void musicSourceChanged();
     void soundcloudClientIdChanged();
+    void youtubeClientIdChanged();
+    void youtubeClientSecretChanged();
     void customBackgroundPathChanged();
     void customBackgroundsChanged();
     void customBackgroundDimChanged();
@@ -242,6 +249,8 @@ private:
     bool m_trayIcon = true;
     QString m_musicSource = QStringLiteral("spotify");
     QString m_soundcloudClientId;
+    QString m_youtubeClientId;
+    QString m_youtubeClientSecret;
     QString m_customBackgroundPath;
     QStringList m_customBackgrounds;
     double m_customBackgroundDim = 0.35;

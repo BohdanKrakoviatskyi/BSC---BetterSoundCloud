@@ -43,15 +43,16 @@ Item {
                     anchors.leftMargin: 14
                     anchors.verticalCenter: parent.verticalCenter
                     segmentHeight: 30
-                    horizontalPadding: 18
+                    horizontalPadding: 14
                     iconSize: 18
-                    currentIndex: Library.source === "soundcloud" ? 1 : 0
+                    currentIndex: Library.source === "soundcloud" ? 1 : (Library.source === "youtube-music" ? 2 : 0)
                     segments: [
                         Segment { symbol: "spotify"; tooltip: "Spotify" },
-                        Segment { symbol: "soundcloud"; tooltip: "SoundCloud" }
+                        Segment { symbol: "soundcloud"; tooltip: "SoundCloud" },
+                        Segment { symbol: "youtube_music"; tooltip: "YouTube Music" }
                     ]
                     onActivated: (index) => {
-                        const target = index === 1 ? "soundcloud" : "spotify"
+                        const target = index === 1 ? "soundcloud" : (index === 2 ? "youtube-music" : "spotify")
                         Library.setSource(target)
                     }
                 }
@@ -99,82 +100,6 @@ Item {
                 selected: root.isSelected(Library.Page.LocalFiles) || root.isSelected(Library.Page.LocalTracks)
                           || (root.isSelected(Library.Page.Playlist) && Library.selectedPlaylist.isLocal)
                 onClicked: Library.showLocalFiles()
-            }
-
-            SectionLabel {
-                width: parent.width
-                text: "Playlists"
-                trailing: IconButton {
-                    symbol: "add"
-                    size: 32
-                    iconSize: 20
-                    iconColor: Appearance.colors.primary
-                    onClicked: UiState.beginCreatePlaylist()
-
-                    tooltip: "New playlist"
-                }
-            }
-
-            NavigationItem {
-                width: parent.width
-                text: "Pinned Playlists"
-                iconShape: "flower"
-                symbol: "push_pin"
-                selected: root.isSelected(Library.Page.PinnedPlaylists)
-                onClicked: Library.showPinnedPlaylists()
-                trailing: IconButton {
-                    symbol: "expand_more"
-                    size: 28
-                    iconSize: 20
-                    rotation: Settings.pinnedPlaylistsExpanded ? 0 : -90
-                    onClicked: Settings.pinnedPlaylistsExpanded = !Settings.pinnedPlaylistsExpanded
-
-                    Behavior on rotation {
-                        ElementMoveSmall {}
-                    }
-                }
-            }
-
-            // the pinned group opens and shuts on a spring: past its height
-            // and back opening, and a rebound shutting
-            Item {
-                width: parent.width
-                height: Settings.pinnedPlaylistsExpanded ? pinned.implicitHeight : 0
-                visible: height > 0.5
-                clip: true
-
-                Behavior on height {
-                    enabled: !Appearance.performanceMode
-                    SpringAnimation { spring: 4; damping: 0.3; epsilon: 0.5 }
-                }
-
-                Column {
-                    id: pinned
-                    width: parent.width
-                    spacing: 2
-                    opacity: Settings.pinnedPlaylistsExpanded ? 1 : 0
-
-                    Behavior on opacity {
-                        NumberAnimation { duration: Appearance.duration(220); easing.type: Easing.OutCubic }
-                    }
-
-                    StyledText {
-                        Reveal.shown: Library.pinnedPlaylists.count === 0
-                        leftPadding: 28
-                        height: 28
-                        text: "No playlists"
-                        font.pixelSize: Appearance.fontSize.smaller
-                        color: Appearance.colors.onSurfaceVariant
-                    }
-
-                    Repeater {
-                        model: Library.pinnedPlaylists
-
-                        PlaylistNavItem {
-                            width: parent.width
-                        }
-                    }
-                }
             }
 
             NavigationItem {

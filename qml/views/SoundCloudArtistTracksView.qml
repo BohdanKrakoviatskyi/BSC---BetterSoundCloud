@@ -6,16 +6,23 @@ import Resonance
 SongListPage {
     id: root
 
-    songs: SoundCloud.artistTracks
-    loading: SoundCloud.loadingArtist && SoundCloud.artistTracks.count === 0
-    loadingMore: SoundCloud.loadingMoreArtistTracks
-    showsEmpty: !SoundCloud.loadingArtist && SoundCloud.artistTracks.count === 0
+    readonly property bool isYouTube: Library.source === "youtube-music" || Library.currentArtist.isYouTubeMusic
+    readonly property SongListModel tracksModel: isYouTube ? YouTubeMusic.artistTracks : SoundCloud.artistTracks
+
+    songs: tracksModel
+    loading: (isYouTube ? YouTubeMusic.loadingArtist : SoundCloud.loadingArtist) && tracksModel.count === 0
+    loadingMore: isYouTube ? YouTubeMusic.loadingMoreArtistTracks : SoundCloud.loadingMoreArtistTracks
+    showsEmpty: !(isYouTube ? YouTubeMusic.loadingArtist : SoundCloud.loadingArtist) && tracksModel.count === 0
     emptySymbol: "music_note"
     emptyTitle: "No tracks"
     emptyDescription: "This artist has no tracks yet."
 
     onLoadMoreRequested: {
-        if (SoundCloud.hasMoreArtistTracks && !SoundCloud.loadingMoreArtistTracks) {
+        if (root.isYouTube) {
+            if (YouTubeMusic.hasMoreArtistTracks && !YouTubeMusic.loadingMoreArtistTracks) {
+                YouTubeMusic.loadMoreArtistTracks()
+            }
+        } else if (SoundCloud.hasMoreArtistTracks && !SoundCloud.loadingMoreArtistTracks) {
             SoundCloud.loadMoreArtistTracks()
         }
     }
@@ -23,14 +30,14 @@ SongListPage {
     hero: CollectionHero {
         id: hero
         kind: "TRACKS"
-        title: "Tracks by " + (Library.currentArtist.name.length > 0 ? Library.currentArtist.name : SoundCloud.currentArtist.fullName)
-        artworkUrl: SoundCloud.artistTracks.count > 0
-                    ? SoundCloud.artistTracks.at(0).artworkUrl
+        title: "Tracks by " + (Library.currentArtist.name.length > 0 ? Library.currentArtist.name : (root.isYouTube ? YouTubeMusic.currentArtist.fullName : SoundCloud.currentArtist.fullName))
+        artworkUrl: root.tracksModel.count > 0
+                    ? root.tracksModel.at(0).artworkUrl
                     : Library.currentArtist.artworkUrl
         facts: Format.joined([
             Library.currentArtist.name,
-            Format.songCount(SoundCloud.artistTracks.count),
-            Format.totalDuration(SoundCloud.artistTracks.totalDurationMs)
+            Format.songCount(root.tracksModel.count),
+            Format.totalDuration(root.tracksModel.totalDurationMs)
         ], "  •  ")
 
         artwork: Rectangle {
@@ -60,8 +67,8 @@ SongListPage {
                 symbol: "play_arrow"
                 burst: "play"
                 text: "Play"
-                enabled: SoundCloud.artistTracks.count > 0
-                onClicked: Player.playFromModel(SoundCloud.artistTracks, 0)
+                enabled: root.tracksModel.count > 0
+                onClicked: Player.playFromModel(root.tracksModel, 0)
             }
         ]
     }

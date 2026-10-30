@@ -11,7 +11,15 @@ Flickable {
     // background of its own; they start below it
     topMargin: Appearance.sizes.topBarHeight
 
-    property int serviceIndex: Settings.musicSource === "soundcloud" ? 1 : 0
+    property int serviceIndex: Settings.musicSource === "soundcloud" ? 1 : (Settings.musicSource === "youtube-music" ? 2 : 0)
+    property bool showCustomYoutubeKeys: false
+
+    Connections {
+        target: Library
+        function onSourceChanged() {
+            root.serviceIndex = Library.source === "soundcloud" ? 1 : (Library.source === "youtube-music" ? 2 : 0)
+        }
+    }
 
     contentHeight: Math.max(height, column.implicitHeight + 72)
     boundsBehavior: Flickable.StopAtBounds
@@ -96,11 +104,12 @@ Flickable {
             currentIndex: root.serviceIndex
             segments: [
                 Segment { text: "Spotify" },
-                Segment { text: "SoundCloud" }
+                Segment { text: "SoundCloud" },
+                Segment { text: "YouTube Music" }
             ]
             onActivated: (index) => {
                 root.serviceIndex = index
-                Library.setSource(index === 1 ? "soundcloud" : "spotify")
+                Library.setSource(index === 1 ? "soundcloud" : (index === 2 ? "youtube-music" : "spotify"))
             }
         }
 
@@ -332,6 +341,104 @@ Flickable {
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
                 text: SoundCloud.statusMessage
+                font.pixelSize: Appearance.fontSize.smaller
+                color: Appearance.colors.primary
+            }
+        }
+
+        Column {
+            visible: root.serviceIndex === 2
+            width: parent.width
+            spacing: 20
+
+            StyledText {
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+                text: "Connect your YouTube Music account with one click — or use your own Google Cloud OAuth Client ID and Secret."
+                color: Appearance.colors.onSurfaceVariant
+            }
+
+            TextButton {
+                anchors.horizontalCenter: parent.horizontalCenter
+                variant: (YouTubeMusic.browserLoginActive || YouTubeMusic.busy) ? TextButton.Tonal : TextButton.Filled
+                symbol: (YouTubeMusic.browserLoginActive || YouTubeMusic.busy) ? "" : "play_circle"
+                busy: YouTubeMusic.browserLoginActive || YouTubeMusic.busy
+                text: YouTubeMusic.busy
+                      ? "Connecting YouTube Music…"
+                      : (YouTubeMusic.browserLoginActive
+                          ? "Waiting for Google sign-in"
+                          : "Login with YouTube Music")
+                onClicked: {
+                    if (YouTubeMusic.browserLoginActive) {
+                        YouTubeMusic.cancelBrowserLogin()
+                    } else {
+                        YouTubeMusic.loginWithBrowser(ytClientIdInput.text, ytClientSecretInput.text)
+                    }
+                }
+            }
+
+            StyledText {
+                visible: YouTubeMusic.browserLoginActive
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+                text: "Sign in to your Google account in the secure window opened by the app. The app connects automatically when sign-in is complete. Click the button again to cancel."
+                font.pixelSize: Appearance.fontSize.smaller
+                color: Appearance.colors.onSurfaceVariant
+            }
+
+            TextButton {
+                anchors.horizontalCenter: parent.horizontalCenter
+                variant: TextButton.Text
+                symbol: root.showCustomYoutubeKeys ? "expand_less" : "key"
+                text: root.showCustomYoutubeKeys ? "Hide custom OAuth keys" : "I have my own Google OAuth keys"
+                onClicked: root.showCustomYoutubeKeys = !root.showCustomYoutubeKeys
+            }
+
+            Column {
+                visible: root.showCustomYoutubeKeys
+                width: parent.width
+                spacing: 14
+
+                Step {
+                    number: 1
+                    title: "Google OAuth Client ID (Desktop app)"
+                    detail: "Create an OAuth 2.0 Client ID of type Desktop app in Google Cloud Console with YouTube Data API v3 enabled."
+                }
+
+                OutlinedTextField {
+                    id: ytClientIdInput
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: Math.min(460, parent.width)
+                    placeholder: "Google OAuth Client ID"
+                    text: YouTubeMusic.clientId
+                    onTextEdited: YouTubeMusic.clientId = text
+                }
+
+                Step {
+                    number: 2
+                    title: "Google OAuth Client Secret"
+                    detail: "Paste the Client Secret from your Google Cloud Desktop app credential."
+                }
+
+                OutlinedTextField {
+                    id: ytClientSecretInput
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: Math.min(460, parent.width)
+                    placeholder: "Google OAuth Client Secret"
+                    text: YouTubeMusic.clientSecret
+                    onTextEdited: YouTubeMusic.clientSecret = text
+                }
+            }
+
+            StyledText {
+                visible: YouTubeMusic.statusMessage.length > 0
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+                text: YouTubeMusic.statusMessage
                 font.pixelSize: Appearance.fontSize.smaller
                 color: Appearance.colors.primary
             }

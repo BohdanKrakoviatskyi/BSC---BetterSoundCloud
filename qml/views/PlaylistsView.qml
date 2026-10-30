@@ -40,7 +40,7 @@ GridView {
     model: source.count + leading
 
     Component.onCompleted: {
-        if (Library.source === "soundcloud" && source.count === 0 && !Library.loadingPlaylists) {
+        if ((Library.source === "soundcloud" || Library.source === "youtube-music") && source.count === 0 && !Library.loadingPlaylists) {
             Library.retryLoadingPlaylists()
         }
     }
