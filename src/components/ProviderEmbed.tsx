@@ -1,0 +1,111 @@
+import { useEffect, useRef } from 'react';
+import { publishProviderState, registerProviderControls } from '../lib/provider-player';
+import type { Track } from '../types';
+
+type SpotifyController = {
+  play(): void;
+  pause(): void;
+  seek(seconds: number): void;
+  addListener(name: 'playback_update', callback: (event: { data: { isPaused: boolean; isBuffering: boolean; position: number; duration: number } }) => void): void;
+  destroy(): void;
+};
+type SpotifyIframeAPI = { createController(element: HTMLElement, options: { uri: string; width: string; height: number }, callback: (controller: SpotifyController) => void): void };
+type YouTubePlayer = {
+  playVideo(): void;
+  pauseVideo(): void;
+  seekTo(seconds: number, allowSeekAhead: boolean): void;
+  setVolume(volume: number): void;
+  destroy(): void;
+  getCurrentTime(): number;
+  getDuration(): number;
+  getPlayerState(): number;
+};
+type YouTubeAPI = { Player: new (element: HTMLElement, options: { videoId: string; width: string; height: number; playerVars: Record<string, number>; events: Record<string, (event: { target: YouTubePlayer; data?: number }) => void> }) => YouTubePlayer; PlayerState: { ENDED: number; PLAYING: number; PAUSED: number; BUFFERING: number } };
+
+declare global {
+  interface Window {
+    onSpotifyIframeApiReady?: (api: SpotifyIframeAPI) => void;
+    SpotifyIframeApi?: SpotifyIframeAPI;
+    onYouTubeIframeAPIReady?: () => void;
+    YT?: YouTubeAPI;
+  }
+}
+
+function script(id: string, src: string): Promise<void> {
+  const found = document.getElementById(id) as HTMLScriptElement | null;
+  if (found?.dataset.loaded === 'true') return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const element = found ?? Object.assign(document.createElement('script'), { id, src, async: true });
+    element.addEventListener('load', () => { element.dataset.loaded = 'true'; resolve(); }, { once: true });
+    element.addEventListener('error', () => reject(new Error(`Could not load ${id}`)), { once: true });
+    if (!found) document.head.append(element);
+  });
+}
+
+export function usesProviderEmbed(track: Track) {
+  return (track.source === 'youtube' && track.playback !== 'direct') || (track.source === 'spotify' && !track.preview);
+}
+
+export function ProviderEmbed({ track }: { track: Track }) {
+  const host = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!usesProviderEmbed(track) || !host.current || !track.nativeId) return;
+    let disposed = false;
+    let unregister = () => {};
+    let endedSent = false;
+    const report = (playing: boolean, loading: boolean, position = 0, duration = track.duration, ended = false) => {
+      if (playing) endedSent = false;
+      const endedNow = ended && !endedSent;
+      if (endedNow) endedSent = true;
+      publishProviderState({ playing, loading, position, duration, ended: endedNow });
+    }
+
+    if (track.source === 'youtube') {
+      const previousReady = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => {
+        previousReady?.();
+        const YT = window.YT;
+        if (disposed || !YT || !host.current) return;
+        const player = new YT.Player(host.current, {
+          videoId: track.nativeId!, width: '100%', height: 270,
+          playerVars: { autoplay: 0, controls: 1, playsinline: 1 },
+          events: {
+            onReady: ({ target }) => {
+              const timer = window.setInterval(() => {
+                const state = target.getPlayerState();
+                report(state === YT.PlayerState.PLAYING, state === YT.PlayerState.BUFFERING, target.getCurrentTime(), target.getDuration(), state === YT.PlayerState.ENDED);
+              }, 500);
+              unregister = registerProviderControls({
+                play: () => target.playVideo(), pause: () => target.pauseVideo(),
+                seek: (seconds) => target.seekTo(seconds, true), setVolume: (volume) => target.setVolume(volume * 100),
+                destroy: () => { window.clearInterval(timer); target.destroy(); },
+              });
+              report(false, false, target.getCurrentTime(), target.getDuration());
+            },
+            onStateChange: ({ target, data }) => report(data === YT.PlayerState.PLAYING, data === YT.PlayerState.BUFFERING, target.getCurrentTime(), target.getDuration(), data === YT.PlayerState.ENDED),
+          },
+        });
+        void player;
+      };
+      if (window.YT) window.onYouTubeIframeAPIReady();
+      else void script('youtube-iframe-api', 'https://www.youtube.com/iframe_api').catch(() => report(false, false));
+    } else {
+      const previousReady = window.onSpotifyIframeApiReady;
+      window.onSpotifyIframeApiReady = (api) => {
+        window.SpotifyIframeApi = api;
+        previousReady?.(api);
+        if (disposed || !host.current) return;
+        api.createController(host.current, { uri: `spotify:track:${track.nativeId}`, width: '100%', height: 152 }, (controller) => {
+          if (disposed) return controller.destroy();
+          unregister = registerProviderControls({ play: () => controller.play(), pause: () => controller.pause(), seek: (seconds) => controller.seek(seconds), setVolume: () => {}, destroy: () => controller.destroy() });
+          controller.addListener('playback_update', ({ data }) => report(!data.isPaused, data.isBuffering, data.position / 1000, data.duration / 1000, data.isPaused && data.duration > 0 && data.position >= data.duration));
+        });
+      };
+      if (window.SpotifyIframeApi) window.onSpotifyIframeApiReady(window.SpotifyIframeApi);
+      else void script('spotify-iframe-api', 'https://open.spotify.com/embed/iframe-api/v1').catch(() => report(false, false));
+    }
+
+    return () => { disposed = true; unregister(); };
+  }, [track.id, track.nativeId, track.source, track.duration]);
+  return usesProviderEmbed(track) ? <div ref={host} className="provider-embed mt-4 min-h-[200px] w-full overflow-hidden rounded-2xl bg-surface-container-low" aria-label={`${track.source} player`} /> : null;
+}

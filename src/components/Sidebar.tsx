@@ -7,17 +7,18 @@ import { t, tracksLabel } from '../lib/i18n';
 import { markResizing } from '../lib/motion';
 import { library } from '../state/library';
 import { player } from '../state/player';
+import { appearance } from '../state/appearance';
 import { go, openDialog, routeKey, ui, type Route } from '../state/ui';
 
-function NavItem({ k, active, expanded, label, sub, icon, art, onClick, playing }: {
-  k: string; active: boolean; expanded: boolean; label: string; sub?: string; icon?: IconName; art?: ReactNode; onClick: () => void; playing?: boolean;
+function NavItem({ k, active, expanded, label, sub, icon, art, onClick, playing, className }: {
+  k: string; active: boolean; expanded: boolean; label: string; sub?: string; icon?: IconName; art?: ReactNode; onClick: () => void; playing?: boolean; className?: string;
 }) {
   return (
     <button
       type="button"
       data-key={k}
       data-ripple
-      className="nav-item sl"
+      className={cx('nav-item sl', className)}
       aria-current={active ? 'page' : undefined}
       data-tip={expanded ? undefined : label}
       data-tip-pos="right"
@@ -34,9 +35,10 @@ function NavItem({ k, active, expanded, label, sub, icon, art, onClick, playing 
 }
 
 export function Logo() {
+  const paletteStyle = useStore(appearance, (state) => state.bgMode === 'dynamic' && state.bgStyle === 'palette');
   return (
-    <Shape n={8} amp={0.1} className="spin-slow h-10 w-10 text-primary">
-      <Icon name="graphic_eq" size={22} className="text-on-primary" />
+    <Shape n={8} amp={0.1} className={cx('spin-slow h-10 w-10', paletteStyle ? 'text-secondary-container' : 'text-primary')}>
+      <Icon name="graphic_eq" size={22} className={paletteStyle ? 'text-on-secondary-container' : 'text-on-primary'} />
     </Shape>
   );
 }
@@ -45,6 +47,7 @@ export function Sidebar({ mode }: { mode: 'inline' | 'drawer' }) {
   const expanded = useStore(ui, (s) => mode === 'drawer' || s.sidebar);
   const route = useStore(ui, (s) => s.route);
   const playlists = useStore(library, (s) => s.playlists);
+  const soundcloudPlaylists = useStore(library, (s) => s.soundcloudPlaylists);
   const playing = useStore(player, (s) => s.playing);
   const curId = useStore(player, (s) => s.queue[s.index] ?? null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -54,7 +57,7 @@ export function Sidebar({ mode }: { mode: 'inline' | 'drawer' }) {
   useLayoutEffect(() => {
     const el = listRef.current?.querySelector<HTMLElement>(`[data-key="${CSS.escape(active)}"]`);
     setInd(el ? { y: el.offsetTop, h: el.offsetHeight } : null);
-  }, [active, playlists.length, expanded]);
+  }, [active, playlists.length, soundcloudPlaylists.length, expanded]);
 
   const nav = (r: Route) => go(r);
   const toggleExpanded = () => {
@@ -84,6 +87,19 @@ export function Sidebar({ mode }: { mode: 'inline' | 'drawer' }) {
           <span className="label-up fade-x">{t('playlists')}</span>
           <IconButton icon="add" label={t('newPlaylist')} size="sm" variant="tonal" tip="right" onClick={() => openDialog({ kind: 'create' })} />
         </div>
+        {soundcloudPlaylists.map((p) => (
+          <NavItem
+            key={`sc:${p.id}`}
+            k={'pl:scpl:' + p.id}
+            label={p.name}
+            sub={tracksLabel(p.trackCount)}
+            active={active === 'pl:scpl:' + p.id}
+            expanded={expanded}
+            playing={playing && !!curId && (library.get().soundcloudPlaylistTracks[p.urn] ?? []).some((track) => track.id === curId) && active === 'pl:scpl:' + p.id}
+            art={<PlaylistCover p={{ id: p.id, name: p.name, ids: [], created: 0, artworkUrl: p.artworkUrl }} className="h-10 w-10 rounded-[12px]" />}
+            onClick={() => nav({ name: 'playlist', id: `scpl:${p.id}` })}
+          />
+        ))}
         {playlists.map((p) => (
           <NavItem
             key={p.id}
@@ -97,9 +113,8 @@ export function Sidebar({ mode }: { mode: 'inline' | 'drawer' }) {
             onClick={() => nav({ name: 'playlist', id: p.id })}
           />
         ))}
-        <div className={cx('mt-auto pt-3', !expanded && 'self-stretch')}>
-          <NavItem k="appearance" icon="palette" label={t('appearance')} active={active === 'appearance'} expanded={expanded} onClick={() => nav({ name: 'appearance' })} />
-        </div>
+        <NavItem k="providers" icon="music_note" label={t('providers')} active={active === 'providers'} expanded={expanded} onClick={() => nav({ name: 'providers' })} />
+        <NavItem k="appearance" icon="palette" label={t('appearance')} active={active === 'appearance'} expanded={expanded} className="mt-3" onClick={() => nav({ name: 'appearance' })} />
       </div>
     </nav>
   );

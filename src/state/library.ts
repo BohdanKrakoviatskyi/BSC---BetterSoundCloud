@@ -1,23 +1,22 @@
 import { createStore, persist, uid } from '../lib/util';
-import { DEMO } from '../data/demo';
-import type { Playlist, Track } from '../types';
+import type { Playlist, SoundCloudPlaylist, Track } from '../types';
+import { soundCloudAuthStatus, soundCloudPlaylistTracks, soundCloudPlaylistsMine, soundCloudTracksMine } from '../lib/providers-api';
+import { mapSoundCloudTrack } from '../lib/api';
 import { snack, ui, go } from './ui';
 import { t } from '../lib/i18n';
 import { player, next } from './player';
 
-const demoMap = new Map(DEMO.map((x) => [x.id, x]));
 const volatile = new Map<string, Track>();
 
-const defaults = (): Playlist[] => [
-  { id: 'p-chill', name: t('plDefault1'), ids: ['d4', 'd5', 'd2', 'd6'], created: 1 },
-  { id: 'p-energy', name: t('plDefault2'), ids: ['d1', 'd3', 'd8', 'd7'], created: 2 },
-  { id: 'p-night', name: t('plDefault3'), ids: ['d1', 'd6', 'd8'], created: 3 },
-];
-
 export const library = createStore({
-  liked: ['d1', 'd5', 'd7'] as string[],
+  liked: [] as string[],
   disliked: [] as string[],
-  playlists: defaults(),
+  playlists: [] as Playlist[],
+  soundcloudLiked: [] as Track[],
+  soundcloudPlaylists: [] as SoundCloudPlaylist[],
+  soundcloudPlaylistTracks: {} as Record<string, Track[]>,
+  soundcloudLibraryLoading: false,
+  soundcloudLibraryError: '',
   cache: {} as Record<string, Track>,
   recent: [] as string[],
 });
@@ -29,16 +28,98 @@ function pruned(s: ReturnType<typeof library.get>) {
   for (const id in s.cache) if (keep.has(id)) out[id] = s.cache[id];
   return out;
 }
-persist('lyra.lib.v1', library, (s) => ({ ...s, cache: pruned(s) }));
+persist('lyra.lib.v1', library, (s) => ({
+  liked: s.liked, disliked: s.disliked, playlists: s.playlists, cache: pruned(s), recent: s.recent,
+}));
 
-export const getTrack = (id: string): Track | undefined => demoMap.get(id) ?? library.get().cache[id] ?? volatile.get(id);
+const obsoletePlaylistNames = new Set([
+  'вечерний чилл', 'evening chill', 'заряд энергии', 'energy boost', 'ночная дорога', 'night drive',
+]);
+library.set((s) => ({ playlists: s.playlists.filter((playlist) => !obsoletePlaylistNames.has(playlist.name.trim().toLocaleLowerCase())) }));
+
+let libraryLoad: Promise<void> | undefined;
+const playlistLoads = new Map<string, Promise<Track[]>>();
+
+export function loadSoundCloudLibrary(force = false): Promise<void> {
+  if (libraryLoad) return force ? libraryLoad.then(() => loadSoundCloudLibrary()) : libraryLoad;
+  library.set({ soundcloudLibraryLoading: true, soundcloudLibraryError: '' });
+  libraryLoad = (async () => {
+    try {
+      const auth = await soundCloudAuthStatus();
+      if (!auth.authorized) {
+        clearSoundCloudLibrary();
+        return;
+      }
+      const [likesResult, playlistsResult] = await Promise.allSettled([soundCloudTracksMine(), soundCloudPlaylistsMine()]);
+      const liked = likesResult.status === 'fulfilled' ? likesResult.value.map(mapSoundCloudTrack) : [];
+      const playlists: SoundCloudPlaylist[] = playlistsResult.status === 'fulfilled'
+        ? playlistsResult.value.map((playlist) => ({
+            id: playlist.id,
+            urn: playlist.urn || `soundcloud:playlists:${playlist.id}`,
+            name: playlist.title,
+            artworkUrl: playlist.artworkUrl || undefined,
+            permalinkUrl: playlist.permalinkUrl || undefined,
+            trackCount: playlist.trackCount,
+            username: playlist.user?.username || auth.profile?.username || 'SoundCloud',
+          }))
+        : [];
+      registerTracks(liked);
+      library.set({
+        soundcloudLiked: liked,
+        soundcloudPlaylists: playlists,
+        soundcloudPlaylistTracks: {},
+        soundcloudLibraryError: likesResult.status === 'rejected'
+          ? String(likesResult.reason)
+          : playlistsResult.status === 'rejected' ? String(playlistsResult.reason) : '',
+      });
+    } catch (error) {
+      clearSoundCloudLibrary();
+      library.set({ soundcloudLibraryError: error instanceof Error ? error.message : String(error) });
+    } finally {
+      library.set({ soundcloudLibraryLoading: false });
+      libraryLoad = undefined;
+    }
+  })();
+  return libraryLoad;
+}
+
+export function clearSoundCloudLibrary() {
+  library.set({
+    soundcloudLiked: [], soundcloudPlaylists: [], soundcloudPlaylistTracks: {},
+    soundcloudLibraryLoading: false, soundcloudLibraryError: '',
+  });
+}
+
+export function reloadSoundCloudPlaylistTracks(urn: string): Promise<Track[]> {
+  const soundcloudPlaylistTracks = { ...library.get().soundcloudPlaylistTracks };
+  delete soundcloudPlaylistTracks[urn];
+  library.set({ soundcloudPlaylistTracks });
+  return loadSoundCloudPlaylistTracks(urn);
+}
+
+export function loadSoundCloudPlaylistTracks(urn: string): Promise<Track[]> {
+  const cached = library.get().soundcloudPlaylistTracks[urn];
+  if (cached) return Promise.resolve(cached);
+  const pending = playlistLoads.get(urn);
+  if (pending) return pending;
+  const request = soundCloudPlaylistTracks(urn).then((cards) => {
+    const tracks = cards.map(mapSoundCloudTrack);
+    registerTracks(tracks);
+    library.set((state) => ({ soundcloudPlaylistTracks: { ...state.soundcloudPlaylistTracks, [urn]: tracks } }));
+    return tracks;
+  }).finally(() => playlistLoads.delete(urn));
+  playlistLoads.set(urn, request);
+  return request;
+}
+
+export const getTrack = (id: string): Track | undefined => library.get().cache[id] ?? volatile.get(id);
 
 export function registerTracks(ts: Track[]) {
-  for (const x of ts) if (!demoMap.has(x.id)) volatile.set(x.id, x);
+  for (const x of ts) volatile.set(x.id, x);
 }
 
 export function ensureCached(id: string) {
-  if (demoMap.has(id) || library.get().cache[id]) return;
+  if (library.get().cache[id]) return;
   const tr = volatile.get(id);
   if (tr) library.set((s) => ({ cache: { ...s.cache, [id]: tr } }));
 }
@@ -107,7 +188,7 @@ export function pushRecent(id: string) {
 
 export function searchLocal(q: string): string[] {
   const n = q.toLowerCase();
-  const all = new Map<string, Track>([...demoMap, ...Object.entries(library.get().cache)]);
+  const all = new Map<string, Track>(Object.entries(library.get().cache));
   return [...all.values()]
     .filter((x) => `${x.title} ${x.artist} ${x.album ?? ''}`.toLowerCase().includes(n))
     .slice(0, 8)

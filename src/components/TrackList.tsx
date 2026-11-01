@@ -104,8 +104,8 @@ export function TrackMenu({ track, anchor, onClose, playlistId }: { track: Track
 }
 
 export function SourcePill({ track }: { track: Track }) {
-  if (track.source !== 'itunes') return null;
-  return <span className="pill">{t('preview')}</span>;
+  const label = track.source === 'soundcloud' ? 'SoundCloud' : track.source === 'spotify' ? 'Spotify' : 'YouTube Music';
+  return <span className="pill">{label}</span>;
 }
 
 type RowProps = { id: string; index: number; list: string[]; isCurrent: boolean; isPlaying: boolean; playlistId?: string };

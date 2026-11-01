@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { IconButton, Menu, Segmented, EmptyState, type Vars } from './ui';
 import { ArtCover, Cover, Eq } from './Cover';
 import { Lyrics } from './Lyrics';
+import { ProviderEmbed } from './ProviderEmbed';
 import { DislikeButton, LikeButton, PlaylistPicker, SourcePill } from './TrackList';
 import { useVtSource } from './MiniPlayer';
 import { cx, useStore } from '../lib/util';
@@ -56,7 +57,7 @@ export function NowPlaying({ mode }: { mode: 'inline' | 'drawer' }) {
     <aside className="panel panel-side np" data-open={open} data-mode={mode} aria-label={t('nowPlaying')} aria-hidden={!open}>
       <div className="np-inner">
         {track ? (
-          <>
+          <Fragment key={track.id}>
             <ArtCover
               src={track.cover}
               vt={mode === 'inline' && vt === 'panel' ? 'np-cover' : undefined}
@@ -64,7 +65,7 @@ export function NowPlaying({ mode }: { mode: 'inline' | 'drawer' }) {
               onClick={() => setImmersive(true)}
               label={t('fullscreenLyrics')}
             />
-            <div key={track.id} className="meta-in">
+            <div className="meta-in">
               <h2 className="np-title headline">{track.title}</h2>
               <div className="flex items-center gap-2">
                 <SourcePill track={track} />
@@ -73,6 +74,7 @@ export function NowPlaying({ mode }: { mode: 'inline' | 'drawer' }) {
                 </button>
               </div>
             </div>
+            <ProviderEmbed key={track.id} track={track} />
             <div className="mt-4 flex items-center gap-2">
               <LikeButton id={track.id} variant="tonal" />
               <DislikeButton id={track.id} variant="tonal" />
@@ -98,7 +100,7 @@ export function NowPlaying({ mode }: { mode: 'inline' | 'drawer' }) {
             <Menu anchor={anchor} open={!!anchor} onClose={() => setAnchor(null)}>
               <PlaylistPicker id={track.id} onClose={() => setAnchor(null)} />
             </Menu>
-          </>
+          </Fragment>
         ) : (
           <div className="flex flex-1 items-center">
             <EmptyState icon="music_note" title={t('nothingPlaying')} text={t('pickSomething')} />

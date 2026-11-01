@@ -556,8 +556,8 @@ html[data-theme=light] { color-scheme: light; }
 
   /* ---------- background ---------- */
   .bg-root { position: fixed; inset: 0; z-index: -1; overflow: hidden; background: var(--md-surface); }
-  .bg-layer { position: absolute; inset: 0; animation: fade 1s var(--ease-emph) backwards; }
-  .bg-layer img { position: absolute; inset: -6%; width: 112%; height: 112%; object-fit: cover; }
+  .bg-layer { position: absolute; inset: 0; overflow: hidden; animation: fade 1s var(--ease-emph) backwards; }
+  .bg-layer img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scale(1.2); transform-origin: center; }
   .bg-dim { position: absolute; inset: 0; transition: background-color .5s; }
 }
 

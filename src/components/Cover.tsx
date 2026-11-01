@@ -92,6 +92,7 @@ export function PlaylistCover({ p, className, style }: { p: Playlist; className?
     }
     return out;
   }, [p.ids]);
+  if (p.artworkUrl) return <Cover src={p.artworkUrl} className={className} style={style} />;
   if (covers.length >= 4)
     return (
       <div className={cx('cover mosaic', className)} style={style}>

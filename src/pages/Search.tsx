@@ -5,8 +5,8 @@ import { SkeletonRows, TrackList } from '../components/TrackList';
 import { useStore } from '../lib/util';
 import { pick, t } from '../lib/i18n';
 import { hct } from '../lib/color';
-import { audiusSearch, itunesSearch } from '../lib/api';
-import { MOODS } from '../data/demo';
+import { searchTracks } from '../lib/api';
+import { MOODS } from '../lib/moods';
 import { registerTracks, searchLocal } from '../state/library';
 import { theme } from '../state/theme';
 import { go } from '../state/ui';
@@ -14,8 +14,8 @@ import type { Track } from '../types';
 
 const cache = new Map<string, Track[]>();
 
-function useRemote(kind: 'it' | 'au', q: string) {
-  const key = kind + ':' + q.toLowerCase();
+function useRemote(q: string) {
+  const key = q.toLowerCase();
   const [st, setSt] = useState<{ key: string; items: Track[] | null; error: boolean }>({ key: '', items: null, error: false });
   const [retry, setRetry] = useState(0);
   useEffect(() => {
@@ -27,7 +27,7 @@ function useRemote(kind: 'it' | 'au', q: string) {
     }
     setSt({ key, items: null, error: false });
     const ac = new AbortController();
-    (kind === 'it' ? itunesSearch : audiusSearch)(q, ac.signal)
+    searchTracks(q, ac.signal)
       .then((r) => {
         registerTracks(r);
         cache.set(key, r);
@@ -35,7 +35,7 @@ function useRemote(kind: 'it' | 'au', q: string) {
       })
       .catch((e: Error) => e.name !== 'AbortError' && setSt({ key, items: [], error: true }));
     return () => ac.abort();
-  }, [key, q, kind, retry]);
+  }, [key, q, retry]);
   const fresh = st.key === key;
   return { items: fresh ? st.items : null, error: fresh && st.error, loading: !!q && (!fresh || st.items === null), retry: () => setRetry((r) => r + 1) };
 }
@@ -112,10 +112,9 @@ export default function Search({ q }: { q: string }) {
     return () => clearTimeout(tm);
   }, [text, q]);
 
-  const it = useRemote('it', q);
-  const au = useRemote('au', q);
+  const remote = useRemote(q);
   const local = useMemo(() => (q ? searchLocal(q) : []), [q]);
-  const nothing = q && !local.length && it.items?.length === 0 && au.items?.length === 0 && !it.error && !au.error;
+  const nothing = q && !local.length && remote.items?.length === 0 && !remote.error;
 
   return (
     <div className="page">
@@ -131,7 +130,7 @@ export default function Search({ q }: { q: string }) {
             onKeyDown={(e) => e.key === 'Escape' && setText('')}
             enterKeyHint="search"
           />
-          {(it.loading || au.loading) && <Loader size={26} />}
+          {remote.loading && <Loader size={26} />}
           {text && (
             <IconButton
               icon="close"
@@ -156,8 +155,7 @@ export default function Search({ q }: { q: string }) {
               <TrackList ids={local} />
             </Section>
           )}
-          <Results title={t('previews')} icon="music_note" r={it} i={1} />
-          <Results title={t('fullTracks')} icon="graphic_eq" r={au} i={2} />
+          <Results title={t('soundcloudTracks')} icon="graphic_eq" r={remote} i={1} />
         </div>
       )}
     </div>

@@ -1,60 +1,115 @@
 import type { LyricLine, Track } from '../types';
+import { findLyricsCandidate, lyricsSearchQueries } from './lyrics-match';
+import { rpc } from './sidecar';
 
-const APP = 'lyra_m3_player';
-const AU = 'https://api.audius.co/v1';
+import {
+  searchSoundCloudTracks,
+  soundCloudTrackLyrics,
+  soundCloudRelatedTracks,
+  searchSpotifyTracks,
+  type SoundCloudTrackCard,
+  type SoundCloudSearchTrack,
+  searchYtDlpTracks,
+  ytDlpTrackStream,
+  spotifyAuthStatus,
+} from './providers-api';
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Json = Record<string, any>;
 
-async function getJson(url: string, signal?: AbortSignal): Promise<Json> {
-  const r = await fetch(url, { signal });
-  if (!r.ok) throw new Error(String(r.status));
-  return r.json();
+async function getJson(url: string): Promise<Json> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(String(response.status));
+  return response.json();
 }
 
-function mapAudius(x: Json): Track | null {
-  if (!x || x.is_streamable === false || x.stream_conditions || x.is_stream_gated) return null;
-  const art = x.artwork || {};
+type SoundCloudTrackLike = Pick<SoundCloudTrackCard, 'id' | 'trackUrn' | 'title' | 'permalinkUrl' | 'artworkUrl' | 'duration' | 'user'> | Pick<SoundCloudSearchTrack, 'id' | 'urn' | 'title' | 'permalinkUrl' | 'artworkUrl' | 'duration' | 'user'>;
+
+export function mapSoundCloudTrack(track: SoundCloudTrackLike): Track {
+  const duration = track.duration / 1000;
+  const nativeId = ('trackUrn' in track ? track.trackUrn : track.urn) || `soundcloud:tracks:${track.id}`;
   return {
-    id: 'au:' + x.id,
-    title: String(x.title ?? '').trim(),
-    artist: x.user?.name ?? 'Unknown',
-    album: x.genre || undefined,
-    cover: art['480x480'] || art['1000x1000'] || art['150x150'],
-    thumb: art['150x150'] || art['480x480'],
-    src: `${AU}/tracks/${x.id}/stream?app_name=${APP}`,
-    duration: x.duration || 0,
-    source: 'audius',
+    id: `sc:${track.id}`, title: track.title, artist: track.user?.username || 'SoundCloud',
+    cover: track.artworkUrl || undefined, thumb: track.artworkUrl || undefined,
+    src: track.permalinkUrl || '', duration, fullDuration: duration || undefined,
+    nativeId, source: 'soundcloud',
   };
 }
 
-const notNull = <T,>(v: T | null): v is T => v !== null;
-
-export async function audiusTrending(signal?: AbortSignal) {
-  const j = await getJson(`${AU}/tracks/trending?app_name=${APP}&time=week&limit=24`, signal);
-  return ((j.data ?? []) as Json[]).map(mapAudius).filter(notNull);
+export async function searchTracks(query: string, signal?: AbortSignal): Promise<Track[]> {
+  const results = await Promise.allSettled([
+    searchSoundCloudTracks(query, signal),
+    spotifyAuthStatus(signal).then((status) => status.authorized ? searchSpotifyTracks({ query, limit: 20 }, signal) : null),
+    searchYtDlpTracks(query, signal),
+  ]);
+  const [soundcloud, spotify, youtube] = results;
+  const tracks: Track[] = [];
+  if (soundcloud.status === 'fulfilled') tracks.push(...soundcloud.value.map(mapSoundCloudTrack));
+  if (spotify.status === 'fulfilled' && spotify.value) {
+    for (const track of spotify.value.tracks) {
+      const duration = track.durationMs / 1000;
+      const cover = track.album.images.slice().sort((a, b) => b.width - a.width)[0]?.url;
+      tracks.push({
+        id: `sp:${track.nativeId}`, title: track.title, artist: track.artists.map((artist) => artist.name).join(', '),
+        album: track.album.name, cover, thumb: cover, src: track.previewUrl || track.permalink || '',
+        duration, fullDuration: duration || undefined, nativeId: track.nativeId, preview: Boolean(track.previewUrl), source: 'spotify',
+      });
+    }
+  }
+  if (youtube.status === 'fulfilled') {
+    for (const track of youtube.value) {
+      const duration = track.durationMs / 1000;
+      tracks.push({
+        id: `yt:${track.nativeId}`, title: track.title, artist: track.artist,
+        cover: track.artworkUrl || undefined, thumb: track.artworkUrl || undefined,
+        src: track.permalink || `https://music.youtube.com/watch?v=${encodeURIComponent(track.nativeId)}`,
+        duration, fullDuration: duration || undefined, nativeId: track.nativeId, playback: 'direct', source: 'youtube',
+      });
+    }
+  }
+  if (tracks.length) return tracks;
+  const firstError = results.find((result) => result.status === 'rejected');
+  if (firstError?.status === 'rejected') throw firstError.reason;
+  return [];
 }
 
-export async function audiusSearch(q: string, signal?: AbortSignal) {
-  const j = await getJson(`${AU}/tracks/search?query=${encodeURIComponent(q)}&app_name=${APP}&limit=20`, signal);
-  return ((j.data ?? []) as Json[]).map(mapAudius).filter(notNull);
+
+export async function trackStream(trackUrn: string): Promise<{ url: string; hls: boolean; preview: boolean }> {
+  const result = await rpc<{ url: string; hls?: boolean; preview?: boolean }>('track.stream', { trackUrn });
+  if (!result?.url) throw new Error('SoundCloud did not return an audio stream.');
+  return { url: result.url, hls: Boolean(result.hls), preview: Boolean(result.preview) };
 }
 
-export async function itunesSearch(q: string, signal?: AbortSignal): Promise<Track[]> {
-  const j = await getJson(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&entity=song&limit=25`, signal);
-  return ((j.results ?? []) as Json[])
-    .filter((x) => x.previewUrl && x.trackId)
-    .map((x) => ({
-      id: 'it:' + x.trackId,
-      title: x.trackName,
-      artist: x.artistName,
-      album: x.collectionName,
-      cover: String(x.artworkUrl100 ?? '').replace('100x100bb', '600x600bb') || undefined,
-      thumb: String(x.artworkUrl100 ?? '').replace('100x100bb', '160x160bb') || undefined,
-      src: x.previewUrl,
-      duration: 30,
-      fullDuration: x.trackTimeMillis ? x.trackTimeMillis / 1000 : undefined,
-      source: 'itunes' as const,
-    }));
+export async function relatedSoundCloudTracks(trackId: number): Promise<Track[]> {
+  return (await soundCloudRelatedTracks(trackId)).map(mapSoundCloudTrack);
+}
+
+export { ytDlpTrackStream };
+
+const normalizeMatch = (value: string) => value.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+
+export async function findYouTubeFallback(track: Track): Promise<Track | null> {
+  const results = await searchYtDlpTracks(`${track.title} ${track.artist}`);
+  const targetTitle = normalizeMatch(track.title);
+  const targetArtist = normalizeMatch(track.artist);
+  const match = results
+    .map((candidate) => {
+      const title = normalizeMatch(candidate.title);
+      const artist = normalizeMatch(candidate.artist);
+      const titleMatch = title === targetTitle || title.includes(targetTitle) || targetTitle.includes(title);
+      const artistMatch = !targetArtist || artist.includes(targetArtist) || targetArtist.includes(artist);
+      return { candidate, score: (titleMatch ? 2 : 0) + (artistMatch ? 1 : 0) };
+    })
+    .filter(({ score }) => score >= 2)
+    .sort((a, b) => b.score - a.score)[0]?.candidate;
+  if (!match) return null;
+  const duration = match.durationMs / 1000;
+  return {
+    id: `yt:${match.nativeId}`, title: match.title, artist: match.artist,
+    cover: match.artworkUrl || undefined, thumb: match.artworkUrl || undefined,
+    src: match.permalink || `https://music.youtube.com/watch?v=${encodeURIComponent(match.nativeId)}`,
+    duration, fullDuration: duration || undefined, nativeId: match.nativeId, playback: 'direct', source: 'youtube',
+  };
 }
 
 /* ---------------- lyrics ---------------- */
@@ -100,44 +155,46 @@ export function getLyrics(t: Track): Promise<LyricsData | null> {
   if (t.lyrics) return Promise.resolve({ synced: t.lyrics });
   let p = lyricsCache.get(t.id);
   if (!p) {
-    p = fetchLyrics(t).catch(() => null);
+    p = (t.source === 'soundcloud' ? fetchSoundCloudLyrics(t) : fetchLyrics(t)).catch(() => null);
     lyricsCache.set(t.id, p);
   }
   return p;
 }
 
-const cleanTitle = (s: string) => s.replace(/\s*[([].*?[)\]]\s*/g, ' ').replace(/\s+-\s+.*$/, '').trim();
-const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+async function fetchSoundCloudLyrics(track: Track): Promise<LyricsData | null> {
+  const match = track.nativeId?.match(/(\d+)$/);
+  const trackId = Number(match?.[1]);
+  if (!trackId) return fetchLyrics(track);
+  const result = await soundCloudTrackLyrics({
+    trackId,
+    title: track.title,
+    artist: track.artist,
+    durationMs: Math.round((track.fullDuration ?? track.duration) * 1000),
+  });
+  if (result.isSynced && result.lines.length) {
+    const synced = withGaps(result.lines.map((line) => ({ t: line.startMs / 1000, text: line.text })));
+    if (synced.length) return { synced };
+  }
+  const plain = result.lines.map((line) => line.text.trim()).filter(Boolean);
+  if (plain.length) return { plain };
+  return fetchLyrics(track);
+}
 
 async function fetchLyrics(t: Track): Promise<LyricsData | null> {
-  const title = cleanTitle(t.title);
-  const artist = t.artist.split(/,|&| feat\.? | ft\.? | x | и /i)[0].trim();
-  const dur = t.fullDuration ?? t.duration;
-  const base = 'https://lrclib.net/api';
+  const duration = t.fullDuration ?? t.duration;
+  const tolerance = t.source === 'youtube' ? 30 : 4;
+  const queries = lyricsSearchQueries(t);
   let rec: Json | null = null;
-  if (t.source === 'itunes') {
-    const p = new URLSearchParams({ track_name: title, artist_name: artist });
-    if (t.album) p.set('album_name', t.album);
-    if (dur) p.set('duration', String(Math.round(dur)));
-    try {
-      rec = await getJson(`${base}/get?${p}`);
-    } catch {
-      rec = null;
-    }
-  }
-  if (!rec) {
-    const arr = (await getJson(`${base}/search?${new URLSearchParams({ track_name: title, artist_name: artist })}`)) as unknown as Json[];
-    const strict = t.source !== 'itunes';
-    rec =
-      (Array.isArray(arr) ? arr : [])
-        .filter((x) => (x.syncedLyrics || x.plainLyrics || x.instrumental) && (!dur || Math.abs((x.duration ?? 0) - dur) < (strict ? 4 : 8)))
-        .filter((x) => !strict || norm(x.artistName ?? '') === norm(artist))
-        .sort((a, b) => Math.abs(a.duration - dur) - Math.abs(b.duration - dur))[0] ?? null;
+  for (const query of queries) {
+    const params = new URLSearchParams({ track_name: query.title, artist_name: query.artist });
+    const results = await getJson(`https://lrclib.net/api/search?${params}`);
+    rec = findLyricsCandidate(Array.isArray(results) ? results : [], query, duration, tolerance);
+    if (rec) break;
   }
   if (!rec) return null;
   if (rec.instrumental) return { instrumental: true };
-  const preview = t.source === 'itunes';
-  if (rec.syncedLyrics && !preview) {
+  const preview = false;
+  if (rec.syncedLyrics) {
     const synced = withGaps(parseLrc(rec.syncedLyrics));
     if (synced.length) return { synced };
   }

@@ -6,7 +6,8 @@ export type Route =
   | { name: 'search'; q: string }
   | { name: 'favorites' }
   | { name: 'playlist'; id: string }
-  | { name: 'appearance' };
+  | { name: 'appearance' }
+  | { name: 'providers' };
 
 export type Dialog = { kind: 'create'; trackId?: string } | { kind: 'rename'; id: string } | { kind: 'delete'; id: string };
 export interface Snack { id: number; text: string; action?: { label: string; run: () => void } }
@@ -24,6 +25,8 @@ function parse(): Route {
       return seg[1] ? { name: 'playlist', id: decodeURIComponent(seg[1]) } : { name: 'home' };
     case 'appearance':
       return { name: 'appearance' };
+    case 'providers':
+      return { name: 'providers' };
     default:
       return { name: 'home' };
   }

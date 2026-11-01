@@ -8,13 +8,14 @@ import { Drawer, Overlays } from './components/Overlays';
 import { IconButton } from './components/ui';
 import { MD, useMedia, useStore, XL } from './lib/util';
 import { t, useLang } from './lib/i18n';
-import { toggleLike } from './state/library';
+import { loadSoundCloudLibrary, toggleLike } from './state/library';
 import { currentTrack, next, prev, seekBy, toggle, toggleMute } from './state/player';
 import { go, routeKey, setImmersive, ui, type Route } from './state/ui';
 import Home from './pages/Home';
 import Search from './pages/Search';
 import Collection from './pages/Collection';
 import Appearance from './pages/Appearance';
+import Providers from './pages/Providers';
 
 function Page({ route }: { route: Route }) {
   switch (route.name) {
@@ -26,6 +27,8 @@ function Page({ route }: { route: Route }) {
       return <Collection kind="playlist" id={route.id} />;
     case 'appearance':
       return <Appearance />;
+    case 'providers':
+      return <Providers />;
     default:
       return <Home />;
   }
@@ -90,6 +93,10 @@ export default function App() {
   const closeDrawer = useCallback(() => ui.set({ drawer: false }), []);
   const closeNp = useCallback(() => ui.set({ npDrawer: false }), []);
   useShortcuts();
+
+  useEffect(() => {
+    void loadSoundCloudLibrary();
+  }, []);
 
   useEffect(() => {
     if (isMd && drawer) closeDrawer();

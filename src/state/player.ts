@@ -1,8 +1,11 @@
 import { useSyncExternalStore } from 'react';
+import Hls from 'hls.js';
 import { createStore, persist, clamp, shuffled, useStore } from '../lib/util';
-import { getTrack, library, pushRecent, isDisliked, ensureCached } from './library';
+import { getTrack, library, pushRecent, isDisliked, ensureCached, registerTracks } from './library';
 import { snack } from './ui';
 import { t } from '../lib/i18n';
+import { findYouTubeFallback, relatedSoundCloudTracks, trackStream, ytDlpTrackStream } from '../lib/api';
+import { onProviderState, providerCommand } from '../lib/provider-player';
 import type { Track } from '../types';
 
 export type Repeat = 'off' | 'all' | 'one';
@@ -26,6 +29,12 @@ export const player = createStore({
 let original: string[] | null = null;
 let pendingSeek = 0;
 let errors = 0;
+let loadId = 0;
+let hls: Hls | undefined;
+let fallbackAttemptedGeneration = -1;
+const relatedFetched = new Set<string>();
+const recommendationSource = new Map<string, Track>();
+const usesProviderPlayback = (track: Track | null | undefined) => !!track && ((track.source === 'youtube' && track.playback !== 'direct') || (track.source === 'spotify' && !track.preview));
 
 export const currentTrack = (): Track | null => {
   const s = player.get();
@@ -93,19 +102,97 @@ function mediaMeta(tr: Track) {
 }
 
 /* ---------------- controls ---------------- */
-function load(i: number, autoplay: boolean) {
+async function fallbackSoundCloud(track: Track, index: number, generation: number): Promise<boolean> {
+  if (generation !== loadId || fallbackAttemptedGeneration === generation) return true;
+  fallbackAttemptedGeneration = generation;
+  try {
+    const fallback = await findYouTubeFallback(track);
+    if (generation !== loadId || currentTrack()?.id !== track.id) return true;
+    if (!fallback) {
+      player.set({ playing: false, loading: false });
+      snack(t('soundcloudFallbackNoMatch'));
+      return true;
+    }
+    registerTracks([fallback]);
+    if (player.get().shuffle) recommendationSource.set(fallback.id, track);
+    const queue = player.get().queue.slice();
+    queue[index] = fallback.id;
+    player.set({ queue });
+    await load(index, true);
+  } catch (error) {
+    if (generation !== loadId) return true;
+    player.set({ playing: false, loading: false });
+    const reason = error instanceof Error ? error.message : t('cantPlay');
+    snack(t('streamFallbackFailed', { reason }));
+  }
+  return true;
+}
+
+async function load(i: number, autoplay: boolean) {
+  const generation = ++loadId;
   const s = player.get();
   const id = s.queue[i];
   const tr = id ? getTrack(id) : undefined;
   if (!tr) return;
   ensureCached(id);
-  player.set({ index: i, duration: tr.duration, loading: autoplay, pos: 0 });
-  audio.src = tr.src;
-  if (autoplay) {
-    audio.play().catch((e: Error) => {
-      if (e.name !== 'AbortError') player.set({ playing: false, loading: false });
-    });
+  hls?.destroy();
+  hls = undefined;
+  audio.pause();
+  audio.removeAttribute('src');
+  player.set({ index: i, duration: tr.duration, loading: true, playing: false, pos: 0 });
+  if (usesProviderPlayback(tr)) {
+    player.set({ loading: false });
+    if (autoplay) providerCommand('play');
+    pushRecent(id);
+    mediaMeta(tr);
+    emitFrame();
+    emitTime();
+    return;
   }
+  try {
+    const stream = tr.source === 'soundcloud' && tr.nativeId
+      ? await trackStream(tr.nativeId)
+      : tr.source === 'youtube' && tr.playback === 'direct' && tr.nativeId
+        ? { ...(await ytDlpTrackStream(tr.nativeId)), hls: false, preview: false }
+        : { url: tr.src, hls: false, preview: Boolean(tr.preview) };
+    if (tr.source === 'soundcloud' && stream.preview) {
+      await fallbackSoundCloud(tr, i, generation);
+      return;
+    }
+    if (!stream.url) throw new Error('This provider did not return a playable preview.');
+    if (generation !== loadId) return;
+    if (stream.hls && !audio.canPlayType('application/vnd.apple.mpegurl')) {
+      if (!Hls.isSupported()) throw new Error('This device cannot play the SoundCloud HLS stream.');
+      hls = new Hls();
+      const instance = hls;
+      await new Promise<void>((resolve, reject) => {
+        const ready = () => { instance.off(Hls.Events.ERROR, failed); resolve(); };
+        const failed = (_event: string, data: { fatal: boolean; details: string }) => {
+          if (data.fatal) {
+            instance.off(Hls.Events.MANIFEST_PARSED, ready);
+            reject(new Error(`SoundCloud HLS failed: ${data.details}`));
+          }
+        };
+        instance.once(Hls.Events.MANIFEST_PARSED, ready);
+        instance.on(Hls.Events.ERROR, failed);
+        instance.attachMedia(audio);
+        instance.loadSource(stream.url);
+      });
+    } else audio.src = stream.url;
+    if (autoplay) await audio.play();
+    else player.set({ loading: false });
+  } catch (e) {
+    if (generation !== loadId) return;
+    if (tr.source === 'soundcloud') {
+      await fallbackSoundCloud(tr, i, generation);
+      return;
+    }
+    player.set({ playing: false, loading: false });
+    snack(e instanceof Error ? e.message : t('cantPlay'));
+    return;
+  }
+  if (generation !== loadId) return;
+  if (tr.source === 'soundcloud') void prefetchRelated(tr);
   pushRecent(id);
   mediaMeta(tr);
   emitFrame();
@@ -129,9 +216,54 @@ export function playQueue(ids: string[], start = 0, shuffle?: boolean) {
 
 export const shufflePlay = (ids: string[]) => ids.length && playQueue(ids, Math.floor(Math.random() * ids.length), true);
 
+const relatedRequests = new Map<string, Promise<Track[]>>();
+
+function prefetchRelated(track: Track): Promise<Track[]> {
+  if (!track.nativeId) return Promise.resolve([]);
+  if (relatedFetched.has(track.id)) return Promise.resolve([]);
+  let request = relatedRequests.get(track.id);
+  if (!request) {
+    const numericId = Number(track.nativeId.match(/(\d+)$/)?.[1]);
+    if (!numericId) return Promise.resolve([]);
+    request = relatedSoundCloudTracks(numericId).then((tracks) => {
+      relatedFetched.add(track.id);
+      return tracks;
+    }).catch(() => []).finally(() => relatedRequests.delete(track.id));
+    relatedRequests.set(track.id, request);
+  }
+  return request;
+}
+
+async function appendRelatedAndContinue(track: Track) {
+  const state = player.get();
+  if (!state.shuffle || currentTrack()?.id !== track.id) return;
+  const source = recommendationSource.get(track.id) ?? track;
+  const related = await prefetchRelated(source);
+  if (currentTrack()?.id !== track.id) return;
+  const existing = new Set(player.get().queue);
+  const candidates = shuffled(related.filter((candidate) => !existing.has(candidate.id) && !isDisliked(candidate.id)));
+  if (!candidates.length) {
+    player.set({ playing: false, loading: false });
+    return;
+  }
+  registerTracks(candidates);
+  const queue = [...player.get().queue, ...candidates.map((candidate) => candidate.id)];
+  const nextIndex = queue.length - candidates.length;
+  if (original) original.push(...candidates.map((candidate) => candidate.id));
+  player.set({ queue });
+  load(nextIndex, true);
+}
+
 export function toggle() {
   const s = player.get();
   if (s.index < 0 || !s.queue.length) return;
+  const track = currentTrack();
+  if (usesProviderPlayback(track)) {
+    const playing = !s.playing;
+    providerCommand(playing ? 'play' : 'pause');
+    player.set({ playing, loading: false });
+    return;
+  }
   if (!audio.src) {
     const keep = s.pos;
     load(s.index, true);
@@ -147,6 +279,11 @@ function step(dir: 1 | -1, auto: boolean) {
   const n = s.queue.length;
   if (!n) return;
   if (auto && s.repeat === 'one') {
+    if (usesProviderPlayback(currentTrack())) {
+      providerCommand('seek', 0);
+      providerCommand('play');
+      return;
+    }
     audio.currentTime = 0;
     audio.play().catch(() => {});
     return;
@@ -156,6 +293,11 @@ function step(dir: 1 | -1, auto: boolean) {
     i += dir;
     if (i >= n) {
       if (auto && s.repeat === 'off') {
+        const track = currentTrack();
+        if (s.shuffle && track && (track.source === 'soundcloud' || recommendationSource.has(track.id))) {
+          void appendRelatedAndContinue(track);
+          return;
+        }
         player.set({ playing: false });
         return;
       }
@@ -175,7 +317,11 @@ export function prev() {
 export const jumpTo = (i: number) => load(i, true);
 
 export function seek(sec: number) {
-  if (!audio.src || audio.readyState < 1) {
+  if (usesProviderPlayback(currentTrack())) {
+    pendingSeek = Math.max(0, sec);
+    player.set({ pos: pendingSeek });
+    providerCommand('seek', pendingSeek);
+  } else if (!audio.src || audio.readyState < 1) {
     pendingSeek = Math.max(0, sec);
     player.set({ pos: pendingSeek });
   } else audio.currentTime = clamp(sec, 0, dur() || sec);
@@ -187,11 +333,13 @@ export const seekBy = (d: number) => seek(curTime() + d);
 export function setVolume(v: number) {
   v = clamp(v, 0, 1);
   audio.volume = v;
+  if (usesProviderPlayback(currentTrack())) providerCommand('setVolume', v);
   audio.muted = false;
   player.set({ volume: v, muted: false });
 }
 export function toggleMute() {
   const m = !player.get().muted;
+  if (usesProviderPlayback(currentTrack())) providerCommand('setVolume', m ? 0 : player.get().volume);
   audio.muted = m;
   player.set({ muted: m });
 }
@@ -238,6 +386,16 @@ export function addToQueue(id: string) {
 }
 
 /* ---------------- audio events ---------------- */
+onProviderState((state) => {
+  if (state.ended) {
+    next(true);
+    return;
+  }
+  player.set({ playing: state.playing, loading: state.loading, pos: state.position, duration: state.duration });
+  emitFrame();
+  emitTime();
+});
+
 audio.addEventListener('play', () => {
   player.set({ playing: true });
   kick();
@@ -251,6 +409,11 @@ audio.addEventListener('waiting', () => player.set({ loading: true }));
 audio.addEventListener('canplay', () => player.set({ loading: false }));
 audio.addEventListener('ended', () => next(true));
 audio.addEventListener('loadedmetadata', () => {
+  const track = currentTrack();
+  if (track?.source === 'soundcloud' && track.duration > 75 && audio.duration > 0 && audio.duration <= 60 && audio.duration + 10 < track.duration) {
+    void fallbackSoundCloud(track, player.get().index, loadId);
+    return;
+  }
   if (pendingSeek) {
     audio.currentTime = Math.min(pendingSeek, audio.duration || pendingSeek);
     pendingSeek = 0;
@@ -261,6 +424,11 @@ audio.addEventListener('loadedmetadata', () => {
 });
 let lastSaved = 0;
 audio.addEventListener('timeupdate', () => {
+  const track = currentTrack();
+  const duration = dur();
+  if (player.get().shuffle && track?.source === 'soundcloud' && duration > 0 && duration - audio.currentTime <= 20) {
+    void prefetchRelated(track);
+  }
   emitTime();
   if (audio.paused) emitFrame();
   if (Math.abs(audio.currentTime - lastSaved) > 4) {
@@ -274,6 +442,13 @@ audio.addEventListener('seeked', () => {
 });
 audio.addEventListener('error', () => {
   if (!audio.src || !audio.error) return;
+  const track = currentTrack();
+  const index = player.get().index;
+  const generation = loadId;
+  if (track?.source === 'soundcloud') {
+    void fallbackSoundCloud(track, index, generation);
+    return;
+  }
   player.set({ loading: false, playing: false });
   snack(t('cantPlay'));
   if (++errors < 3) setTimeout(() => next(true), 900);
@@ -297,7 +472,12 @@ export function initPlayer() {
     const ms = navigator.mediaSession;
     const h: [MediaSessionAction, MediaSessionActionHandler][] = [
       ['play', () => toggle()],
-      ['pause', () => audio.pause()],
+      ['pause', () => {
+        if (usesProviderPlayback(currentTrack())) {
+          providerCommand('pause');
+          player.set({ playing: false });
+        } else audio.pause();
+      }],
       ['previoustrack', () => prev()],
       ['nexttrack', () => next()],
       ['seekbackward', () => seekBy(-10)],

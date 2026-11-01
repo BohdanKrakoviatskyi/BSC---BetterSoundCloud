@@ -1,44 +1,27 @@
 import { useEffect, useState } from 'react';
+import { useStore } from '../lib/util';
 import { Icon } from '../components/Icon';
 import { Button, Chip, HRow, Section, type Vars } from '../components/ui';
-import { Cover, Eq, PlaylistCover } from '../components/Cover';
+import { PlaylistCover } from '../components/Cover';
 import { MediaCard } from '../components/TrackList';
-import { useStore } from '../lib/util';
+
 import { pick, t, tracksLabel } from '../lib/i18n';
-import { audiusTrending } from '../lib/api';
-import { DEMO, DEMO_IDS, MOODS } from '../data/demo';
+import { searchTracks } from '../lib/api';
+import { MOODS } from '../lib/moods';
 import { getTrack, library, registerTracks } from '../state/library';
-import { player, playQueue, toggle } from '../state/player';
+
 import { go, openDialog } from '../state/ui';
 import type { Track } from '../types';
 
 let trendCache: Track[] | null = null;
 
-function QuickTile({ track, i }: { track: Track; i: number }) {
-  const isCur = useStore(player, (s) => s.queue[s.index] === track.id);
-  const playing = useStore(player, (s) => s.playing);
-  return (
-    <button
-      type="button"
-      data-ripple
-      className="quick sl anim-in"
-      data-current={isCur}
-      style={{ '--i': i + 2 } as Vars}
-      onClick={() => (isCur ? toggle() : playQueue(DEMO_IDS, i))}
-    >
-      <Cover src={track.thumb} className="quick-cover" />
-      <span className="min-w-0 flex-1">
-        <span className={'block truncate font-semibold ' + (isCur ? 'text-primary' : '')}>{track.title}</span>
-        <span className="block truncate text-sm text-on-surface-variant">{track.artist}</span>
-      </span>
-      <span className="quick-play">{isCur ? <Eq on={playing} /> : <Icon name="play_arrow" fill />}</span>
-    </button>
-  );
-}
 
 export default function Home() {
   const recent = useStore(library, (s) => s.recent);
   const playlists = useStore(library, (s) => s.playlists);
+  const soundcloudPlaylists = useStore(library, (s) => s.soundcloudPlaylists);
+  const soundcloudLibraryLoading = useStore(library, (s) => s.soundcloudLibraryLoading);
+  const soundcloudLibraryError = useStore(library, (s) => s.soundcloudLibraryError);
   const [trend, setTrend] = useState<Track[] | null>(trendCache);
   const [err, setErr] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -47,7 +30,7 @@ export default function Home() {
     if (trendCache) return;
     const ac = new AbortController();
     setErr(false);
-    audiusTrending(ac.signal)
+    searchTracks('top hits', ac.signal)
       .then((r) => {
         registerTracks(r);
         trendCache = r;
@@ -71,18 +54,10 @@ export default function Home() {
         <p className="mt-2 text-lg text-on-surface-variant">{t('homeSubtitle')}</p>
       </header>
 
-      <Section title={t('quickPicks')} subtitle={t('quickPicksSub')} i={1}>
-        <div className="quick-grid">
-          {DEMO.map((tr, i) => (
-            <QuickTile key={tr.id} track={tr} i={i} />
-          ))}
-        </div>
-      </Section>
-
       <Section
-        title={t('trending')}
-        subtitle={t('trendingSub')}
-        i={3}
+        title={t('soundcloudPicks')}
+        subtitle={t('soundcloudPicksSub')}
+        i={1}
         action={<Icon name="trending_up" className="text-primary" size={28} />}
       >
         {err ? (
@@ -110,6 +85,20 @@ export default function Home() {
 
       <Section title={t('yourPlaylists')} i={4}>
         <HRow labels={arrows} cw={180}>
+          {soundcloudPlaylists.map((p, i) => (
+            <button
+              key={`soundcloud:${p.id}`}
+              type="button"
+              data-ripple
+              className="mcard sl anim-in"
+              style={{ '--i': i } as Vars}
+              onClick={() => go({ name: 'playlist', id: `scpl:${p.id}` })}
+            >
+              <PlaylistCover p={{ id: p.id, name: p.name, ids: [], created: 0, artworkUrl: p.artworkUrl }} className="mcard-cover" />
+              <span className="mcard-title">{p.name}</span>
+              <span className="mcard-sub">{tracksLabel(p.trackCount)}</span>
+            </button>
+          ))}
           {playlists.map((p, i) => (
             <button
               key={p.id}
@@ -124,6 +113,8 @@ export default function Home() {
               <span className="mcard-sub">{tracksLabel(p.ids.length)}</span>
             </button>
           ))}
+          {soundcloudLibraryLoading && <span className="px-3 py-2 text-sm text-on-surface-variant">Loading SoundCloud library…</span>}
+          {!soundcloudLibraryLoading && soundcloudLibraryError && <span className="px-3 py-2 text-sm text-error">{soundcloudLibraryError}</span>}
           <button type="button" data-ripple className="mcard sl anim-in" onClick={() => openDialog({ kind: 'create' })}>
             <span className="mcard-cover grid place-items-center !shadow-none outline-2 -outline-offset-2 outline-dashed outline-outline-variant">
               <Icon name="add" size={40} className="text-primary" />

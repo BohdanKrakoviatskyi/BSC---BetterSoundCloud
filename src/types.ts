@@ -1,4 +1,4 @@
-export type Source = 'demo' | 'audius' | 'itunes';
+export type Source = 'soundcloud' | 'spotify' | 'youtube';
 
 export interface LyricLine {
   t: number;
@@ -16,6 +16,9 @@ export interface Track {
   src: string;
   duration: number;
   fullDuration?: number;
+  nativeId?: string;
+  preview?: boolean;
+  playback?: 'direct';
   source: Source;
   lyrics?: LyricLine[];
 }
@@ -25,4 +28,15 @@ export interface Playlist {
   name: string;
   ids: string[];
   created: number;
+  artworkUrl?: string;
+}
+
+export interface SoundCloudPlaylist {
+  id: string;
+  urn: string;
+  name: string;
+  artworkUrl?: string;
+  permalinkUrl?: string;
+  trackCount: number;
+  username: string;
 }
