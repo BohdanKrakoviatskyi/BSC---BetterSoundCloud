@@ -15,9 +15,8 @@ import (
 // user's own rating of a video. It does not move the video's public like counter, which is aggregated
 // across every viewer and cannot be edited by an API client. What it does change is which playlist the
 // video lands in: a "like" puts it in the positively-rated (liked) playlist that channels.list
-// reports under the WL id, and that is the same list RPCYoutubeTracksMine reads. So the heart is the
-// library — the same role Spotify's save-to-library plays, which is why the adapter maps this onto
-// likeTrack/unlikeTrack rather than onto anything counter-shaped.
+// reports under the WL id, and that is the same list RPCYoutubeTracksMine reads. The heart therefore
+// maps onto likeTrack/unlikeTrack rather than onto anything counter-shaped.
 //
 // Quota is the reason there is no batching and no automatic retry. The method costs 50 units against
 // the project's shared 10,000 a day, so one like spends what two hundred reads do; the app sends one

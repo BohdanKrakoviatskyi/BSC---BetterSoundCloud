@@ -32,6 +32,16 @@ persist('lyra.lib.v1', library, (s) => ({
   liked: s.liked, disliked: s.disliked, playlists: s.playlists, cache: pruned(s), recent: s.recent,
 }));
 
+const storedLibrary = library.get();
+const keepTrack = (id: string) => !id.startsWith('sp:');
+library.set({
+  liked: storedLibrary.liked.filter(keepTrack),
+  disliked: storedLibrary.disliked.filter(keepTrack),
+  recent: storedLibrary.recent.filter(keepTrack),
+  playlists: storedLibrary.playlists.map((playlist) => ({ ...playlist, ids: playlist.ids.filter(keepTrack) })),
+  cache: Object.fromEntries(Object.entries(storedLibrary.cache).filter(([id]) => keepTrack(id))),
+});
+
 const obsoletePlaylistNames = new Set([
   'вечерний чилл', 'evening chill', 'заряд энергии', 'energy boost', 'ночная дорога', 'night drive',
 ]);

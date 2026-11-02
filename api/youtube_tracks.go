@@ -10,9 +10,8 @@ import (
 	"time"
 )
 
-// YouTube identifiers are opaque strings, and like Spotify's they are not turned into numbers here.
-// Every track carries nativeId and source; the numeric id the domain needs is handed out by the
-// frontend's serviceIdentity, which cannot collide.
+// YouTube identifiers are opaque strings and are not turned into numbers here. Every track carries
+// nativeId and source; the numeric id the domain needs is handed out by the frontend's serviceIdentity.
 //
 // One thing is named differently on purpose: pagination here is a pageToken, not a next URL. YouTube's
 // continuation is an opaque token that only means anything together with the request that produced
@@ -649,8 +648,8 @@ func (s *service) youtubeAccessToken() (string, error) {
 		return "", errors.New("YouTube Music не авторизован")
 	}
 	if s.youtubeAuth.ExpiresAt > 0 && time.Now().UnixMilli() >= s.youtubeAuth.ExpiresAt {
-		// Unlike Spotify, this one is recoverable without the user: Google's refresh grant needs only
-		// the refresh token, which is stored. So the caller is told to refresh rather than to sign in.
+		// Google's refresh grant needs only the stored refresh token, so the caller is told to refresh
+		// rather than to sign in.
 		return "", errors.New("срок действия токена YouTube истёк, нужен refresh")
 	}
 	return token, nil

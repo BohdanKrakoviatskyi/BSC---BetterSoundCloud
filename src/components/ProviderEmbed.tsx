@@ -2,14 +2,6 @@ import { useEffect, useRef } from 'react';
 import { publishProviderState, registerProviderControls } from '../lib/provider-player';
 import type { Track } from '../types';
 
-type SpotifyController = {
-  play(): void;
-  pause(): void;
-  seek(seconds: number): void;
-  addListener(name: 'playback_update', callback: (event: { data: { isPaused: boolean; isBuffering: boolean; position: number; duration: number } }) => void): void;
-  destroy(): void;
-};
-type SpotifyIframeAPI = { createController(element: HTMLElement, options: { uri: string; width: string; height: number }, callback: (controller: SpotifyController) => void): void };
 type YouTubePlayer = {
   playVideo(): void;
   pauseVideo(): void;
@@ -24,8 +16,6 @@ type YouTubeAPI = { Player: new (element: HTMLElement, options: { videoId: strin
 
 declare global {
   interface Window {
-    onSpotifyIframeApiReady?: (api: SpotifyIframeAPI) => void;
-    SpotifyIframeApi?: SpotifyIframeAPI;
     onYouTubeIframeAPIReady?: () => void;
     YT?: YouTubeAPI;
   }
@@ -43,7 +33,7 @@ function script(id: string, src: string): Promise<void> {
 }
 
 export function usesProviderEmbed(track: Track) {
-  return (track.source === 'youtube' && track.playback !== 'direct') || (track.source === 'spotify' && !track.preview);
+  return track.source === 'youtube' && track.playback !== 'direct';
 }
 
 export function ProviderEmbed({ track }: { track: Track }) {
@@ -89,20 +79,6 @@ export function ProviderEmbed({ track }: { track: Track }) {
       };
       if (window.YT) window.onYouTubeIframeAPIReady();
       else void script('youtube-iframe-api', 'https://www.youtube.com/iframe_api').catch(() => report(false, false));
-    } else {
-      const previousReady = window.onSpotifyIframeApiReady;
-      window.onSpotifyIframeApiReady = (api) => {
-        window.SpotifyIframeApi = api;
-        previousReady?.(api);
-        if (disposed || !host.current) return;
-        api.createController(host.current, { uri: `spotify:track:${track.nativeId}`, width: '100%', height: 152 }, (controller) => {
-          if (disposed) return controller.destroy();
-          unregister = registerProviderControls({ play: () => controller.play(), pause: () => controller.pause(), seek: (seconds) => controller.seek(seconds), setVolume: () => {}, destroy: () => controller.destroy() });
-          controller.addListener('playback_update', ({ data }) => report(!data.isPaused, data.isBuffering, data.position / 1000, data.duration / 1000, data.isPaused && data.duration > 0 && data.position >= data.duration));
-        });
-      };
-      if (window.SpotifyIframeApi) window.onSpotifyIframeApiReady(window.SpotifyIframeApi);
-      else void script('spotify-iframe-api', 'https://open.spotify.com/embed/iframe-api/v1').catch(() => report(false, false));
     }
 
     return () => { disposed = true; unregister(); };

@@ -1,4 +1,5 @@
 import type { LyricLine, Track } from '../types';
+import { findYouTubeFallbackCandidate, youtubeFallbackQueries } from './youtube-match';
 import { findLyricsCandidate, lyricsSearchQueries } from './lyrics-match';
 import { rpc } from './sidecar';
 
@@ -6,12 +7,10 @@ import {
   searchSoundCloudTracks,
   soundCloudTrackLyrics,
   soundCloudRelatedTracks,
-  searchSpotifyTracks,
   type SoundCloudTrackCard,
   type SoundCloudSearchTrack,
   searchYtDlpTracks,
   ytDlpTrackStream,
-  spotifyAuthStatus,
 } from './providers-api';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -39,23 +38,11 @@ export function mapSoundCloudTrack(track: SoundCloudTrackLike): Track {
 export async function searchTracks(query: string, signal?: AbortSignal): Promise<Track[]> {
   const results = await Promise.allSettled([
     searchSoundCloudTracks(query, signal),
-    spotifyAuthStatus(signal).then((status) => status.authorized ? searchSpotifyTracks({ query, limit: 20 }, signal) : null),
     searchYtDlpTracks(query, signal),
   ]);
-  const [soundcloud, spotify, youtube] = results;
+  const [soundcloud, youtube] = results;
   const tracks: Track[] = [];
   if (soundcloud.status === 'fulfilled') tracks.push(...soundcloud.value.map(mapSoundCloudTrack));
-  if (spotify.status === 'fulfilled' && spotify.value) {
-    for (const track of spotify.value.tracks) {
-      const duration = track.durationMs / 1000;
-      const cover = track.album.images.slice().sort((a, b) => b.width - a.width)[0]?.url;
-      tracks.push({
-        id: `sp:${track.nativeId}`, title: track.title, artist: track.artists.map((artist) => artist.name).join(', '),
-        album: track.album.name, cover, thumb: cover, src: track.previewUrl || track.permalink || '',
-        duration, fullDuration: duration || undefined, nativeId: track.nativeId, preview: Boolean(track.previewUrl), source: 'spotify',
-      });
-    }
-  }
   if (youtube.status === 'fulfilled') {
     for (const track of youtube.value) {
       const duration = track.durationMs / 1000;
@@ -84,32 +71,35 @@ export async function relatedSoundCloudTracks(trackId: number): Promise<Track[]>
   return (await soundCloudRelatedTracks(trackId)).map(mapSoundCloudTrack);
 }
 
+export async function searchYouTubeRecommendations(track: Track): Promise<Track[]> {
+  const results = await searchYtDlpTracks(`${track.artist} songs like ${track.title}`);
+  return results.map((item) => {
+    const duration = item.durationMs / 1000;
+    return {
+      id: `yt:${item.nativeId}`, title: item.title, artist: item.artist,
+      cover: item.artworkUrl || undefined, thumb: item.artworkUrl || undefined,
+      src: item.permalink || `https://music.youtube.com/watch?v=${encodeURIComponent(item.nativeId)}`,
+      duration, fullDuration: duration || undefined, nativeId: item.nativeId, playback: 'direct', source: 'youtube',
+    };
+  });
+}
+
 export { ytDlpTrackStream };
 
-const normalizeMatch = (value: string) => value.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
-
 export async function findYouTubeFallback(track: Track): Promise<Track | null> {
-  const results = await searchYtDlpTracks(`${track.title} ${track.artist}`);
-  const targetTitle = normalizeMatch(track.title);
-  const targetArtist = normalizeMatch(track.artist);
-  const match = results
-    .map((candidate) => {
-      const title = normalizeMatch(candidate.title);
-      const artist = normalizeMatch(candidate.artist);
-      const titleMatch = title === targetTitle || title.includes(targetTitle) || targetTitle.includes(title);
-      const artistMatch = !targetArtist || artist.includes(targetArtist) || targetArtist.includes(artist);
-      return { candidate, score: (titleMatch ? 2 : 0) + (artistMatch ? 1 : 0) };
-    })
-    .filter(({ score }) => score >= 2)
-    .sort((a, b) => b.score - a.score)[0]?.candidate;
-  if (!match) return null;
-  const duration = match.durationMs / 1000;
-  return {
-    id: `yt:${match.nativeId}`, title: match.title, artist: match.artist,
-    cover: match.artworkUrl || undefined, thumb: match.artworkUrl || undefined,
-    src: match.permalink || `https://music.youtube.com/watch?v=${encodeURIComponent(match.nativeId)}`,
-    duration, fullDuration: duration || undefined, nativeId: match.nativeId, playback: 'direct', source: 'youtube',
-  };
+  const seed = { ...track, duration: track.fullDuration ?? track.duration };
+  for (const query of youtubeFallbackQueries(seed)) {
+    const match = findYouTubeFallbackCandidate(seed, await searchYtDlpTracks(query));
+    if (!match) continue;
+    const duration = match.durationMs / 1000;
+    return {
+      id: `yt:${match.nativeId}`, title: match.title, artist: match.artist,
+      cover: match.artworkUrl || undefined, thumb: match.artworkUrl || undefined,
+      src: match.permalink || `https://music.youtube.com/watch?v=${encodeURIComponent(match.nativeId)}`,
+      duration, fullDuration: duration || undefined, nativeId: match.nativeId, playback: 'direct', source: 'youtube',
+    };
+  }
+  return null;
 }
 
 /* ---------------- lyrics ---------------- */

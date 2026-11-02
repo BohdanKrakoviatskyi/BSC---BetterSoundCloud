@@ -113,8 +113,10 @@ export function Sidebar({ mode }: { mode: 'inline' | 'drawer' }) {
             onClick={() => nav({ name: 'playlist', id: p.id })}
           />
         ))}
+      </div>
+      <div className="side-bottom">
         <NavItem k="providers" icon="music_note" label={t('providers')} active={active === 'providers'} expanded={expanded} onClick={() => nav({ name: 'providers' })} />
-        <NavItem k="appearance" icon="palette" label={t('appearance')} active={active === 'appearance'} expanded={expanded} className="mt-3" onClick={() => nav({ name: 'appearance' })} />
+        <NavItem k="appearance" icon="palette" label={t('appearance')} active={active === 'appearance'} expanded={expanded} onClick={() => nav({ name: 'appearance' })} />
       </div>
     </nav>
   );

@@ -4,7 +4,9 @@ import { createStore, persist, clamp, shuffled, useStore } from '../lib/util';
 import { getTrack, library, pushRecent, isDisliked, ensureCached, registerTracks } from './library';
 import { snack } from './ui';
 import { t } from '../lib/i18n';
-import { findYouTubeFallback, relatedSoundCloudTracks, trackStream, ytDlpTrackStream } from '../lib/api';
+import { findYouTubeFallback, relatedSoundCloudTracks, searchYouTubeRecommendations, trackStream, ytDlpTrackStream } from '../lib/api';
+import { rankRecommendations } from '../lib/recommendations';
+import { createPendingAudioSeek, pendingAudioSeekFor, type PendingAudioSeek } from '../lib/pending-audio-seek';
 import { onProviderState, providerCommand } from '../lib/provider-player';
 import type { Track } from '../types';
 
@@ -27,14 +29,14 @@ export const player = createStore({
 });
 
 let original: string[] | null = null;
-let pendingSeek = 0;
+let pendingSeek: PendingAudioSeek | null = null;
 let errors = 0;
 let loadId = 0;
 let hls: Hls | undefined;
 let fallbackAttemptedGeneration = -1;
 const relatedFetched = new Set<string>();
 const recommendationSource = new Map<string, Track>();
-const usesProviderPlayback = (track: Track | null | undefined) => !!track && ((track.source === 'youtube' && track.playback !== 'direct') || (track.source === 'spotify' && !track.preview));
+const usesProviderPlayback = (track: Track | null | undefined) => !!track && track.source === 'youtube' && track.playback !== 'direct';
 
 export const currentTrack = (): Track | null => {
   const s = player.get();
@@ -134,6 +136,7 @@ async function load(i: number, autoplay: boolean) {
   const id = s.queue[i];
   const tr = id ? getTrack(id) : undefined;
   if (!tr) return;
+  pendingSeek = pendingSeek?.trackId === id ? pendingSeek : null;
   ensureCached(id);
   hls?.destroy();
   hls = undefined;
@@ -219,13 +222,15 @@ export const shufflePlay = (ids: string[]) => ids.length && playQueue(ids, Math.
 const relatedRequests = new Map<string, Promise<Track[]>>();
 
 function prefetchRelated(track: Track): Promise<Track[]> {
-  if (!track.nativeId) return Promise.resolve([]);
-  if (relatedFetched.has(track.id)) return Promise.resolve([]);
+  if (!track.nativeId || relatedFetched.has(track.id)) return Promise.resolve([]);
   let request = relatedRequests.get(track.id);
   if (!request) {
     const numericId = Number(track.nativeId.match(/(\d+)$/)?.[1]);
-    if (!numericId) return Promise.resolve([]);
-    request = relatedSoundCloudTracks(numericId).then((tracks) => {
+    if (track.source === 'soundcloud' && !numericId) return Promise.resolve([]);
+    const fetch = track.source === 'soundcloud'
+      ? relatedSoundCloudTracks(numericId)
+      : searchYouTubeRecommendations(track);
+    request = fetch.then((tracks) => {
       relatedFetched.add(track.id);
       return tracks;
     }).catch(() => []).finally(() => relatedRequests.delete(track.id));
@@ -241,7 +246,8 @@ async function appendRelatedAndContinue(track: Track) {
   const related = await prefetchRelated(source);
   if (currentTrack()?.id !== track.id) return;
   const existing = new Set(player.get().queue);
-  const candidates = shuffled(related.filter((candidate) => !existing.has(candidate.id) && !isDisliked(candidate.id)));
+  const disliked = new Set(library.get().disliked);
+  const candidates = shuffled(rankRecommendations(source, related, existing, disliked));
   if (!candidates.length) {
     player.set({ playing: false, loading: false });
     return;
@@ -266,8 +272,9 @@ export function toggle() {
   }
   if (!audio.src) {
     const keep = s.pos;
+    const id = s.queue[s.index];
     load(s.index, true);
-    pendingSeek = keep;
+    pendingSeek = id ? createPendingAudioSeek(id, keep) : null;
     return;
   }
   if (audio.paused) audio.play().catch(() => player.set({ playing: false }));
@@ -294,7 +301,7 @@ function step(dir: 1 | -1, auto: boolean) {
     if (i >= n) {
       if (auto && s.repeat === 'off') {
         const track = currentTrack();
-        if (s.shuffle && track && (track.source === 'soundcloud' || recommendationSource.has(track.id))) {
+        if (s.shuffle && track && (track.source === 'soundcloud' || track.source === 'youtube' || recommendationSource.has(track.id))) {
           void appendRelatedAndContinue(track);
           return;
         }
@@ -318,13 +325,19 @@ export const jumpTo = (i: number) => load(i, true);
 
 export function seek(sec: number) {
   if (usesProviderPlayback(currentTrack())) {
-    pendingSeek = Math.max(0, sec);
-    player.set({ pos: pendingSeek });
-    providerCommand('seek', pendingSeek);
+    pendingSeek = null;
+    const position = Math.max(0, sec);
+    player.set({ pos: position });
+    providerCommand('seek', position);
   } else if (!audio.src || audio.readyState < 1) {
-    pendingSeek = Math.max(0, sec);
-    player.set({ pos: pendingSeek });
-  } else audio.currentTime = clamp(sec, 0, dur() || sec);
+    const position = Math.max(0, sec);
+    const id = currentTrack()?.id;
+    pendingSeek = id ? createPendingAudioSeek(id, position) : null;
+    player.set({ pos: position });
+  } else {
+    pendingSeek = null;
+    audio.currentTime = clamp(sec, 0, dur() || sec);
+  }
   emitFrame();
   emitTime();
 }
@@ -414,9 +427,10 @@ audio.addEventListener('loadedmetadata', () => {
     void fallbackSoundCloud(track, player.get().index, loadId);
     return;
   }
-  if (pendingSeek) {
-    audio.currentTime = Math.min(pendingSeek, audio.duration || pendingSeek);
-    pendingSeek = 0;
+  const seekTo = track ? pendingAudioSeekFor(pendingSeek, track.id) : null;
+  if (seekTo !== null) {
+    audio.currentTime = Math.min(seekTo, audio.duration || seekTo);
+    pendingSeek = null;
   }
   if (isFinite(audio.duration)) player.set({ duration: audio.duration });
   emitFrame();
@@ -465,7 +479,7 @@ export function initPlayer() {
   player.set({ queue: q, index: idx, playing: false, loading: false, pos: idx >= 0 ? s.pos : 0 });
   audio.volume = s.volume;
   audio.muted = s.muted;
-  pendingSeek = idx >= 0 ? s.pos : 0;
+  pendingSeek = idx >= 0 && q[idx] ? createPendingAudioSeek(q[idx], s.pos) : null;
   const cur = currentTrack();
   if (cur) mediaMeta(cur);
   if ('mediaSession' in navigator) {

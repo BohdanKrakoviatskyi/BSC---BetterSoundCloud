@@ -59,57 +59,6 @@ export type SoundCloudLyrics = {
   isSynced: boolean;
 };
 
-export type SpotifyAuthProfile = {
-  id: string;
-  displayName?: string;
-  email?: string;
-  product?: string;
-};
-
-export type SpotifyAuthStatus = {
-  authorized: boolean;
-  profile?: SpotifyAuthProfile;
-  expiresAt?: number;
-};
-
-export type SpotifyAuthExchangeParams = {
-  code: string;
-  clientId: string;
-  clientSecret: string;
-  redirectUri: string;
-};
-
-export type SpotifyAuthCredentials = {
-  clientId: string;
-  clientSecret: string;
-};
-
-export type SpotifyArtist = { id: string; name: string };
-export type SpotifyImage = { url: string; width: number };
-export type SpotifyTrack = {
-  nativeId: string;
-  source: string;
-  urn: string;
-  title: string;
-  permalink?: string;
-  artworkUrl?: string;
-  durationMs: number;
-  popularity?: number;
-  previewUrl?: string;
-  artists: SpotifyArtist[];
-  album: {
-    id: string;
-    name: string;
-    images: SpotifyImage[];
-  };
-};
-
-export type SpotifyTrackPage = {
-  tracks: SpotifyTrack[];
-  nextHref?: string;
-};
-
-export type SpotifySearchParams = { query: string; limit?: number };
 
 export type YouTubeAuthProfile = {
   id: string;
@@ -209,34 +158,6 @@ export function soundCloudTrackLyrics(params: { trackId: number; title: string; 
   return rpc('track.lyrics', params, signal);
 }
 
-export function spotifyAuthStatus(signal?: AbortSignal): Promise<SpotifyAuthStatus> {
-  return rpc('spotify.auth.status', {}, signal);
-}
-
-export function spotifyAuthExchange(
-  params: SpotifyAuthExchangeParams,
-  signal?: AbortSignal,
-): Promise<SpotifyAuthStatus> {
-  return rpc('spotify.auth.exchange', params, signal);
-}
-
-export function spotifyAuthRefresh(
-  credentials: SpotifyAuthCredentials,
-  signal?: AbortSignal,
-): Promise<SpotifyAuthStatus> {
-  return rpc('spotify.auth.refresh', credentials, signal);
-}
-
-export function spotifyAuthLogout(signal?: AbortSignal): Promise<SpotifyAuthStatus> {
-  return rpc('spotify.auth.logout', {}, signal);
-}
-
-export function searchSpotifyTracks(
-  params: SpotifySearchParams,
-  signal?: AbortSignal,
-): Promise<SpotifyTrackPage> {
-  return rpc('spotify.search.tracks', params, signal);
-}
 
 export function youtubeAuthStatus(signal?: AbortSignal): Promise<YouTubeAuthStatus> {
   return rpc('youtube.auth.status', {}, signal);

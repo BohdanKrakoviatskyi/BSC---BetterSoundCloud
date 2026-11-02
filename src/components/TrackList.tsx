@@ -8,6 +8,8 @@ import { getTrack, library, toggleDislike, toggleLike, togglePlaylistTrack } fro
 import { addToQueue, player, playNext, playQueue, toggle } from '../state/player';
 import { go, openDialog } from '../state/ui';
 import type { Track } from '../types';
+import soundcloudLogo from '../assets/soundcloud.svg';
+import youtubeMusicLogo from '../assets/youtube-music.svg';
 
 export function LikeButton({ id, size = 'md', variant, className }: { id: string; size?: 'sm' | 'md' | 'lg'; variant?: 'tonal'; className?: string }) {
   const liked = useStore(library, (s) => s.liked.includes(id));
@@ -104,8 +106,9 @@ export function TrackMenu({ track, anchor, onClose, playlistId }: { track: Track
 }
 
 export function SourcePill({ track }: { track: Track }) {
-  const label = track.source === 'soundcloud' ? 'SoundCloud' : track.source === 'spotify' ? 'Spotify' : 'YouTube Music';
-  return <span className="pill">{label}</span>;
+  const label = track.source === 'soundcloud' ? 'SoundCloud' : 'YouTube Music';
+  const logo = track.source === 'soundcloud' ? youtubeMusicLogo : soundcloudLogo;
+  return <img className="provider-logo" src={logo} alt={label} title={label} />;
 }
 
 type RowProps = { id: string; index: number; list: string[]; isCurrent: boolean; isPlaying: boolean; playlistId?: string };

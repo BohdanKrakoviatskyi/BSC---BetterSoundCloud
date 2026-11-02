@@ -378,16 +378,7 @@ type service struct {
 	settings     settings
 	authPath     string
 	auth         authState
-	// Spotify keeps its own token file rather than sharing the SoundCloud one: they are
-	// independent services with independent lifetimes, and one being cleared must not sign the
-	// other out.
-	spotifyPath string
-	spotifyAuth spotifyAuthState
-	// A field so tests can point at an httptest server.
-	spotifyAPIBase string
-	spotifyAuthURL string
-	// YouTube Music keeps its own token file too. Three services, three independent sessions: signing
-	// out of one must never touch another, and a Google token means nothing to a Spotify session.
+	// YouTube Music keeps its own token file so signing out never touches SoundCloud.
 	youtubePath string
 	youtubeAuth youtubeAuthState
 	// Where the home page rows are cached. Search results go stale, and YouTube gives search.list a
@@ -423,15 +414,16 @@ func run(input io.Reader, output io.Writer) error {
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return fmt.Errorf("create app data directory: %w", err)
 	}
+	if err := removeFileIfExists(filepath.Join(dataDir, "spotify.json")); err != nil {
+		log.Printf("could not remove retired provider credentials: %v", err)
+	}
 
 	svc := &service{
-		settingsPath:   filepath.Join(dataDir, "settings.json"),
-		settings:       defaultSettings(),
-		authPath:       filepath.Join(dataDir, "auth.json"),
-		spotifyPath:    filepath.Join(dataDir, "spotify.json"),
-		spotifyAPIBase: spotifyDefaultAPIBase,
-		spotifyAuthURL: spotifyDefaultAuthURL,
-		youtubePath:    filepath.Join(dataDir, "youtube.json"),
+		settingsPath: filepath.Join(dataDir, "settings.json"),
+		settings:     defaultSettings(),
+		authPath:     filepath.Join(dataDir, "auth.json"),
+
+		youtubePath: filepath.Join(dataDir, "youtube.json"),
 		// 0600 like auth.json rather than the 0644 a plain cache would get: the rows name tracks and
 		// channels the user looked at, and this file sits beside the token files.
 		youtubeDiscoverPath: filepath.Join(dataDir, "youtube-discover.json"),
@@ -447,12 +439,8 @@ func run(input io.Reader, output io.Writer) error {
 	}
 	// Повреждённое или нечитаемое хранилище токена не должно мешать запуску:
 	// работаем как неавторизованные, диагностика уходит в stderr.
-	// Spotify's session is independent of SoundCloud's and must not fail the launch on its own.
 	if err := svc.loadYoutubeAuth(); err != nil {
 		log.Printf("youtube.auth stage=load_failed error=%q", err.Error())
-	}
-	if err := svc.loadSpotifyAuth(); err != nil {
-		log.Printf("spotify.auth stage=load_failed error=%q", err.Error())
 	}
 	if err := svc.loadAuth(); err != nil {
 		fmt.Fprintln(os.Stderr, "local backend: auth state ignored:", err)

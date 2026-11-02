@@ -9,21 +9,16 @@ import {
   soundCloudAuthRefresh,
   soundCloudAuthStatus,
   soundCloudSetClientId,
-  spotifyAuthExchange,
-  spotifyAuthLogout,
-  spotifyAuthRefresh,
-  spotifyAuthStatus,
   youtubeAuthExchange,
   youtubeAuthLogout,
   youtubeAuthRefresh,
   youtubeAuthStatus,
   type SoundCloudAuthStatus,
-  type SpotifyAuthStatus,
   type YouTubeAuthStatus,
 } from '../lib/providers-api';
 import { clearSoundCloudLibrary, loadSoundCloudLibrary } from '../state/library';
 
-type ProviderId = 'soundcloud' | 'spotify' | 'youtube';
+type ProviderId = 'soundcloud' | 'youtube';
 type Credentials = { clientId: string; clientSecret: string; redirectUri: string };
 type Connection = { connected: boolean; account?: string; expiresAt?: number };
 type ProviderConfig = {
@@ -41,14 +36,6 @@ const PROVIDERS: ProviderConfig[] = [
     name: 'SoundCloud',
     description: 'Sign in to SoundCloud in a dedicated browser window.',
     note: 'Press Login with SoundCloud. Resonance captures the client ID and session token from SoundCloud API requests, validates the token, and stores the session in the local app data directory.'
-  },
-  {
-    id: 'spotify',
-    name: 'Spotify',
-    description: 'Connect through Spotify’s authorization-code flow.',
-    clientLabel: 'Spotify client ID',
-    secretLabel: 'Spotify client secret',
-    note: 'Create a Spotify developer app and register the exact callback URL below. Full-track playback in Spotify’s embedded player may require a Spotify account; direct Web Playback SDK access requires Premium. Client secrets are kept only in this screen’s memory.'
   },
   {
     id: 'youtube',
@@ -74,10 +61,7 @@ async function fetchConnection(id: ProviderId): Promise<Connection> {
     const result: SoundCloudAuthStatus = await soundCloudAuthStatus();
     return { connected: result.authorized, account: result.profile?.fullName || result.profile?.username };
   }
-  if (id === 'spotify') {
-    const result: SpotifyAuthStatus = await spotifyAuthStatus();
-    return { connected: result.authorized, account: result.profile?.displayName || result.profile?.email, expiresAt: result.expiresAt };
-  }
+
   const result: YouTubeAuthStatus = await youtubeAuthStatus();
   return { connected: result.authorized, account: result.profile?.name || result.profile?.email, expiresAt: result.expiresAt };
 }
@@ -198,17 +182,14 @@ function ProviderCard({ provider, index }: { provider: ProviderConfig; index: nu
     if (!credentials.clientId || !credentials.redirectUri) throw new Error('Enter the client ID and registered callback URL first.');
     const state = crypto.randomUUID();
     setOauthState(state);
-    const url = new URL(provider.id === 'spotify' ? 'https://accounts.spotify.com/authorize' : provider.id === 'youtube' ? 'https://accounts.google.com/o/oauth2/v2/auth' : 'https://secure.soundcloud.com/authorize');
+    const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     url.searchParams.set('client_id', credentials.clientId);
     url.searchParams.set('redirect_uri', credentials.redirectUri);
     url.searchParams.set('response_type', 'code');
     url.searchParams.set('state', state);
-    if (provider.id === 'spotify') url.searchParams.set('scope', 'streaming user-read-email user-read-private user-modify-playback-state');
-    else {
-      url.searchParams.set('scope', 'https://www.googleapis.com/auth/youtube.readonly openid email profile');
-      url.searchParams.set('access_type', 'offline');
-      url.searchParams.set('prompt', 'consent');
-    }
+    url.searchParams.set('scope', 'https://www.googleapis.com/auth/youtube.readonly openid email profile');
+    url.searchParams.set('access_type', 'offline');
+    url.searchParams.set('prompt', 'consent');
     return url.toString();
   };
 
@@ -231,9 +212,7 @@ function ProviderCard({ provider, index }: { provider: ProviderConfig; index: nu
     }
     if (!authorizationCode) throw new Error('The callback URL did not include an authorization code.');
     const params = { ...credentials, code: authorizationCode };
-    if (provider.id === 'spotify') await spotifyAuthExchange(params);
-    else if (provider.id === 'youtube') await youtubeAuthExchange(params);
-    else throw new Error('Use the SoundCloud login window to sign in.');
+    await youtubeAuthExchange(params);
     setCode('');
   }, 'Authorization code exchanged.');
 
@@ -245,8 +224,7 @@ function ProviderCard({ provider, index }: { provider: ProviderConfig; index: nu
     else {
       if (!credentials.clientId || !credentials.clientSecret) throw new Error('Enter the client ID and client secret to refresh this connection.');
       const authCredentials = { clientId: credentials.clientId, clientSecret: credentials.clientSecret };
-      if (provider.id === 'spotify') await spotifyAuthRefresh(authCredentials);
-      else await youtubeAuthRefresh(authCredentials);
+      await youtubeAuthRefresh(authCredentials);
     }
   }, 'Connection refreshed.');
 
@@ -255,7 +233,6 @@ function ProviderCard({ provider, index }: { provider: ProviderConfig; index: nu
       await soundCloudAuthLogout();
       clearSoundCloudLibrary();
     }
-    else if (provider.id === 'spotify') await spotifyAuthLogout();
     else await youtubeAuthLogout();
   }, 'Provider disconnected.');
 

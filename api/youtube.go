@@ -143,8 +143,7 @@ func (s *service) RPCYoutubeAuthExchange(params youtubeExchangeParams) (youtubeA
 
 // RPCYoutubeAuthRefresh renews the access token.
 //
-// Google's refresh grant for this client needs the same credentials as the exchange: the stored
-// session alone is not enough, so the frontend passes what it kept at sign-in (like Spotify).
+// Google's refresh grant needs the same credentials as the exchange, so the frontend passes what it kept at sign-in.
 func (s *service) RPCYoutubeAuthRefresh(params youtubeRefreshParams) (youtubeAuthStatus, error) {
 	if strings.TrimSpace(s.youtubeAuth.RefreshToken) == "" {
 		return youtubeAuthStatus{}, errors.New("нет сохранённого refresh token YouTube")
