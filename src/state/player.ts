@@ -242,12 +242,36 @@ function prefetchRelated(track: Track): Promise<Track[]> {
 async function appendRelatedAndContinue(track: Track) {
   const state = player.get();
   if (!state.shuffle || currentTrack()?.id !== track.id) return;
+
   const source = recommendationSource.get(track.id) ?? track;
-  const related = await prefetchRelated(source);
+  const libraryState = library.get();
+  const known = new Set([
+    ...libraryState.liked,
+    ...libraryState.recent,
+    ...libraryState.playlists.flatMap((playlist) => playlist.ids),
+    ...libraryState.soundcloudLiked.map((item) => item.id),
+    ...Object.values(libraryState.soundcloudPlaylistTracks).flatMap((items) => items.map((item) => item.id)),
+    ...Object.keys(libraryState.cache),
+  ]);
+  const seedIds = [
+    ...player.get().queue.slice(0, player.get().index + 1).reverse(),
+    ...libraryState.recent,
+    ...libraryState.liked,
+    ...libraryState.playlists.flatMap((playlist) => playlist.ids),
+    ...libraryState.soundcloudLiked.map((item) => item.id),
+  ];
+  const seeds = [...new Set([source.id, ...seedIds])]
+    .map((id) => getTrack(id))
+    .filter((item): item is Track => Boolean(item))
+    .slice(0, 5);
+  const results = await Promise.allSettled(seeds.map(prefetchRelated));
   if (currentTrack()?.id !== track.id) return;
+
+  const related = [...new Map(results.flatMap((result) => result.status === 'fulfilled' ? result.value : [])
+    .map((item) => [item.id, item])).values()];
   const existing = new Set(player.get().queue);
   const disliked = new Set(library.get().disliked);
-  const candidates = shuffled(rankRecommendations(source, related, existing, disliked));
+  const candidates = shuffled(rankRecommendations(seeds, related, existing, disliked, known)).slice(0, 20);
   if (!candidates.length) {
     player.set({ playing: false, loading: false });
     return;

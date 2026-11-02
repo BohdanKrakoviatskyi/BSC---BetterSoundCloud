@@ -16,14 +16,14 @@ test('rejects same-title versions and already queued or disliked tracks', () => 
   assert.deepEqual(ranked.map((track) => track.id), ['good']);
 });
 
-test('requires artist similarity and ranks closer track titles first', () => {
+test('ranks matching artist and titles ahead of weaker provider recommendations', () => {
   const ranked = rankRecommendations(seed, [
     candidate('unrelated', 'Blue Horizon', 'Someone Else'),
     candidate('related', 'Blue Horizon', 'The Artists'),
     candidate('less-related', 'Summer Rain', 'The Artists'),
   ]);
 
-  assert.deepEqual(ranked.map((track) => track.id), ['related', 'less-related']);
+  assert.deepEqual(ranked.map((track) => track.id), ['related', 'less-related', 'unrelated']);
 });
 
 test('uses duration similarity to break otherwise equal recommendation ties', () => {
@@ -33,4 +33,15 @@ test('uses duration similarity to break otherwise equal recommendation ties', ()
   ]);
 
   assert.deepEqual(ranked.map((track) => track.id), ['close', 'long']);
+});
+
+test('ranks tracks from any seed and excludes tracks already known to the user', () => {
+  const secondSeed = { id: 'second', title: 'Night Drive', artist: 'Neon Band', duration: 210 };
+  const ranked = rankRecommendations([seed, secondSeed], [
+    candidate('known', 'City Lights', 'Neon Band'),
+    candidate('new', 'City Lights', 'Neon Band'),
+    candidate('first-seed-match', 'Blue Horizon', 'The Artists'),
+  ], new Set(), new Set(), new Set(['known']));
+
+  assert.deepEqual(ranked.map((track) => track.id), ['first-seed-match', 'new']);
 });

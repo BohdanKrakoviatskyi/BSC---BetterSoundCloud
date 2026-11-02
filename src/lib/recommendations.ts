@@ -16,27 +16,34 @@ function similarity(a: Set<string>, b: Set<string>) {
 }
 
 export function rankRecommendations<T extends RecommendationTrack>(
-  seed: RecommendationTrack,
+  seeds: RecommendationTrack | RecommendationTrack[],
   candidates: T[],
   queued: ReadonlySet<string> = new Set(),
   disliked: ReadonlySet<string> = new Set(),
+  known: ReadonlySet<string> = new Set(),
 ): T[] {
-  const seedTitle = normalize(seed.title);
-  const seedArtist = words(seed.artist);
-  const seedTitleWords = words(seed.title);
-  return candidates
-    .filter((candidate) => candidate.id !== seed.id && !queued.has(candidate.id) && !disliked.has(candidate.id))
-    .filter((candidate) => normalize(candidate.title) !== seedTitle)
-    .map((candidate, index) => ({
-      candidate,
-      index,
-      artistScore: similarity(seedArtist, words(candidate.artist)),
-      titleScore: similarity(seedTitleWords, words(candidate.title)),
-      durationScore: seed.duration && candidate.duration
+  const seedList = Array.isArray(seeds) ? seeds : [seeds];
+  const scores = new Map<string, number>();
+  const seedIds = new Set(seedList.map((seed) => seed.id));
+  const seedTitles = new Set(seedList.map((seed) => normalize(seed.title)));
+  for (const seed of seedList) {
+    const seedTitle = normalize(seed.title);
+    const seedArtist = words(seed.artist);
+    const seedTitleWords = words(seed.title);
+    for (const candidate of candidates) {
+      if (candidate.id === seed.id || normalize(candidate.title) === seedTitle) continue;
+      const artistScore = similarity(seedArtist, words(candidate.artist));
+      const titleScore = similarity(seedTitleWords, words(candidate.title));
+      const durationScore = seed.duration && candidate.duration
         ? 1 - Math.min(Math.abs(seed.duration - candidate.duration) / Math.max(seed.duration, candidate.duration), 1)
-        : 0,
-    }))
-    .filter(({ artistScore }) => artistScore >= 0.5)
-    .sort((a, b) => b.titleScore - a.titleScore || b.artistScore - a.artistScore || b.durationScore - a.durationScore || a.index - b.index)
+        : 0;
+      const score = artistScore * 0.5 + titleScore * 0.35 + durationScore * 0.15;
+      scores.set(candidate.id, Math.max(scores.get(candidate.id) ?? 0, score));
+    }
+  }
+  return candidates
+    .filter((candidate) => !seedIds.has(candidate.id) && !seedTitles.has(normalize(candidate.title)) && !queued.has(candidate.id) && !disliked.has(candidate.id) && !known.has(candidate.id))
+    .map((candidate, index) => ({ candidate, index, score: scores.get(candidate.id) ?? 0 }))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
     .map(({ candidate }) => candidate);
 }
