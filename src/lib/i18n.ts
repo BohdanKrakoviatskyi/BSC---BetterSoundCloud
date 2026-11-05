@@ -154,11 +154,22 @@ const S = {
   shortcuts: ['Горячие клавиши', 'Keyboard shortcuts'],
   kbPlay: ['Пауза / воспроизведение', 'Play / pause'],
   kbSeek: ['Перемотка ±5 сек', 'Seek ±5s'],
+  kbSeekBack: ['Перемотка назад', 'Seek backward'],
+  kbSeekForward: ['Перемотка вперёд', 'Seek forward'],
+  kbPrevious: ['Предыдущий трек', 'Previous track'],
+  kbNext: ['Следующий трек', 'Next track'],
   kbSkip: ['Предыдущий / следующий трек', 'Previous / next track'],
   kbLike: ['Нравится', 'Like'],
   kbLyrics: ['Текст на весь экран', 'Fullscreen lyrics'],
-  kbMute: ['Без звука', 'Mute'],
+  kbMute: ['Выключить звук', 'Mute'],
   kbSearch: ['Поиск', 'Search'],
+
+  shortcutListening: ['Нажмите сочетание…', 'Press a shortcut…'],
+
+  shortcutReset: ['Вернуть сочетание по умолчанию', 'Restore default shortcut'],
+  shortcutDuplicate: ['Это сочетание уже назначено другому действию.', 'This shortcut is already assigned to another action.'],
+  shortcutRegisterError: ['Не удалось зарегистрировать глобальную клавишу.', 'Could not register the global shortcut.'],
+  shortcutStorageError: ['Не удалось сохранить настройки сочетаний.', 'Could not save shortcut settings.'],
 
   min: ['мин', 'min'],
   hr: ['ч', 'h'],

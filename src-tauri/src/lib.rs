@@ -60,8 +60,7 @@ fn is_music_youtube_url(url: &tauri::Url) -> bool {
 }
 
 fn is_music_youtube_library_url(url: &tauri::Url) -> bool {
-    is_music_youtube_url(url)
-        && (url.path() == "/library" || url.path().starts_with("/library/"))
+    is_music_youtube_url(url) && (url.path() == "/library" || url.path().starts_with("/library/"))
 }
 
 fn build_cookie_header(cookies: &[Cookie<'static>]) -> String {
@@ -129,10 +128,7 @@ fn start_soundcloud_login(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn start_ytmusic_login(
-    app: AppHandle,
-    state: State<'_, YtMusicLoginState>,
-) -> Result<(), String> {
+fn start_ytmusic_login(app: AppHandle, state: State<'_, YtMusicLoginState>) -> Result<(), String> {
     // Closing a previous attempt must not look like the user cancelled the new one.
     if let Ok(mut nonce) = state.nonce.lock() {
         *nonce = None;
@@ -150,15 +146,11 @@ fn start_ytmusic_login(
 
     // Open the library page directly: it is the page we need for capture, and
     // signed-out visitors get a clear sign-in prompt there.
-    WebviewWindowBuilder::new(
-        &app,
-        "ytmusic-login",
-        WebviewUrl::External(library_url()?),
-    )
-    .title("Sign in to YouTube Music")
-    .inner_size(1040.0, 820.0)
-    .build()
-    .map_err(|error| format!("could not open YouTube Music login: {error}"))?;
+    WebviewWindowBuilder::new(&app, "ytmusic-login", WebviewUrl::External(library_url()?))
+        .title("Sign in to YouTube Music")
+        .inner_size(1040.0, 820.0)
+        .build()
+        .map_err(|error| format!("could not open YouTube Music login: {error}"))?;
 
     let watcher_app = app.clone();
     tauri::async_runtime::spawn_blocking(move || watch_ytmusic_login(watcher_app, nonce));
@@ -254,7 +246,10 @@ fn capture_ytmusic_session(app: &AppHandle, window: &WebviewWindow, nonce: &str)
     }
 
     let state = app.state::<YtMusicLoginState>();
-    let mut current = state.nonce.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut current = state
+        .nonce
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     if current.as_deref() == Some(nonce) {
         *current = None;
     }
@@ -268,6 +263,7 @@ fn capture_ytmusic_session(app: &AppHandle, window: &WebviewWindow, nonce: &str)
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(YtMusicLoginState::default())
         .on_window_event(|window, event| {
             if window.label() == "soundcloud-login"
@@ -323,13 +319,17 @@ mod tests {
             &"https://music.youtube.com/library".parse().unwrap()
         ));
         assert!(is_music_youtube_library_url(
-            &"https://music.youtube.com/library/playlists".parse().unwrap()
+            &"https://music.youtube.com/library/playlists"
+                .parse()
+                .unwrap()
         ));
         assert!(!is_music_youtube_library_url(
             &"https://music.youtube.com/".parse().unwrap()
         ));
         assert!(!is_music_youtube_library_url(
-            &"https://music.youtube.com.evil.test/library".parse().unwrap()
+            &"https://music.youtube.com.evil.test/library"
+                .parse()
+                .unwrap()
         ));
         assert!(!is_music_youtube_library_url(
             &"http://music.youtube.com/library".parse().unwrap()

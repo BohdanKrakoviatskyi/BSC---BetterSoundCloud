@@ -1,6 +1,7 @@
 import { useMemo, useRef, type ReactNode } from 'react';
 import { hexFromArgb } from '@material/material-color-utilities';
 import { Icon, type IconName } from '../components/Icon';
+import { ShortcutSettings } from '../components/ShortcutSettings';
 import { Button, Segmented, Slider, type Vars } from '../components/ui';
 import { cx, useStore } from '../lib/util';
 import { t, type Key } from '../lib/i18n';
@@ -275,28 +276,7 @@ export default function Appearance() {
             />
           </Card>
           <Card icon="keyboard" title={t('shortcuts')} i={8}>
-            <div className="grid gap-2 text-sm">
-              {([
-                [['Space'], 'kbPlay'],
-                [['←', '→'], 'kbSeek'],
-                [['Shift', '←/→'], 'kbSkip'],
-                [['L'], 'kbLike'],
-                [['F'], 'kbLyrics'],
-                [['M'], 'kbMute'],
-                [['/'], 'kbSearch'],
-              ] as [string[], Key][]).map(([keys, k]) => (
-                <div key={k} className="flex items-center justify-between gap-3">
-                  <span className="text-on-surface-variant">{t(k)}</span>
-                  <span className="flex gap-1">
-                    {keys.map((x) => (
-                      <kbd key={x} className="kbd">
-                        {x}
-                      </kbd>
-                    ))}
-                  </span>
-                </div>
-              ))}
-            </div>
+            <ShortcutSettings />
           </Card>
         </div>
 

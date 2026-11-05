@@ -26,3 +26,4 @@ tauri = { version = "2.12.5", features = [] }
 tauri-plugin-log = "2"
 
 tauri-plugin-shell = "2"
+tauri-plugin-global-shortcut = "2"

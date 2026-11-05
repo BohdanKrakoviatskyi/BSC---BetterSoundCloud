@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef } from 'react';
+
 import { Sidebar } from './components/Sidebar';
 import { MiniPlayer } from './components/MiniPlayer';
 import { NowPlaying } from './components/NowPlaying';
@@ -8,9 +9,9 @@ import { Drawer, Overlays } from './components/Overlays';
 import { IconButton } from './components/ui';
 import { MD, useMedia, useStore, XL } from './lib/util';
 import { t, useLang } from './lib/i18n';
-import { loadSoundCloudLibrary, loadYtMusicLibrary, toggleLike } from './state/library';
-import { currentTrack, next, prev, seekBy, toggle, toggleMute } from './state/player';
-import { go, routeKey, setImmersive, ui, type Route } from './state/ui';
+import { loadSoundCloudLibrary, loadYtMusicLibrary } from './state/library';
+import { handleWindowShortcut } from './state/shortcut-runtime';
+import { routeKey, ui, type Route } from './state/ui';
 import Home from './pages/Home';
 import Search from './pages/Search';
 import Collection from './pages/Collection';
@@ -56,30 +57,8 @@ function Center({ isMd }: { isMd: boolean }) {
 
 function useShortcuts() {
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const el = e.target as HTMLElement;
-      if (el.closest('input, textarea, [contenteditable=true]') || e.metaKey || e.ctrlKey || e.altKey) return;
-      const k = e.key.toLowerCase();
-      if (e.code === 'Space') {
-        if (el.closest('button, [role=slider]')) return;
-        e.preventDefault();
-        toggle();
-      } else if (e.key === 'ArrowRight') e.shiftKey ? next() : seekBy(5);
-      else if (e.key === 'ArrowLeft') e.shiftKey ? prev() : seekBy(-5);
-      else if (k === 'l' || k === 'д') {
-        const tr = currentTrack();
-        if (tr) toggleLike(tr.id);
-      } else if (k === 'f' || k === 'а') {
-        if (currentTrack()) setImmersive(!ui.get().immersive);
-      } else if (k === 'm' || k === 'ь') toggleMute();
-      else if (e.key === '/') {
-        e.preventDefault();
-        setImmersive(false);
-        go({ name: 'search', q: '' });
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', handleWindowShortcut);
+    return () => window.removeEventListener('keydown', handleWindowShortcut);
   }, []);
 }
 

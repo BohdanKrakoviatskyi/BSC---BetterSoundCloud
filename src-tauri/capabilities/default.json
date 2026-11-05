@@ -5,6 +5,8 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister",
     "allow-start-soundcloud-login",
     "allow-start-ytmusic-login",
     {

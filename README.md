@@ -14,6 +14,10 @@ npm install
 npx tauri dev
 ```
 
+## Global mute shortcut
+
+Configure shortcuts in Appearance. The mute shortcut works globally in the Tauri desktop app while Resonance is running; other shortcuts work while its window is focused.
+
 ## Build
 ```bash
 npm run build
