@@ -271,9 +271,9 @@ function ProviderCard({ provider, index }: { provider: ProviderConfig; index: nu
             {token && <Button variant="outlined" disabled={busy} onClick={() => void login()}>Use existing access token</Button>}
           </>
         ) : (
-          <Button variant="filled" disabled={busy} onClick={() => void ytMusicBrowserLogin()}>{busy ? 'Waiting for YouTube Music…' : 'Connect YouTube Music'}</Button>
+          <Button variant="filled" disabled={busy} onClick={() => void ytMusicBrowserLogin()}>{busy ? 'Waiting for YouTube Music…' : 'Login with YouTube Music'}</Button>
         )}
-        <Button variant="tonal" disabled={busy || !connected} onClick={() => void refresh()}>{provider.id === 'soundcloud' ? 'Refresh' : 'Refresh library'}</Button>
+        <Button variant="tonal" disabled={busy || !connected} onClick={() => void refresh()}>Refresh library</Button>
         <Button variant="outlined" disabled={busy || !connected} onClick={() => void disconnect()}>Disconnect</Button>
       </div>
       {message && <p className="mt-3 text-sm text-primary" role="status">{message}</p>}
