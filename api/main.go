@@ -397,6 +397,13 @@ type service struct {
 	// lookup would queue unrelated work behind the network.
 	lyricsMu    sync.RWMutex
 	lyricsCache map[int64]cachedLyrics
+	// Resolved yt-dlp audio URLs are cached to avoid spawning yt-dlp on every play.
+	// Signed googlevideo URLs expire; entries are short-lived and failures bypass cache.
+	ytStreamMu    sync.Mutex
+	ytStreamCache map[string]ytStreamCacheEntry
+	ytStreamCalls map[string]*ytStreamCall
+	// Local HTTP audio proxy/cache for YouTube playback (download+stream+disk cache).
+	ytAudio *ytAudioManager
 }
 
 func main() {
@@ -433,6 +440,12 @@ func run(input io.Reader, output io.Writer) error {
 		apiBase:             apiBase(),
 		httpClient:          &http.Client{Timeout: 15 * time.Second},
 		lyricsCache:         make(map[int64]cachedLyrics),
+	}
+	audioMgr := newYTAudioManager(filepath.Join(dataDir, "yt-audio-cache"), svc.httpClient)
+	if err := audioMgr.start(); err != nil {
+		log.Printf("yt audio cache disabled: %v", err)
+	} else {
+		svc.ytAudio = audioMgr
 	}
 	if err := svc.loadSettings(); err != nil {
 		return err
@@ -476,13 +489,18 @@ func run(input io.Reader, output io.Writer) error {
 	return scanner.Err()
 }
 
+var rpcNoGlobalLock = map[string]bool{
+	"yt.dlp.search": true,
+	"yt.dlp.stream": true,
+}
+
 func (s *service) call(method string, params json.RawMessage) (any, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	startedAt := time.Now()
 	log.Printf("rpc stage=received method=%q params_bytes=%d", method, len(params))
 	spec, ok := rpcMethods()[method]
 	if !ok {
+		s.mu.Unlock()
 		log.Printf("rpc stage=dispatch_error method=%q error=%q", method, "unknown method")
 		return nil, errors.New("unknown method")
 	}
@@ -491,15 +509,29 @@ func (s *service) call(method string, params json.RawMessage) (any, error) {
 		params = json.RawMessage(`{}`)
 	}
 	if err := json.Unmarshal(params, paramsValue.Interface()); err != nil {
+		s.mu.Unlock()
 		wrapped := fmt.Errorf("invalid %s payload: %w", method, err)
 		log.Printf("rpc stage=decode_error method=%q params_type=%s error=%q", method, spec.params, wrapped.Error())
 		return nil, wrapped
 	}
 	methodValue := reflect.ValueOf(s).MethodByName(spec.goName)
 	if !methodValue.IsValid() {
+		s.mu.Unlock()
 		log.Printf("rpc stage=dispatch_error method=%q go_method=%q error=%q", method, spec.goName, "method disappeared after discovery")
 		return nil, errors.New("unknown method")
 	}
+	if rpcNoGlobalLock[method] {
+		s.mu.Unlock()
+		outputs := methodValue.Call([]reflect.Value{paramsValue.Elem()})
+		if !outputs[1].IsNil() {
+			err := outputs[1].Interface().(error)
+			log.Printf("rpc stage=handler_error method=%q go_method=%q elapsed_ms=%d error=%q", method, spec.goName, time.Since(startedAt).Milliseconds(), err.Error())
+			return nil, err
+		}
+		log.Printf("rpc stage=complete method=%q result_type=%s elapsed_ms=%d", method, spec.result, time.Since(startedAt).Milliseconds())
+		return outputs[0].Interface(), nil
+	}
+	defer s.mu.Unlock()
 	outputs := methodValue.Call([]reflect.Value{paramsValue.Elem()})
 	if !outputs[1].IsNil() {
 		err := outputs[1].Interface().(error)

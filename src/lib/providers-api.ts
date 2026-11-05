@@ -165,6 +165,6 @@ export function searchYtDlpTracks(query: string, signal?: AbortSignal): Promise<
   return rpc('yt.dlp.search', { query }, signal);
 }
 
-export function ytDlpTrackStream(videoId: string): Promise<{ url: string }> {
-  return rpc('yt.dlp.stream', { videoId });
+export function ytDlpTrackStream(videoId: string, signal?: AbortSignal): Promise<{ url: string }> {
+  return rpc('yt.dlp.stream', { videoId }, signal);
 }

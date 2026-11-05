@@ -36,7 +36,55 @@ let hls: Hls | undefined;
 let fallbackAttemptedGeneration = -1;
 const relatedFetched = new Set<string>();
 const recommendationSource = new Map<string, Track>();
+const ytStreamPrefetch = new Map<string, Promise<{ url: string }>>();
 const usesProviderPlayback = (track: Track | null | undefined) => !!track && track.source === 'youtube' && track.playback !== 'direct';
+
+const YT_STREAM_PREFETCH_AHEAD = 3;
+
+function prefetchYtStream(id?: string | null) {
+  if (!id) return;
+  if (ytStreamPrefetch.has(id)) return;
+  // Warms the local Go yt-dlp audio cache (download-to-disk). Best-effort.
+  const request = ytDlpTrackStream(id)
+    .then(async ({ url }) => {
+      if (!url) return { url };
+      if (url.includes('/yt-audio/') && url.includes('t=')) {
+        try {
+          await fetch(`${url}&prefetch=1`, { method: 'GET', cache: 'no-store' });
+        } catch {
+          // Background prefetch; playback path will handle misses.
+        }
+      }
+      return { url };
+    })
+    .catch(() => ({ url: '' }))
+    .finally(() => {
+      if (ytStreamPrefetch.get(id) === request) ytStreamPrefetch.delete(id);
+    });
+  ytStreamPrefetch.set(id, request);
+}
+
+function prefetchUpcomingYtStreams(index = player.get().index) {
+  const { queue, repeat } = player.get();
+  if (!queue.length || index < 0) return;
+  let queued = 0;
+  for (let offset = 1; offset <= queue.length && queued < YT_STREAM_PREFETCH_AHEAD; offset += 1) {
+    let nextIndex = index + offset;
+    if (nextIndex >= queue.length) {
+      if (repeat === 'off') break;
+      nextIndex %= queue.length;
+    }
+    const track = getTrack(queue[nextIndex]);
+    if (!track) continue;
+    if (isDisliked(track.id)) continue;
+    if (track.source === 'youtube' && track.playback === 'direct' && track.nativeId) {
+      prefetchYtStream(track.nativeId);
+      queued += 1;
+    } else if (track.source === 'youtube' && track.playback === 'direct') {
+      queued += 1;
+    }
+  }
+}
 
 export const currentTrack = (): Track | null => {
   const s = player.get();
@@ -140,9 +188,12 @@ async function load(i: number, autoplay: boolean) {
   ensureCached(id);
   hls?.destroy();
   hls = undefined;
-  audio.pause();
-  audio.removeAttribute('src');
   player.set({ index: i, duration: tr.duration, loading: true, playing: false, pos: 0 });
+  lastSaved = 0;
+  try { audio.pause(); } catch {}
+  audio.removeAttribute('src');
+  try { audio.load(); } catch {}
+  prefetchUpcomingYtStreams(i);
   if (usesProviderPlayback(tr)) {
     player.set({ loading: false });
     if (autoplay) providerCommand('play');
@@ -181,9 +232,12 @@ async function load(i: number, autoplay: boolean) {
         instance.attachMedia(audio);
         instance.loadSource(stream.url);
       });
-    } else audio.src = stream.url;
-    if (autoplay) await audio.play();
-    else player.set({ loading: false });
+    } else {
+      audio.src = stream.url;
+    }
+    if (autoplay) {
+      try { await audio.play(); } catch { player.set({ loading: false, playing: false }); }
+    } else player.set({ loading: false });
   } catch (e) {
     if (generation !== loadId) return;
     if (tr.source === 'soundcloud') {
@@ -196,6 +250,7 @@ async function load(i: number, autoplay: boolean) {
   }
   if (generation !== loadId) return;
   if (tr.source === 'soundcloud') void prefetchRelated(tr);
+  if (tr.source === 'youtube' && tr.playback === 'direct') prefetchUpcomingYtStreams(i);
   pushRecent(id);
   mediaMeta(tr);
   emitFrame();
@@ -441,8 +496,13 @@ audio.addEventListener('playing', () => {
   player.set({ loading: false });
   errors = 0;
 });
-audio.addEventListener('pause', () => player.set({ playing: false, pos: audio.currentTime }));
-audio.addEventListener('waiting', () => player.set({ loading: true }));
+audio.addEventListener('pause', () => {
+  if (player.get().loading) return;
+  player.set({ playing: false, pos: audio.src ? audio.currentTime : 0 });
+});
+audio.addEventListener('waiting', () => {
+  if (audio.src) player.set({ loading: true });
+});
 audio.addEventListener('canplay', () => player.set({ loading: false }));
 audio.addEventListener('ended', () => next(true));
 audio.addEventListener('loadedmetadata', () => {

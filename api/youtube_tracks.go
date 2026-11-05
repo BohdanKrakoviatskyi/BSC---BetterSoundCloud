@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -593,16 +594,26 @@ func (s *service) RPCYoutubeArtistPlaylists(params youtubeArtistPageParams) (you
 	if err := s.youtubeGet(token, s.youtubeURL("/playlists", values), "плейлисты канала YouTube", &wire); err != nil {
 		return youtubePlaylistPage{}, err
 	}
-	page := youtubePlaylistPage{NextPageToken: wire.NextPageToken, Playlists: []youtubePlaylist{}}
-	for _, item := range wire.Items {
-		playlist := mapYoutubePlaylist(item)
-		if playlist.ArtworkURL == "" && strings.TrimSpace(item.ID) != "" {
-			if cover := s.youtubePlaylistCover(token, item.ID); cover != "" {
-				playlist.ArtworkURL = cover
-			}
+	page := youtubePlaylistPage{NextPageToken: wire.NextPageToken, Playlists: make([]youtubePlaylist, len(wire.Items))}
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 4)
+	for index, item := range wire.Items {
+		page.Playlists[index] = mapYoutubePlaylist(item)
+		playlistID := strings.TrimSpace(item.ID)
+		if page.Playlists[index].ArtworkURL != "" || playlistID == "" {
+			continue
 		}
-		page.Playlists = append(page.Playlists, playlist)
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int, id string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if cover := s.youtubePlaylistCover(token, id); cover != "" {
+				page.Playlists[i].ArtworkURL = cover
+			}
+		}(index, playlistID)
 	}
+	wg.Wait()
 	return page, nil
 }
 

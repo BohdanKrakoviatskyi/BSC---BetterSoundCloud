@@ -5,31 +5,45 @@ type Pending = { resolve: (value: unknown) => void; reject: (reason: Error) => v
 
 let child: Promise<Child> | undefined;
 let nextId = 0;
+let buffer = '';
 const pending = new Map<number, Pending>();
+
+function failPending(message: string) {
+  pending.forEach(({ reject }) => reject(new Error(message)));
+  pending.clear();
+}
+
+function handleLine(line: string) {
+  if (!line.trim()) return;
+  try {
+    const response = JSON.parse(line) as RpcResponse<unknown>;
+    const request = pending.get(response.id);
+    if (!request) return;
+    pending.delete(response.id);
+    if (response.error) request.reject(new Error(response.error));
+    else request.resolve(response.result);
+  } catch {
+    // Ignore malformed output; sidecar diagnostics belong on stderr.
+  }
+}
 
 function start() {
   const command = Command.sidecar('binaries/local-api');
 
-  command.stdout.on('data', (line) => {
-    try {
-      const response = JSON.parse(line) as RpcResponse<unknown>;
-      const request = pending.get(response.id);
-      if (!request) return;
-      pending.delete(response.id);
-      if (response.error) request.reject(new Error(response.error));
-      else request.resolve(response.result);
-    } catch {
-      // Ignore malformed output; sidecar diagnostics belong on stderr.
+  command.stdout.on('data', (chunk) => {
+    buffer += chunk;
+    let newline = buffer.indexOf('\n');
+    while (newline >= 0) {
+      handleLine(buffer.slice(0, newline));
+      buffer = buffer.slice(newline + 1);
+      newline = buffer.indexOf('\n');
     }
   });
   command.stderr.on('data', (line) => console.error('[local-api]', line));
-  const failPending = (message: string) => {
-    pending.forEach(({ reject }) => reject(new Error(message)));
-    pending.clear();
-  };
-  command.on('error', (error) => failPending(error));
+  command.on('error', (error) => failPending(String(error)));
   command.on('close', () => {
     failPending('Local API stopped');
+    buffer = '';
     child = undefined;
   });
   return command.spawn();

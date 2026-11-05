@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -49,6 +50,19 @@ type ytDlpStreamResult struct {
 	URL string `json:"url"`
 }
 
+type ytStreamCacheEntry struct {
+	url     string
+	expires time.Time
+}
+
+type ytStreamCall struct {
+	done   chan struct{}
+	result ytDlpStreamResult
+	err    error
+}
+
+const ytStreamCacheTTL = 90 * time.Minute
+
 func (s *service) RPCYtDlpSearch(params ytDlpSearchParams) ([]ytDlpTrack, error) {
 	query := strings.TrimSpace(params.Query)
 	if query == "" {
@@ -57,7 +71,7 @@ func (s *service) RPCYtDlpSearch(params ytDlpSearchParams) ([]ytDlpTrack, error)
 	if len(query) > 300 {
 		return nil, errors.New("search query is too long")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	output, err := runYtDlp(ctx, "--no-warnings", "--no-progress", "--skip-download", "--flat-playlist", "--dump-single-json", "ytsearch10:"+query)
 	if err != nil {
@@ -70,10 +84,52 @@ func (s *service) RPCYtDlpStream(params ytDlpStreamParams) (ytDlpStreamResult, e
 	if !validYouTubeVideoID(params.VideoID) {
 		return ytDlpStreamResult{}, errors.New("invalid YouTube video ID")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	if s.ytAudio != nil {
+		return ytDlpStreamResult{URL: s.ytAudio.streamURL(params.VideoID)}, nil
+	}
+	// Fallback: direct resolved URL (browser streams from CDN).
+	id := params.VideoID
+	now := time.Now()
+	s.ytStreamMu.Lock()
+	if s.ytStreamCache == nil {
+		s.ytStreamCache = make(map[string]ytStreamCacheEntry)
+		s.ytStreamCalls = make(map[string]*ytStreamCall)
+	}
+	if entry, ok := s.ytStreamCache[id]; ok && now.Before(entry.expires) && entry.url != "" {
+		s.ytStreamMu.Unlock()
+		return ytDlpStreamResult{URL: entry.url}, nil
+	}
+	if call, ok := s.ytStreamCalls[id]; ok {
+		s.ytStreamMu.Unlock()
+		<-call.done
+		return call.result, call.err
+	}
+	call := &ytStreamCall{done: make(chan struct{})}
+	s.ytStreamCalls[id] = call
+	s.ytStreamMu.Unlock()
+	result, err := resolveYtDlpStream(id)
+	s.ytStreamMu.Lock()
+	delete(s.ytStreamCalls, id)
+	if err == nil && result.URL != "" {
+		s.ytStreamCache[id] = ytStreamCacheEntry{url: result.URL, expires: time.Now().Add(ytStreamCacheTTL)}
+	}
+	s.ytStreamMu.Unlock()
+	call.result = result
+	call.err = err
+	close(call.done)
+	return result, err
+}
+
+func resolveYtDlpStream(videoID string) (ytDlpStreamResult, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
-	videoURL := "https://www.youtube.com/watch?v=" + params.VideoID
-	output, err := runYtDlp(ctx, "--no-warnings", "--no-progress", "--no-playlist", "--format", "bestaudio[ext=m4a]/bestaudio", "--get-url", videoURL)
+	videoURL := "https://www.youtube.com/watch?v=" + videoID
+	output, err := runYtDlp(ctx,
+		"--no-warnings", "--no-progress", "--no-playlist",
+		"--extractor-retries", "2", "--socket-timeout", "15",
+		"--format", "bestaudio[ext=m4a]/bestaudio",
+		"--get-url", videoURL,
+	)
 	if err != nil {
 		return ytDlpStreamResult{}, err
 	}
@@ -171,3 +227,5 @@ func validYtDlpAudioURL(value string) bool {
 	host := strings.ToLower(parsed.Hostname())
 	return host == "googlevideo.com" || strings.HasSuffix(host, ".googlevideo.com")
 }
+
+var _ sync.Mutex
