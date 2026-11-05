@@ -34,6 +34,10 @@ export const library = createStore({
   _libraryCachedAt: 0,
 });
 
+const EXCLUDED_YTMUSIC_PLAYLIST_TITLES = new Set(['episodes for later', 'sounds from shorts', 'liked music']);
+const visibleYtMusicPlaylists = (playlists: YtMusicPlaylist[]) =>
+  playlists.filter((playlist) => !EXCLUDED_YTMUSIC_PLAYLIST_TITLES.has((playlist.title || '').trim().toLocaleLowerCase()));
+
 /** Only keep external track metadata that is still referenced somewhere. */
 function pruned(s: ReturnType<typeof library.get>) {
   const keep = new Set<string>([...s.liked, ...s.disliked, ...s.recent, ...s.playlists.flatMap((p) => p.ids), ...player.get().queue]);
@@ -63,6 +67,7 @@ library.set({
   recent: storedLibrary.recent.filter(keepTrack),
   playlists: storedLibrary.playlists.map((playlist) => ({ ...playlist, ids: playlist.ids.filter(keepTrack) })),
   cache: Object.fromEntries(Object.entries(storedLibrary.cache).filter(([id]) => keepTrack(id))),
+  ytmusicPlaylists: visibleYtMusicPlaylists(storedLibrary.ytmusicPlaylists ?? []),
 });
 
 registerTracks(storedLibrary.soundcloudLiked ?? []);
@@ -189,7 +194,11 @@ export function loadYtMusicLibrary(force = false): Promise<void> {
           clearYtMusicLibrary();
           return;
         }
-        library.set({ ytmusicAuthorized: true, ytmusicProfile: auth.profile ?? cached.ytmusicProfile });
+        library.set({
+          ytmusicAuthorized: true,
+          ytmusicProfile: auth.profile ?? cached.ytmusicProfile,
+          ytmusicPlaylists: visibleYtMusicPlaylists(cached.ytmusicPlaylists),
+        });
         if (Date.now() - (cached._libraryCachedAt || 0) > 3600000) {
           void loadYtMusicLibrary(true);
         }
@@ -215,7 +224,7 @@ export function loadYtMusicLibrary(force = false): Promise<void> {
       registerTracks(liked);
       library.set({
         ytmusicLiked: liked,
-        ytmusicPlaylists: result.playlists,
+        ytmusicPlaylists: visibleYtMusicPlaylists(result.playlists),
         ytmusicProfile: result.profile ?? auth.profile ?? cached.ytmusicProfile ?? null,
         ytmusicLibraryError: '',
       });
@@ -249,12 +258,15 @@ export function loadYtMusicPlaylistArtwork(playlistId: string): Promise<string |
   const pending = ytmusicArtworkLoads.get(playlistId);
   if (pending) return pending;
   const epoch = ytmusicEpoch;
-  const request = ytMusicPlaylistArtwork(playlistId).then((art) => {
-    if (epoch === ytmusicEpoch) {
-      library.set((state) => ({ ytmusicPlaylistArt: { ...state.ytmusicPlaylistArt, [playlistId]: art } }));
-    }
-    return art;
-  }).catch(() => null).finally(() => ytmusicArtworkLoads.delete(playlistId));
+  const request = ytMusicPlaylistArtwork(playlistId)
+    .then((art) => {
+      if (epoch === ytmusicEpoch) {
+        library.set((state) => ({ ytmusicPlaylistArt: { ...state.ytmusicPlaylistArt, [playlistId]: art ?? null } }));
+      }
+      return art ?? null;
+    })
+    .catch(() => null)
+    .finally(() => ytmusicArtworkLoads.delete(playlistId));
   ytmusicArtworkLoads.set(playlistId, request);
   return request;
 }

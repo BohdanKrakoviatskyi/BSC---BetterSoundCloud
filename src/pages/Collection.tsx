@@ -10,13 +10,15 @@ import {
 } from '../state/library';
 import { player, playQueue, shufflePlay, toggle } from '../state/player';
 import { go, openDialog } from '../state/ui';
+import { parseSoundCloudCollectionId } from '../lib/soundcloud-library';
 import { parseYtMusicCollectionId } from '../lib/ytmusic-library';
 
 export default function Collection({ kind, id }: { kind: 'favorites' | 'playlist'; id?: string }) {
   const liked = useStore(library, (s) => s.liked);
   const soundcloudLiked = useStore(library, (s) => s.soundcloudLiked);
   const localPlaylist = useStore(library, (s) => (kind === 'playlist' ? s.playlists.find((p) => p.id === id) : undefined));
-  const remoteId = id?.startsWith('scpl:') ? id.slice(5) : undefined;
+  const scCollection = kind === 'playlist' ? parseSoundCloudCollectionId(id) : null;
+  const remoteId = scCollection?.kind === 'playlist' ? scCollection.playlistId : undefined;
   const remotePlaylist = useStore(library, (s) => remoteId ? s.soundcloudPlaylists.find((p) => p.id === remoteId) : undefined);
   const cachedRemoteTracks = useStore(library, (s) => remotePlaylist ? s.soundcloudPlaylistTracks[remotePlaylist.urn] ?? null : null);
   const ytCollection = kind === 'playlist' ? parseYtMusicCollectionId(id) : null;
@@ -48,15 +50,24 @@ export default function Collection({ kind, id }: { kind: 'favorites' | 'playlist
     created: 0,
     artworkUrl: ytArt,
   } : undefined;
-
-  const pl = localPlaylist ?? (remotePlaylist ? {
+  const scPl = scCollection?.kind === 'liked' ? {
+    id: id!,
+    name: t('soundcloudLiked'),
+    ids: soundcloudLiked.map((track) => track.id),
+    created: 0,
+  } : remotePlaylist ? {
     id: `scpl:${remotePlaylist.id}`, name: remotePlaylist.name,
     ids: cachedRemoteTracks?.map((track) => track.id) ?? [], created: 0, artworkUrl: remotePlaylist.artworkUrl,
-  } : ytPl);
-  const isProviderPlaylist = Boolean(remotePlaylist) || Boolean(ytCollection);
+  } : undefined;
+
+  const pl = localPlaylist ?? scPl ?? ytPl;
+  const isProviderPlaylist = Boolean(scCollection) || Boolean(ytCollection);
 
   useEffect(() => {
-    if (!remotePlaylist || cachedRemoteTracks) return;
+    if (!remotePlaylist || cachedRemoteTracks) {
+      setRemoteLoading(false);
+      return;
+    }
     let alive = true;
     setRemoteLoading(true);
     setRemoteError('');
@@ -67,7 +78,10 @@ export default function Collection({ kind, id }: { kind: 'favorites' | 'playlist
   }, [remotePlaylist?.urn, cachedRemoteTracks]);
 
   useEffect(() => {
-    if (!ytPlaylistId || cachedYtTracks) return;
+    if (!ytPlaylistId || cachedYtTracks) {
+      setYtLoading(false);
+      return;
+    }
     let alive = true;
     setYtLoading(true);
     setYtError('');

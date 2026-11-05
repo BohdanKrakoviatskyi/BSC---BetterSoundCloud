@@ -12,13 +12,13 @@ import { appearance } from '../state/appearance';
 import { go, openDialog, routeKey, ui, type Route } from '../state/ui';
 import { loadYtMusicPlaylistArtwork } from '../state/library';
 
-function YtMusicPlaylistCover({ playlistId, title }: { playlistId: string; title: string }) {
+function YtMusicPlaylistCover({ playlistId, title, artworkUrl }: { playlistId: string; title: string; artworkUrl?: string | null }) {
   const artCache = useStore(library, (s) => s.ytmusicPlaylistArt);
-  const art = artCache[playlistId];
+  const art = playlistId in artCache ? artCache[playlistId] : undefined;
   useLayoutEffect(() => {
     if (!(playlistId in artCache)) void loadYtMusicPlaylistArtwork(playlistId);
   }, [playlistId, artCache]);
-  return <PlaylistCover p={{ id: playlistId, name: title, ids: [], created: 0, artworkUrl: art ?? undefined }} className="h-10 w-10 rounded-[12px]" />;
+  return <PlaylistCover p={{ id: playlistId, name: title, ids: [], created: 0, artworkUrl: art ?? artworkUrl ?? undefined }} className="h-10 w-10 rounded-[12px]" />;
 }
 
 function NavItem({ k, active, expanded, label, sub, icon, art, onClick, playing, className }: {
@@ -148,7 +148,7 @@ export function Sidebar({ mode }: { mode: 'inline' | 'drawer' }) {
                 active={active === 'pl:' + ytmusicPlaylistId(p.playlistId)}
                 expanded={expanded}
                 playing={playing && !!curId && (library.get().ytmusicPlaylistTracks[p.playlistId] ?? []).some((track) => track.id === curId) && active === 'pl:' + ytmusicPlaylistId(p.playlistId)}
-                art={<YtMusicPlaylistCover playlistId={p.playlistId} title={p.title} />}
+                art={<YtMusicPlaylistCover playlistId={p.playlistId} title={p.title} artworkUrl={p.artworkUrl} />}
                 onClick={() => nav({ name: 'playlist', id: ytmusicPlaylistId(p.playlistId) })}
               />
             ))}

@@ -328,6 +328,13 @@ def _load_headers(credential_path: Path) -> tuple[dict[str, str], dict[str, str]
     return headers, profile
 
 
+EXCLUDED_YTMUSIC_PLAYLIST_TITLES = {
+    "episodes for later",
+    "sounds from shorts",
+    "liked music",
+}
+
+
 def sync_library(headers: dict[str, str], saved_profile: dict[str, str]) -> dict[str, Any]:
     client = _ytmusic(headers)
     try:
@@ -339,11 +346,14 @@ def sync_library(headers: dict[str, str], saved_profile: dict[str, str]) -> dict
         profile = normalize_profile(saved_profile)
 
     playlists_raw = client.get_library_playlists(limit=None) or []
-    playlists = [
-        normalize_playlist_summary(item)
-        for item in playlists_raw
-        if isinstance(item, dict) and (item.get("playlistId") or item.get("id"))
-    ]
+    playlists = []
+    for item in playlists_raw:
+        if not isinstance(item, dict) or not (item.get("playlistId") or item.get("id")):
+            continue
+        summary = normalize_playlist_summary(item)
+        if summary.get("title", "").strip().casefold() in EXCLUDED_YTMUSIC_PLAYLIST_TITLES:
+            continue
+        playlists.append(summary)
 
     liked_raw = client.get_liked_songs(limit=None) or {}
     liked_items = liked_raw.get("tracks", []) if isinstance(liked_raw, dict) else liked_raw
@@ -373,10 +383,9 @@ def fetch_playlist_artwork(headers: dict[str, str], playlist_id: str) -> str | N
         return None
     if not isinstance(playlist, dict):
         return None
-    thumbnails = playlist.get("thumbnails") or []
-    for thumb in thumbnails:
-        if isinstance(thumb, dict) and thumb.get("url"):
-            return str(thumb["url"])
+    art = _artwork(playlist)
+    if art:
+        return art
     artwork = playlist.get("artworkUrl")
     return str(artwork) if artwork else None
 
