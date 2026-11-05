@@ -262,12 +262,7 @@ function ProviderCard({ provider, index }: { provider: ProviderConfig; index: nu
       {connection?.account && <p className="mt-3 text-sm">Account: <span className="font-semibold">{connection.account}</span></p>}
       <p className="mt-4 rounded-2xl bg-surface-container-low p-3 text-sm text-on-surface-variant">{provider.note}</p>
 
-      {provider.id === 'soundcloud' && (
-        <label className="mt-4 grid gap-1.5 text-sm font-semibold">
-          Existing access token (optional fallback)
-          <input className="field min-w-0 w-full" type="password" autoComplete="new-password" value={token} onChange={(event) => setToken(event.target.value)} aria-label="SoundCloud access token" />
-        </label>
-      )}
+
 
       <div className="mt-4 flex flex-wrap gap-2">
         {provider.id === 'soundcloud' ? (
@@ -291,14 +286,13 @@ export default function Providers() {
   return (
     <div className="page max-w-[980px]">
       <header className="anim-in mb-6 mt-2">
-        <p className="mb-2 text-sm font-bold uppercase tracking-[0.14em] text-primary">Listening accounts</p>
         <h1 className="display text-[clamp(32px,5.5cqw,54px)]">Providers</h1>
         <p className="mt-2 max-w-2xl text-lg text-on-surface-variant">Connect music services in a dedicated sign-in window. Resonance keeps each provider session in the local app data directory and never stores credentials in the page or in source control.</p>
       </header>
       <div className="grid gap-4">
         {PROVIDERS.map((provider, index) => <ProviderCard key={provider.id} provider={provider} index={index + 1} />)}
       </div>
-      <p className="mt-4 text-xs text-on-surface-variant">YouTube Music support uses the unofficial YouTube Music web protocol through <span className="font-semibold">ytmusicapi</span>. Disconnecting removes only that provider&apos;s session; SoundCloud and your local library are left untouched.</p>
+
     </div>
   );
 }
