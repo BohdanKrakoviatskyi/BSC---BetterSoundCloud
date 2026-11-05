@@ -9,6 +9,7 @@ import { pick, t, tracksLabel } from '../lib/i18n';
 import { searchTracks } from '../lib/api';
 import { MOODS } from '../lib/moods';
 import { getTrack, library, registerTracks } from '../state/library';
+import { YTMUSIC_LIKED_ID, YTMUSIC_SAVED_ID, ytmusicPlaylistId } from '../lib/ytmusic-library';
 
 import { go, openDialog } from '../state/ui';
 import type { Track } from '../types';
@@ -22,6 +23,12 @@ export default function Home() {
   const soundcloudPlaylists = useStore(library, (s) => s.soundcloudPlaylists);
   const soundcloudLibraryLoading = useStore(library, (s) => s.soundcloudLibraryLoading);
   const soundcloudLibraryError = useStore(library, (s) => s.soundcloudLibraryError);
+  const ytmusicPlaylists = useStore(library, (s) => s.ytmusicPlaylists);
+  const ytmusicLiked = useStore(library, (s) => s.ytmusicLiked);
+  const ytmusicSaved = useStore(library, (s) => s.ytmusicSaved);
+  const ytmusicConnected = useStore(library, (s) => s.ytmusicAuthorized);
+  const ytmusicLibraryLoading = useStore(library, (s) => s.ytmusicLibraryLoading);
+  const ytmusicLibraryError = useStore(library, (s) => s.ytmusicLibraryError);
   const [trend, setTrend] = useState<Track[] | null>(trendCache);
   const [err, setErr] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -113,8 +120,24 @@ export default function Home() {
               <span className="mcard-sub">{tracksLabel(p.ids.length)}</span>
             </button>
           ))}
+          {ytmusicPlaylists.map((p, i) => (
+            <button
+              key={`ytmusic:${p.playlistId}`}
+              type="button"
+              data-ripple
+              className="mcard sl anim-in"
+              style={{ '--i': i } as Vars}
+              onClick={() => go({ name: 'playlist', id: ytmusicPlaylistId(p.playlistId) })}
+            >
+              <PlaylistCover p={{ id: p.playlistId, name: p.title, ids: [], created: 0, artworkUrl: p.artworkUrl ?? undefined }} className="mcard-cover" />
+              <span className="mcard-title">{p.title}</span>
+              <span className="mcard-sub">{tracksLabel(p.trackCount)}</span>
+            </button>
+          ))}
           {soundcloudLibraryLoading && <span className="px-3 py-2 text-sm text-on-surface-variant">Loading SoundCloud library…</span>}
           {!soundcloudLibraryLoading && soundcloudLibraryError && <span className="px-3 py-2 text-sm text-error">{soundcloudLibraryError}</span>}
+          {ytmusicConnected && ytmusicLibraryLoading && <span className="px-3 py-2 text-sm text-on-surface-variant">{t('ytmusicLoading')}</span>}
+          {ytmusicConnected && !ytmusicLibraryLoading && ytmusicLibraryError && <span className="px-3 py-2 text-sm text-error">{ytmusicLibraryError}</span>}
           <button type="button" data-ripple className="mcard sl anim-in" onClick={() => openDialog({ kind: 'create' })}>
             <span className="mcard-cover grid place-items-center !shadow-none outline-2 -outline-offset-2 outline-dashed outline-outline-variant">
               <Icon name="add" size={40} className="text-primary" />
@@ -132,8 +155,41 @@ export default function Home() {
         </div>
       </Section>
 
+      {ytmusicConnected && (
+        <Section
+          title={t('ytmusicLibrary')}
+          subtitle={t('ytmusicLibrarySub')}
+          i={6}
+          action={<Icon name="music_note" className="text-primary" size={28} />}
+        >
+          <HRow labels={arrows} cw={180}>
+            <button
+              type="button"
+              data-ripple
+              className="mcard sl anim-in"
+              onClick={() => go({ name: 'playlist', id: YTMUSIC_LIKED_ID })}
+            >
+              <PlaylistCover p={{ id: YTMUSIC_LIKED_ID, name: t('ytmusicLiked'), ids: [], created: 0 }} className="mcard-cover" />
+              <span className="mcard-title">{t('ytmusicLiked')}</span>
+              <span className="mcard-sub">{tracksLabel(ytmusicLiked.length)}</span>
+            </button>
+            <button
+              type="button"
+              data-ripple
+              className="mcard sl anim-in"
+              style={{ '--i': 1 } as Vars}
+              onClick={() => go({ name: 'playlist', id: YTMUSIC_SAVED_ID })}
+            >
+              <PlaylistCover p={{ id: YTMUSIC_SAVED_ID, name: t('ytmusicSaved'), ids: [], created: 0 }} className="mcard-cover" />
+              <span className="mcard-title">{t('ytmusicSaved')}</span>
+              <span className="mcard-sub">{tracksLabel(ytmusicSaved.length)}</span>
+            </button>
+          </HRow>
+        </Section>
+      )}
+
       {recentTracks.length > 0 && (
-        <Section title={t('recent')} i={6} action={<Icon name="history" className="text-on-surface-variant" size={26} />}>
+        <Section title={t('recent')} i={7} action={<Icon name="history" className="text-on-surface-variant" size={26} />}>
           <HRow labels={arrows}>
             {recentTracks.map((tr, i) => (
               <MediaCard key={tr.id} track={tr} list={recentIds} index={i} />

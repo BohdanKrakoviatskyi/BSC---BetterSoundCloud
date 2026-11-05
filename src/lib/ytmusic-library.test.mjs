@@ -1,0 +1,34 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mapYtMusicTrack, mapYtMusicTracks, parseYtMusicCollectionId, ytmusicPlaylistId } from './ytmusic-library.ts';
+
+test('maps YouTube Music metadata to the existing direct-playback track model', () => {
+  assert.deepEqual(mapYtMusicTrack({
+    videoId: 'abc123', title: 'Song', artists: ['One', 'Two'], artist: 'One, Two',
+    artworkUrl: 'https://img.test/cover.jpg', durationSeconds: 123, available: true,
+  }), {
+    id: 'yt:abc123', title: 'Song', artist: 'One, Two', cover: 'https://img.test/cover.jpg',
+    thumb: 'https://img.test/cover.jpg', src: 'https://music.youtube.com/watch?v=abc123',
+    duration: 123, fullDuration: 123, nativeId: 'abc123', playback: 'direct', source: 'youtube',
+  });
+});
+
+test('drops invalid video IDs and deduplicates tracks while preserving order', () => {
+  const tracks = mapYtMusicTracks([
+    { videoId: 'a', title: 'First', artist: 'Artist' },
+    { videoId: '', title: 'Missing' },
+    { videoId: 'a', title: 'Duplicate' },
+    { videoId: 'b', title: 'Second' },
+  ]);
+  assert.deepEqual(tracks.map((track) => track.id), ['yt:a', 'yt:b']);
+  assert.equal(ytmusicPlaylistId('PL1'), 'ytpl:PL1');
+});
+
+test('parses provider collection IDs without accepting local or SoundCloud IDs', () => {
+  assert.deepEqual(parseYtMusicCollectionId('ytpl:PL1'), { kind: 'playlist', playlistId: 'PL1' });
+  assert.deepEqual(parseYtMusicCollectionId('ytliked'), { kind: 'liked' });
+  assert.deepEqual(parseYtMusicCollectionId('ytsaved'), { kind: 'saved' });
+  assert.equal(parseYtMusicCollectionId('scpl:1'), null);
+  assert.equal(parseYtMusicCollectionId('local-id'), null);
+  assert.equal(parseYtMusicCollectionId('ytpl:'), null);
+});

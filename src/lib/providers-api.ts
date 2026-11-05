@@ -1,4 +1,6 @@
 import { rpc } from './sidecar';
+import { ytMusicRpc } from './ytmusic-sidecar';
+import type { YtMusicLibrary, YtMusicPlaylist } from './ytmusic-library';
 
 export type SoundCloudProfile = {
   id: number;
@@ -60,30 +62,18 @@ export type SoundCloudLyrics = {
 };
 
 
-export type YouTubeAuthProfile = {
-  id: string;
-  email?: string;
+export type YtMusicAuthProfile = {
   name?: string;
+  handle?: string;
   picture?: string;
 };
 
-export type YouTubeAuthStatus = {
+export type YtMusicAuthStatus = {
   authorized: boolean;
-  profile?: YouTubeAuthProfile;
-  expiresAt?: number;
+  profile?: YtMusicAuthProfile;
 };
 
-export type YouTubeAuthExchangeParams = {
-  code: string;
-  clientId: string;
-  clientSecret: string;
-  redirectUri: string;
-};
-
-export type YouTubeAuthCredentials = {
-  clientId: string;
-  clientSecret: string;
-};
+export type YtMusicAuthHeaders = Record<string, string>;
 
 export type YouTubeTrack = {
   nativeId: string;
@@ -100,18 +90,6 @@ export type YouTubeTrack = {
   subscriberCount?: number;
   artist: string;
   publishedAt?: string;
-};
-
-export type YouTubeTrackPage = {
-  tracks: YouTubeTrack[];
-  nextPageToken?: string;
-  capped?: boolean;
-};
-
-export type YouTubeSearchParams = {
-  query: string;
-  pageToken?: string;
-  limit?: number;
 };
 
 export function soundCloudAuthStatus(signal?: AbortSignal): Promise<SoundCloudAuthStatus> {
@@ -159,33 +137,24 @@ export function soundCloudTrackLyrics(params: { trackId: number; title: string; 
 }
 
 
-export function youtubeAuthStatus(signal?: AbortSignal): Promise<YouTubeAuthStatus> {
-  return rpc('youtube.auth.status', {}, signal);
+export function ytMusicAuthStatus(signal?: AbortSignal): Promise<YtMusicAuthStatus> {
+  return ytMusicRpc('auth.status', {}, signal);
 }
 
-export function youtubeAuthExchange(
-  params: YouTubeAuthExchangeParams,
-  signal?: AbortSignal,
-): Promise<YouTubeAuthStatus> {
-  return rpc('youtube.auth.exchange', params, signal);
+export function ytMusicAuthSave(headers: YtMusicAuthHeaders, signal?: AbortSignal): Promise<YtMusicAuthStatus> {
+  return ytMusicRpc('auth.save', { headers }, signal);
 }
 
-export function youtubeAuthRefresh(
-  credentials: YouTubeAuthCredentials,
-  signal?: AbortSignal,
-): Promise<YouTubeAuthStatus> {
-  return rpc('youtube.auth.refresh', credentials, signal);
+export function ytMusicAuthLogout(signal?: AbortSignal): Promise<YtMusicAuthStatus> {
+  return ytMusicRpc('auth.logout', {}, signal);
 }
 
-export function youtubeAuthLogout(signal?: AbortSignal): Promise<YouTubeAuthStatus> {
-  return rpc('youtube.auth.logout', {}, signal);
+export function ytMusicLibrarySync(signal?: AbortSignal): Promise<YtMusicLibrary> {
+  return ytMusicRpc('library.sync', {}, signal);
 }
 
-export function searchYouTubeTracks(
-  params: YouTubeSearchParams,
-  signal?: AbortSignal,
-): Promise<YouTubeTrackPage> {
-  return rpc('youtube.search.tracks', params, signal);
+export function ytMusicPlaylistTracks(playlistId: string, signal?: AbortSignal): Promise<YtMusicPlaylist> {
+  return ytMusicRpc('playlist.tracks', { playlistId }, signal);
 }
 
 export function searchYtDlpTracks(query: string, signal?: AbortSignal): Promise<YouTubeTrack[]> {

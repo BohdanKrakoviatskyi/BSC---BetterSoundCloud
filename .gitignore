@@ -6,3 +6,6 @@ src-tauri/target
 .DS_Store
 *.log
 Thumbs.db
+__pycache__/
+*.pyc
+.venv/

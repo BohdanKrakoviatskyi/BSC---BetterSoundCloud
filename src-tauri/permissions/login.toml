@@ -1,0 +1,14 @@
+# App-level ACL permissions.
+#
+# Defining any app permission turns on ACL checks for every custom command, so
+# each command the frontend calls must be explicitly granted in a capability.
+
+[[permission]]
+identifier = "allow-start-soundcloud-login"
+description = "Open the embedded SoundCloud sign-in window."
+commands.allow = ["start_soundcloud_login"]
+
+[[permission]]
+identifier = "allow-start-ytmusic-login"
+description = "Open the embedded YouTube Music sign-in window."
+commands.allow = ["start_ytmusic_login"]

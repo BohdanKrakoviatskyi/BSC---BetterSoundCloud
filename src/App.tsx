@@ -8,7 +8,7 @@ import { Drawer, Overlays } from './components/Overlays';
 import { IconButton } from './components/ui';
 import { MD, useMedia, useStore, XL } from './lib/util';
 import { t, useLang } from './lib/i18n';
-import { loadSoundCloudLibrary, toggleLike } from './state/library';
+import { loadSoundCloudLibrary, loadYtMusicLibrary, toggleLike } from './state/library';
 import { currentTrack, next, prev, seekBy, toggle, toggleMute } from './state/player';
 import { go, routeKey, setImmersive, ui, type Route } from './state/ui';
 import Home from './pages/Home';
@@ -96,6 +96,7 @@ export default function App() {
 
   useEffect(() => {
     void loadSoundCloudLibrary();
+    void loadYtMusicLibrary();
   }, []);
 
   useEffect(() => {

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { open } from '@tauri-apps/plugin-shell';
 import { Button, type Vars } from '../components/ui';
 import {
   soundCloudAuthLogin,
@@ -9,45 +8,44 @@ import {
   soundCloudAuthRefresh,
   soundCloudAuthStatus,
   soundCloudSetClientId,
-  youtubeAuthExchange,
-  youtubeAuthLogout,
-  youtubeAuthRefresh,
-  youtubeAuthStatus,
+  ytMusicAuthSave,
+  ytMusicAuthLogout,
+  ytMusicAuthStatus,
   type SoundCloudAuthStatus,
-  type YouTubeAuthStatus,
+  type YtMusicAuthStatus,
 } from '../lib/providers-api';
-import { clearSoundCloudLibrary, loadSoundCloudLibrary } from '../state/library';
+import {
+  clearSoundCloudLibrary,
+  clearYtMusicLibrary,
+  library,
+  loadSoundCloudLibrary,
+  loadYtMusicLibrary,
+} from '../state/library';
 
-type ProviderId = 'soundcloud' | 'youtube';
-type Credentials = { clientId: string; clientSecret: string; redirectUri: string };
-type Connection = { connected: boolean; account?: string; expiresAt?: number };
+type ProviderId = 'soundcloud' | 'ytmusic';
+type Connection = { connected: boolean; account?: string };
 type ProviderConfig = {
   id: ProviderId;
   name: string;
   description: string;
-  clientLabel?: string;
-  secretLabel?: string;
   note: string;
 };
+type YtMusicCapturePayload = { headers?: Record<string, string> };
 
 const PROVIDERS: ProviderConfig[] = [
   {
     id: 'soundcloud',
     name: 'SoundCloud',
     description: 'Sign in to SoundCloud in a dedicated browser window.',
-    note: 'Press Login with SoundCloud. Resonance captures the client ID and session token from SoundCloud API requests, validates the token, and stores the session in the local app data directory.'
+    note: 'Press Login with SoundCloud. Resonance captures the client ID and session token from SoundCloud API requests, validates the token, and stores the session in the local app data directory.',
   },
   {
-    id: 'youtube',
+    id: 'ytmusic',
     name: 'YouTube Music',
-    description: 'Connect through Google OAuth for YouTube access.',
-    clientLabel: 'Google OAuth client ID',
-    secretLabel: 'Google OAuth client secret',
-    note: 'Create an OAuth client in Google Cloud, register the callback URL below, configure consent, and enable YouTube Data API v3. YouTube Music has no separate public OAuth registration. Playback uses YouTube’s visible embedded player.'
+    description: 'Sign in to YouTube Music in a dedicated browser window.',
+    note: 'Resonance opens YouTube Music, waits for the signed-in account request, and reads the session cookie from the embedded window. Your library is read-only, and every track plays through the existing yt-dlp stream path.',
   },
 ];
-
-const EMPTY_CREDENTIALS: Credentials = { clientId: '', clientSecret: '', redirectUri: '' };
 
 function errorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
@@ -62,16 +60,13 @@ async function fetchConnection(id: ProviderId): Promise<Connection> {
     return { connected: result.authorized, account: result.profile?.fullName || result.profile?.username };
   }
 
-  const result: YouTubeAuthStatus = await youtubeAuthStatus();
-  return { connected: result.authorized, account: result.profile?.name || result.profile?.email, expiresAt: result.expiresAt };
+  const result: YtMusicAuthStatus = await ytMusicAuthStatus();
+  return { connected: result.authorized, account: result.profile?.name || result.profile?.handle };
 }
 
 function ProviderCard({ provider, index }: { provider: ProviderConfig; index: number }) {
   const [connection, setConnection] = useState<Connection | null>(null);
-  const [credentials, setCredentials] = useState<Credentials>(EMPTY_CREDENTIALS);
   const [token, setToken] = useState('');
-  const [code, setCode] = useState('');
-  const [oauthState, setOauthState] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -79,14 +74,11 @@ function ProviderCard({ provider, index }: { provider: ProviderConfig; index: nu
 
   useEffect(() => () => loginCleanup.current?.(), []);
 
-  const updateCredentials = (field: keyof Credentials, value: string) => {
-    setCredentials((current) => ({ ...current, [field]: value }));
-  };
-
   const loadStatus = async () => {
     try {
       setConnection(await fetchConnection(provider.id));
     } catch (requestError) {
+      setConnection({ connected: false });
       setError(errorMessage(requestError));
     }
   };
@@ -177,63 +169,79 @@ function ProviderCard({ provider, index }: { provider: ProviderConfig; index: nu
     }
   };
 
-  const authorizationUrl = () => {
-    if (provider.id === 'soundcloud') throw new Error('Use the SoundCloud login window.');
-    if (!credentials.clientId || !credentials.redirectUri) throw new Error('Enter the client ID and registered callback URL first.');
-    const state = crypto.randomUUID();
-    setOauthState(state);
-    const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-    url.searchParams.set('client_id', credentials.clientId);
-    url.searchParams.set('redirect_uri', credentials.redirectUri);
-    url.searchParams.set('response_type', 'code');
-    url.searchParams.set('state', state);
-    url.searchParams.set('scope', 'https://www.googleapis.com/auth/youtube.readonly openid email profile');
-    url.searchParams.set('access_type', 'offline');
-    url.searchParams.set('prompt', 'consent');
-    return url.toString();
-  };
-
-  const startAuthorization = () => run(async () => {
-    await open(authorizationUrl());
-  }, 'Provider authorization opened in your browser. Paste the full callback URL below.');
-
-  const exchange = () => run(async () => {
-    if (!code.trim()) throw new Error('Paste the full callback URL returned by the provider.');
-    if (!credentials.clientId || !credentials.clientSecret || !credentials.redirectUri) {
-      throw new Error('Enter the client ID, client secret, and exact registered callback URL.');
-    }
-    let authorizationCode = code.trim();
+  const ytMusicBrowserLogin = async () => {
+    setBusy(true);
+    setError('');
+    setMessage('Finish signing in to YouTube Music in the opened window…');
+    let settled = false;
+    let timer = 0;
+    let unlistenCaptured: (() => void) | undefined;
+    let unlistenCancelled: (() => void) | undefined;
+    const cleanup = () => {
+      window.clearTimeout(timer);
+      unlistenCaptured?.();
+      unlistenCancelled?.();
+      loginCleanup.current = undefined;
+    };
+    const finish = async (payload?: YtMusicCapturePayload) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      try {
+        if (!payload?.headers) throw new Error('YouTube Music sign-in was cancelled or timed out.');
+        try {
+          await ytMusicAuthSave(payload.headers);
+        } catch (requestError) {
+          throw new Error(`YouTube Music rejected the captured session: ${errorMessage(requestError)}`);
+        }
+        await loadYtMusicLibrary(true);
+        await loadStatus();
+        const libraryError = library.get().ytmusicLibraryError;
+        if (libraryError) throw new Error(libraryError);
+        setMessage('YouTube Music connected.');
+      } catch (requestError) {
+        setError(errorMessage(requestError));
+        setMessage('');
+      } finally {
+        setBusy(false);
+      }
+    };
     try {
-      const callback = new URL(authorizationCode);
-      if (oauthState && callback.searchParams.get('state') !== oauthState) throw new Error('OAuth state did not match. Start authorization again.');
-      authorizationCode = callback.searchParams.get('code') || '';
-    } catch (error) {
-      if (error instanceof Error && error.message.startsWith('OAuth state')) throw error;
+      unlistenCaptured = await listen<YtMusicCapturePayload>('ytmusic-auth-captured', ({ payload }) => void finish(payload));
+      unlistenCancelled = await listen('ytmusic-login-cancelled', () => void finish());
+      loginCleanup.current = () => { settled = true; cleanup(); };
+      timer = window.setTimeout(() => void finish(), 5 * 60 * 1000);
+      await invoke('start_ytmusic_login');
+    } catch (requestError) {
+      if (!settled) {
+        settled = true;
+        cleanup();
+        setError(errorMessage(requestError));
+        setMessage('');
+        setBusy(false);
+      }
     }
-    if (!authorizationCode) throw new Error('The callback URL did not include an authorization code.');
-    const params = { ...credentials, code: authorizationCode };
-    await youtubeAuthExchange(params);
-    setCode('');
-  }, 'Authorization code exchanged.');
+  };
 
   const refresh = () => run(async () => {
     if (provider.id === 'soundcloud') {
       await soundCloudAuthRefresh();
       await loadSoundCloudLibrary(true);
+      return;
     }
-    else {
-      if (!credentials.clientId || !credentials.clientSecret) throw new Error('Enter the client ID and client secret to refresh this connection.');
-      const authCredentials = { clientId: credentials.clientId, clientSecret: credentials.clientSecret };
-      await youtubeAuthRefresh(authCredentials);
-    }
-  }, 'Connection refreshed.');
+    await loadYtMusicLibrary(true);
+    const libraryError = library.get().ytmusicLibraryError;
+    if (libraryError) throw new Error(libraryError);
+  }, provider.id === 'soundcloud' ? 'Connection refreshed.' : 'YouTube Music library refreshed.');
 
   const disconnect = () => run(async () => {
     if (provider.id === 'soundcloud') {
       await soundCloudAuthLogout();
       clearSoundCloudLibrary();
+      return;
     }
-    else await youtubeAuthLogout();
+    await ytMusicAuthLogout();
+    clearYtMusicLibrary();
   }, 'Provider disconnected.');
 
   const connected = Boolean(connection?.connected);
@@ -252,33 +260,13 @@ function ProviderCard({ provider, index }: { provider: ProviderConfig; index: nu
       </div>
 
       {connection?.account && <p className="mt-3 text-sm">Account: <span className="font-semibold">{connection.account}</span></p>}
-      {connection?.expiresAt && <p className="mt-1 text-xs text-on-surface-variant">Token expires {new Date(connection.expiresAt).toLocaleString()}</p>}
       <p className="mt-4 rounded-2xl bg-surface-container-low p-3 text-sm text-on-surface-variant">{provider.note}</p>
 
-      {provider.id === 'soundcloud' ? (
+      {provider.id === 'soundcloud' && (
         <label className="mt-4 grid gap-1.5 text-sm font-semibold">
           Existing access token (optional fallback)
           <input className="field min-w-0 w-full" type="password" autoComplete="new-password" value={token} onChange={(event) => setToken(event.target.value)} aria-label="SoundCloud access token" />
         </label>
-      ) : (
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <label className="grid min-w-0 gap-1.5 text-sm font-semibold">
-            {provider.clientLabel}
-            <input className="field min-w-0 w-full" type="text" autoComplete="off" value={credentials.clientId} onChange={(event) => updateCredentials('clientId', event.target.value)} aria-label={`${provider.name} client ID`} />
-          </label>
-          <label className="grid min-w-0 gap-1.5 text-sm font-semibold">
-            {provider.secretLabel}
-            <input className="field min-w-0 w-full" type="password" autoComplete="new-password" value={credentials.clientSecret} onChange={(event) => updateCredentials('clientSecret', event.target.value)} aria-label={`${provider.name} client secret`} />
-          </label>
-          <label className="grid min-w-0 gap-1.5 text-sm font-semibold sm:col-span-2">
-            Registered callback / redirect URL
-            <input className="field min-w-0 w-full" type="url" autoComplete="url" value={credentials.redirectUri} onChange={(event) => updateCredentials('redirectUri', event.target.value)} aria-label={`${provider.name} callback or redirect URL`} placeholder="http://127.0.0.1:43821/callback" />
-          </label>
-          <label className="grid min-w-0 gap-1.5 text-sm font-semibold sm:col-span-2">
-            Full callback URL
-            <input className="field min-w-0 w-full" type="url" autoComplete="off" value={code} onChange={(event) => setCode(event.target.value)} aria-label={`${provider.name} callback URL`} placeholder="Paste the full redirected URL" />
-          </label>
-        </div>
       )}
 
       <div className="mt-4 flex flex-wrap gap-2">
@@ -288,12 +276,9 @@ function ProviderCard({ provider, index }: { provider: ProviderConfig; index: nu
             {token && <Button variant="outlined" disabled={busy} onClick={() => void login()}>Use existing access token</Button>}
           </>
         ) : (
-          <>
-            <Button variant="tonal" disabled={busy || !credentials.clientId || !credentials.redirectUri} onClick={() => void startAuthorization()}>{busy ? 'Working…' : 'Open provider login'}</Button>
-            <Button variant="filled" disabled={busy || !credentials.clientId || !credentials.clientSecret || !credentials.redirectUri || !code.trim()} onClick={() => void exchange()}>{busy ? 'Working…' : 'Exchange code / connect'}</Button>
-          </>
+          <Button variant="filled" disabled={busy} onClick={() => void ytMusicBrowserLogin()}>{busy ? 'Waiting for YouTube Music…' : 'Connect YouTube Music'}</Button>
         )}
-        <Button variant="tonal" disabled={busy || !connected || (provider.id !== 'soundcloud' && (!credentials.clientId || !credentials.clientSecret))} onClick={() => void refresh()}>Refresh</Button>
+        <Button variant="tonal" disabled={busy || !connected} onClick={() => void refresh()}>{provider.id === 'soundcloud' ? 'Refresh' : 'Refresh library'}</Button>
         <Button variant="outlined" disabled={busy || !connected} onClick={() => void disconnect()}>Disconnect</Button>
       </div>
       {message && <p className="mt-3 text-sm text-primary" role="status">{message}</p>}
@@ -308,12 +293,12 @@ export default function Providers() {
       <header className="anim-in mb-6 mt-2">
         <p className="mb-2 text-sm font-bold uppercase tracking-[0.14em] text-primary">Listening accounts</p>
         <h1 className="display text-[clamp(32px,5.5cqw,54px)]">Providers</h1>
-        <p className="mt-2 max-w-2xl text-lg text-on-surface-variant">Connect music services using their developer credentials. Tokens, secrets, and authorization codes stay in this page’s memory and are cleared when you leave or reload it.</p>
+        <p className="mt-2 max-w-2xl text-lg text-on-surface-variant">Connect music services in a dedicated sign-in window. Resonance keeps each provider session in the local app data directory and never stores credentials in the page or in source control.</p>
       </header>
       <div className="grid gap-4">
         {PROVIDERS.map((provider, index) => <ProviderCard key={provider.id} provider={provider} index={index + 1} />)}
       </div>
-      <p className="mt-4 text-xs text-on-surface-variant">Never expose a production client secret in a public client application. Confidential OAuth exchanges should be performed by a trusted backend; the current API accepts secrets from this UI, so use it only in an appropriate trusted environment.</p>
+      <p className="mt-4 text-xs text-on-surface-variant">YouTube Music support uses the unofficial YouTube Music web protocol through <span className="font-semibold">ytmusicapi</span>. Disconnecting removes only that provider&apos;s session; SoundCloud and your local library are left untouched.</p>
     </div>
   );
 }

@@ -1,7 +1,11 @@
 import { createStore, persist, uid } from '../lib/util';
 import type { Playlist, SoundCloudPlaylist, Track } from '../types';
-import { soundCloudAuthStatus, soundCloudPlaylistTracks, soundCloudPlaylistsMine, soundCloudTracksMine } from '../lib/providers-api';
+import {
+  soundCloudAuthStatus, soundCloudPlaylistTracks, soundCloudPlaylistsMine, soundCloudTracksMine,
+  ytMusicAuthStatus, ytMusicLibrarySync, ytMusicPlaylistTracks,
+} from '../lib/providers-api';
 import { mapSoundCloudTrack } from '../lib/api';
+import { mapYtMusicTracks, type YtMusicPlaylist, type YtMusicProfile } from '../lib/ytmusic-library';
 import { snack, ui, go } from './ui';
 import { t } from '../lib/i18n';
 import { player, next } from './player';
@@ -17,6 +21,14 @@ export const library = createStore({
   soundcloudPlaylistTracks: {} as Record<string, Track[]>,
   soundcloudLibraryLoading: false,
   soundcloudLibraryError: '',
+  ytmusicLiked: [] as Track[],
+  ytmusicSaved: [] as Track[],
+  ytmusicPlaylists: [] as YtMusicPlaylist[],
+  ytmusicPlaylistTracks: {} as Record<string, Track[]>,
+  ytmusicLibraryLoading: false,
+  ytmusicLibraryError: '',
+  ytmusicAuthorized: false,
+  ytmusicProfile: null as YtMusicProfile | null,
   cache: {} as Record<string, Track>,
   recent: [] as string[],
 });
@@ -49,6 +61,9 @@ library.set((s) => ({ playlists: s.playlists.filter((playlist) => !obsoletePlayl
 
 let libraryLoad: Promise<void> | undefined;
 const playlistLoads = new Map<string, Promise<Track[]>>();
+let ytmusicLoad: Promise<void> | undefined;
+let ytmusicEpoch = 0;
+const ytmusicPlaylistLoads = new Map<string, Promise<Track[]>>();
 
 export function loadSoundCloudLibrary(force = false): Promise<void> {
   if (libraryLoad) return force ? libraryLoad.then(() => loadSoundCloudLibrary()) : libraryLoad;
@@ -120,6 +135,80 @@ export function loadSoundCloudPlaylistTracks(urn: string): Promise<Track[]> {
   }).finally(() => playlistLoads.delete(urn));
   playlistLoads.set(urn, request);
   return request;
+}
+
+export function loadYtMusicLibrary(force = false): Promise<void> {
+  if (ytmusicLoad) return force ? ytmusicLoad.then(() => loadYtMusicLibrary()) : ytmusicLoad;
+  const epoch = ytmusicEpoch;
+  library.set({ ytmusicLibraryLoading: true, ytmusicLibraryError: '' });
+  const request = (async () => {
+    try {
+      const auth = await ytMusicAuthStatus();
+      if (epoch !== ytmusicEpoch) return;
+      if (!auth.authorized) {
+        clearYtMusicLibrary();
+        return;
+      }
+      library.set({ ytmusicAuthorized: true, ytmusicProfile: auth.profile ?? library.get().ytmusicProfile });
+      const result = await ytMusicLibrarySync();
+      if (epoch !== ytmusicEpoch) return;
+      const liked = mapYtMusicTracks(result.likedSongs);
+      const saved = mapYtMusicTracks(result.savedSongs);
+      registerTracks([...liked, ...saved]);
+      library.set({
+        ytmusicLiked: liked,
+        ytmusicSaved: saved,
+        ytmusicPlaylists: result.playlists,
+        ytmusicPlaylistTracks: {},
+        ytmusicProfile: result.profile ?? auth.profile ?? null,
+        ytmusicLibraryError: '',
+      });
+    } catch (error) {
+      if (epoch !== ytmusicEpoch) return;
+      library.set({ ytmusicLibraryError: error instanceof Error ? error.message : String(error) });
+    } finally {
+      if (epoch === ytmusicEpoch) library.set({ ytmusicLibraryLoading: false });
+    }
+  })();
+  ytmusicLoad = request;
+  void request.finally(() => {
+    if (ytmusicLoad === request) ytmusicLoad = undefined;
+  });
+  return request;
+}
+
+export function clearYtMusicLibrary() {
+  ytmusicEpoch += 1;
+  ytmusicLoad = undefined;
+  library.set({
+    ytmusicLiked: [], ytmusicSaved: [], ytmusicPlaylists: [], ytmusicPlaylistTracks: {},
+    ytmusicLibraryLoading: false, ytmusicLibraryError: '', ytmusicAuthorized: false, ytmusicProfile: null,
+  });
+}
+
+export function loadYtMusicPlaylistTracks(playlistId: string): Promise<Track[]> {
+  const cached = library.get().ytmusicPlaylistTracks[playlistId];
+  if (cached) return Promise.resolve(cached);
+  const pending = ytmusicPlaylistLoads.get(playlistId);
+  if (pending) return pending;
+  const epoch = ytmusicEpoch;
+  const request = ytMusicPlaylistTracks(playlistId).then((playlist) => {
+    const tracks = mapYtMusicTracks(playlist.tracks ?? []);
+    if (epoch === ytmusicEpoch) {
+      registerTracks(tracks);
+      library.set((state) => ({ ytmusicPlaylistTracks: { ...state.ytmusicPlaylistTracks, [playlistId]: tracks } }));
+    }
+    return tracks;
+  }).finally(() => ytmusicPlaylistLoads.delete(playlistId));
+  ytmusicPlaylistLoads.set(playlistId, request);
+  return request;
+}
+
+export function reloadYtMusicPlaylistTracks(playlistId: string): Promise<Track[]> {
+  const ytmusicPlaylistTracks = { ...library.get().ytmusicPlaylistTracks };
+  delete ytmusicPlaylistTracks[playlistId];
+  library.set({ ytmusicPlaylistTracks });
+  return loadYtMusicPlaylistTracks(playlistId);
 }
 
 export const getTrack = (id: string): Track | undefined => library.get().cache[id] ?? volatile.get(id);
