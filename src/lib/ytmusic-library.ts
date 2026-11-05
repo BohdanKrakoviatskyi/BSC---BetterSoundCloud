@@ -23,7 +23,6 @@ export type YtMusicLibrary = {
   profile: YtMusicProfile;
   playlists: YtMusicPlaylist[];
   likedSongs: YtMusicTrack[];
-  savedSongs: YtMusicTrack[];
 };
 
 export function mapYtMusicTrack(track: YtMusicTrack): Track {
@@ -57,17 +56,15 @@ export function mapYtMusicTracks(tracks: YtMusicTrack[]): Track[] {
 }
 
 export const YTMUSIC_LIKED_ID = 'ytliked';
-export const YTMUSIC_SAVED_ID = 'ytsaved';
 
 export const ytmusicPlaylistId = (playlistId: string) => `ytpl:${playlistId}`;
 
 export type YtMusicCollection =
   | { kind: 'playlist'; playlistId: string }
-  | { kind: 'liked' | 'saved' };
+  | { kind: 'liked' };
 
 export function parseYtMusicCollectionId(id?: string): YtMusicCollection | null {
   if (id === YTMUSIC_LIKED_ID) return { kind: 'liked' };
-  if (id === YTMUSIC_SAVED_ID) return { kind: 'saved' };
   if (id?.startsWith('ytpl:') && id.length > 5) return { kind: 'playlist', playlistId: id.slice(5) };
   return null;
 }

@@ -2,7 +2,7 @@ import { createStore, persist, uid } from '../lib/util';
 import type { Playlist, SoundCloudPlaylist, Track } from '../types';
 import {
   soundCloudAuthStatus, soundCloudPlaylistTracks, soundCloudPlaylistsMine, soundCloudTracksMine,
-  ytMusicAuthStatus, ytMusicLibrarySync, ytMusicPlaylistTracks,
+  ytMusicAuthStatus, ytMusicLibrarySync, ytMusicPlaylistArtwork, ytMusicPlaylistTracks,
 } from '../lib/providers-api';
 import { mapSoundCloudTrack } from '../lib/api';
 import { mapYtMusicTracks, type YtMusicPlaylist, type YtMusicProfile } from '../lib/ytmusic-library';
@@ -22,8 +22,8 @@ export const library = createStore({
   soundcloudLibraryLoading: false,
   soundcloudLibraryError: '',
   ytmusicLiked: [] as Track[],
-  ytmusicSaved: [] as Track[],
   ytmusicPlaylists: [] as YtMusicPlaylist[],
+  ytmusicPlaylistArt: {} as Record<string, string | null>,
   ytmusicPlaylistTracks: {} as Record<string, Track[]>,
   ytmusicLibraryLoading: false,
   ytmusicLibraryError: '',
@@ -64,6 +64,7 @@ const playlistLoads = new Map<string, Promise<Track[]>>();
 let ytmusicLoad: Promise<void> | undefined;
 let ytmusicEpoch = 0;
 const ytmusicPlaylistLoads = new Map<string, Promise<Track[]>>();
+const ytmusicArtworkLoads = new Map<string, Promise<string | null>>();
 
 export function loadSoundCloudLibrary(force = false): Promise<void> {
   if (libraryLoad) return force ? libraryLoad.then(() => loadSoundCloudLibrary()) : libraryLoad;
@@ -153,12 +154,11 @@ export function loadYtMusicLibrary(force = false): Promise<void> {
       const result = await ytMusicLibrarySync();
       if (epoch !== ytmusicEpoch) return;
       const liked = mapYtMusicTracks(result.likedSongs);
-      const saved = mapYtMusicTracks(result.savedSongs);
-      registerTracks([...liked, ...saved]);
+      registerTracks(liked);
       library.set({
         ytmusicLiked: liked,
-        ytmusicSaved: saved,
         ytmusicPlaylists: result.playlists,
+        ytmusicPlaylistArt: {},
         ytmusicPlaylistTracks: {},
         ytmusicProfile: result.profile ?? auth.profile ?? null,
         ytmusicLibraryError: '',
@@ -180,10 +180,27 @@ export function loadYtMusicLibrary(force = false): Promise<void> {
 export function clearYtMusicLibrary() {
   ytmusicEpoch += 1;
   ytmusicLoad = undefined;
+  ytmusicArtworkLoads.clear();
   library.set({
-    ytmusicLiked: [], ytmusicSaved: [], ytmusicPlaylists: [], ytmusicPlaylistTracks: {},
+    ytmusicLiked: [], ytmusicPlaylists: [], ytmusicPlaylistArt: {}, ytmusicPlaylistTracks: {},
     ytmusicLibraryLoading: false, ytmusicLibraryError: '', ytmusicAuthorized: false, ytmusicProfile: null,
   });
+}
+
+export function loadYtMusicPlaylistArtwork(playlistId: string): Promise<string | null> {
+  const cached = library.get().ytmusicPlaylistArt;
+  if (playlistId in cached) return Promise.resolve(cached[playlistId]);
+  const pending = ytmusicArtworkLoads.get(playlistId);
+  if (pending) return pending;
+  const epoch = ytmusicEpoch;
+  const request = ytMusicPlaylistArtwork(playlistId).then((art) => {
+    if (epoch === ytmusicEpoch) {
+      library.set((state) => ({ ytmusicPlaylistArt: { ...state.ytmusicPlaylistArt, [playlistId]: art } }));
+    }
+    return art;
+  }).catch(() => null).finally(() => ytmusicArtworkLoads.delete(playlistId));
+  ytmusicArtworkLoads.set(playlistId, request);
+  return request;
 }
 
 export function loadYtMusicPlaylistTracks(playlistId: string): Promise<Track[]> {

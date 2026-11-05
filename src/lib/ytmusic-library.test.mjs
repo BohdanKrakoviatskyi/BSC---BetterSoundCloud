@@ -27,7 +27,7 @@ test('drops invalid video IDs and deduplicates tracks while preserving order', (
 test('parses provider collection IDs without accepting local or SoundCloud IDs', () => {
   assert.deepEqual(parseYtMusicCollectionId('ytpl:PL1'), { kind: 'playlist', playlistId: 'PL1' });
   assert.deepEqual(parseYtMusicCollectionId('ytliked'), { kind: 'liked' });
-  assert.deepEqual(parseYtMusicCollectionId('ytsaved'), { kind: 'saved' });
+  assert.equal(parseYtMusicCollectionId('ytsaved'), null);
   assert.equal(parseYtMusicCollectionId('scpl:1'), null);
   assert.equal(parseYtMusicCollectionId('local-id'), null);
   assert.equal(parseYtMusicCollectionId('ytpl:'), null);

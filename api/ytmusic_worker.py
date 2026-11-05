@@ -353,19 +353,32 @@ def sync_library(headers: dict[str, str], saved_profile: dict[str, str]) -> dict
         if (normalized := normalize_track(item))
     ]
 
-    saved_raw = client.get_library_songs(limit=None) or []
-    saved = [
-        normalized
-        for item in saved_raw
-        if (normalized := normalize_track(item))
-    ]
-
     return {
         "profile": profile,
         "playlists": playlists,
         "likedSongs": liked,
-        "savedSongs": saved,
     }
+
+
+def fetch_playlist_artwork(headers: dict[str, str], playlist_id: str) -> str | None:
+    """Lazily resolve a playlist cover via ``get_playlist(limit=1)``.
+
+    ``get_library_playlists`` does not include thumbnail data; only a
+    per-playlist fetch exposes the artwork URL.
+    """
+    client = _ytmusic(headers)
+    try:
+        playlist = client.get_playlist(playlist_id, limit=1)
+    except Exception:
+        return None
+    if not isinstance(playlist, dict):
+        return None
+    thumbnails = playlist.get("thumbnails") or []
+    for thumb in thumbnails:
+        if isinstance(thumb, dict) and thumb.get("url"):
+            return str(thumb["url"])
+    artwork = playlist.get("artworkUrl")
+    return str(artwork) if artwork else None
 
 
 def handle(request: dict[str, Any], data_dir: Path) -> Any:
@@ -415,6 +428,13 @@ def handle(request: dict[str, Any], data_dir: Path) -> Any:
         if not playlist_id:
             raise WorkerError("Playlist ID is required.")
         return normalize_playlist(_ytmusic(headers).get_playlist(playlist_id, limit=None))
+
+    if method == "playlist.artwork":
+        headers, _profile = _load_headers(credential_path)
+        playlist_id = _text(params.get("playlistId"))
+        if not playlist_id:
+            raise WorkerError("Playlist ID is required.")
+        return fetch_playlist_artwork(headers, playlist_id)
 
     raise WorkerError("Unknown YouTube Music operation.")
 

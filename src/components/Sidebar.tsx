@@ -7,9 +7,19 @@ import { t, tracksLabel } from '../lib/i18n';
 import { markResizing } from '../lib/motion';
 import { library } from '../state/library';
 import { player } from '../state/player';
-import { YTMUSIC_LIKED_ID, YTMUSIC_SAVED_ID, ytmusicPlaylistId } from '../lib/ytmusic-library';
+import { YTMUSIC_LIKED_ID, ytmusicPlaylistId } from '../lib/ytmusic-library';
 import { appearance } from '../state/appearance';
 import { go, openDialog, routeKey, ui, type Route } from '../state/ui';
+import { loadYtMusicPlaylistArtwork } from '../state/library';
+
+function YtMusicPlaylistCover({ playlistId, title }: { playlistId: string; title: string }) {
+  const artCache = useStore(library, (s) => s.ytmusicPlaylistArt);
+  const art = artCache[playlistId];
+  useLayoutEffect(() => {
+    if (!(playlistId in artCache)) void loadYtMusicPlaylistArtwork(playlistId);
+  }, [playlistId, artCache]);
+  return <PlaylistCover p={{ id: playlistId, name: title, ids: [], created: 0, artworkUrl: art ?? undefined }} className="h-10 w-10 rounded-[12px]" />;
+}
 
 function NavItem({ k, active, expanded, label, sub, icon, art, onClick, playing, className }: {
   k: string; active: boolean; expanded: boolean; label: string; sub?: string; icon?: IconName; art?: ReactNode; onClick: () => void; playing?: boolean; className?: string;
@@ -51,7 +61,6 @@ export function Sidebar({ mode }: { mode: 'inline' | 'drawer' }) {
   const soundcloudPlaylists = useStore(library, (s) => s.soundcloudPlaylists);
   const ytmusicPlaylists = useStore(library, (s) => s.ytmusicPlaylists);
   const ytmusicLiked = useStore(library, (s) => s.ytmusicLiked);
-  const ytmusicSaved = useStore(library, (s) => s.ytmusicSaved);
   const ytmusicConnected = useStore(library, (s) => s.ytmusicAuthorized);
   const playing = useStore(player, (s) => s.playing);
   const curId = useStore(player, (s) => s.queue[s.index] ?? null);
@@ -130,16 +139,6 @@ export function Sidebar({ mode }: { mode: 'inline' | 'drawer' }) {
               playing={playing && !!curId && ytmusicLiked.some((track) => track.id === curId) && active === 'pl:' + YTMUSIC_LIKED_ID}
               onClick={() => nav({ name: 'playlist', id: YTMUSIC_LIKED_ID })}
             />
-            <NavItem
-              k={'pl:' + YTMUSIC_SAVED_ID}
-              icon="music_note"
-              label={t('ytmusicSaved')}
-              sub={tracksLabel(ytmusicSaved.length)}
-              active={active === 'pl:' + YTMUSIC_SAVED_ID}
-              expanded={expanded}
-              playing={playing && !!curId && ytmusicSaved.some((track) => track.id === curId) && active === 'pl:' + YTMUSIC_SAVED_ID}
-              onClick={() => nav({ name: 'playlist', id: YTMUSIC_SAVED_ID })}
-            />
             {ytmusicPlaylists.map((p) => (
               <NavItem
                 key={`yt:${p.playlistId}`}
@@ -149,7 +148,7 @@ export function Sidebar({ mode }: { mode: 'inline' | 'drawer' }) {
                 active={active === 'pl:' + ytmusicPlaylistId(p.playlistId)}
                 expanded={expanded}
                 playing={playing && !!curId && (library.get().ytmusicPlaylistTracks[p.playlistId] ?? []).some((track) => track.id === curId) && active === 'pl:' + ytmusicPlaylistId(p.playlistId)}
-                art={<PlaylistCover p={{ id: p.playlistId, name: p.title, ids: [], created: 0, artworkUrl: p.artworkUrl ?? undefined }} className="h-10 w-10 rounded-[12px]" />}
+                art={<YtMusicPlaylistCover playlistId={p.playlistId} title={p.title} />}
                 onClick={() => nav({ name: 'playlist', id: ytmusicPlaylistId(p.playlistId) })}
               />
             ))}

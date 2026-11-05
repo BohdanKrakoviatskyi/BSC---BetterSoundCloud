@@ -157,6 +157,10 @@ export function ytMusicPlaylistTracks(playlistId: string, signal?: AbortSignal):
   return ytMusicRpc('playlist.tracks', { playlistId }, signal);
 }
 
+export function ytMusicPlaylistArtwork(playlistId: string, signal?: AbortSignal): Promise<string | null> {
+  return ytMusicRpc('playlist.artwork', { playlistId }, signal);
+}
+
 export function searchYtDlpTracks(query: string, signal?: AbortSignal): Promise<YouTubeTrack[]> {
   return rpc('yt.dlp.search', { query }, signal);
 }

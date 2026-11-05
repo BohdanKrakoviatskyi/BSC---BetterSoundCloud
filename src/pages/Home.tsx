@@ -9,7 +9,29 @@ import { pick, t, tracksLabel } from '../lib/i18n';
 import { searchTracks } from '../lib/api';
 import { MOODS } from '../lib/moods';
 import { getTrack, library, registerTracks } from '../state/library';
-import { YTMUSIC_LIKED_ID, YTMUSIC_SAVED_ID, ytmusicPlaylistId } from '../lib/ytmusic-library';
+import { YTMUSIC_LIKED_ID, ytmusicPlaylistId } from '../lib/ytmusic-library';
+import { loadYtMusicPlaylistArtwork } from '../state/library';
+
+function YtMusicCoverCard({ playlistId, title, trackCount, index }: { playlistId: string; title: string; trackCount: number; index: number }) {
+  const artCache = useStore(library, (s) => s.ytmusicPlaylistArt);
+  const art = artCache[playlistId];
+  useEffect(() => {
+    if (!(playlistId in artCache)) void loadYtMusicPlaylistArtwork(playlistId);
+  }, [playlistId, artCache]);
+  return (
+    <button
+      type="button"
+      data-ripple
+      className="mcard sl anim-in"
+      style={{ '--i': index } as Vars}
+      onClick={() => go({ name: 'playlist', id: ytmusicPlaylistId(playlistId) })}
+    >
+      <PlaylistCover p={{ id: playlistId, name: title, ids: [], created: 0, artworkUrl: art ?? undefined }} className="mcard-cover" />
+      <span className="mcard-title">{title}</span>
+      <span className="mcard-sub">{tracksLabel(trackCount)}</span>
+    </button>
+  );
+}
 
 import { go, openDialog } from '../state/ui';
 import type { Track } from '../types';
@@ -25,7 +47,6 @@ export default function Home() {
   const soundcloudLibraryError = useStore(library, (s) => s.soundcloudLibraryError);
   const ytmusicPlaylists = useStore(library, (s) => s.ytmusicPlaylists);
   const ytmusicLiked = useStore(library, (s) => s.ytmusicLiked);
-  const ytmusicSaved = useStore(library, (s) => s.ytmusicSaved);
   const ytmusicConnected = useStore(library, (s) => s.ytmusicAuthorized);
   const ytmusicLibraryLoading = useStore(library, (s) => s.ytmusicLibraryLoading);
   const ytmusicLibraryError = useStore(library, (s) => s.ytmusicLibraryError);
@@ -121,18 +142,7 @@ export default function Home() {
             </button>
           ))}
           {ytmusicPlaylists.map((p, i) => (
-            <button
-              key={`ytmusic:${p.playlistId}`}
-              type="button"
-              data-ripple
-              className="mcard sl anim-in"
-              style={{ '--i': i } as Vars}
-              onClick={() => go({ name: 'playlist', id: ytmusicPlaylistId(p.playlistId) })}
-            >
-              <PlaylistCover p={{ id: p.playlistId, name: p.title, ids: [], created: 0, artworkUrl: p.artworkUrl ?? undefined }} className="mcard-cover" />
-              <span className="mcard-title">{p.title}</span>
-              <span className="mcard-sub">{tracksLabel(p.trackCount)}</span>
-            </button>
+            <YtMusicCoverCard key={`ytmusic:${p.playlistId}`} playlistId={p.playlistId} title={p.title} trackCount={p.trackCount} index={i} />
           ))}
           {soundcloudLibraryLoading && <span className="px-3 py-2 text-sm text-on-surface-variant">Loading SoundCloud library…</span>}
           {!soundcloudLibraryLoading && soundcloudLibraryError && <span className="px-3 py-2 text-sm text-error">{soundcloudLibraryError}</span>}
@@ -173,17 +183,9 @@ export default function Home() {
               <span className="mcard-title">{t('ytmusicLiked')}</span>
               <span className="mcard-sub">{tracksLabel(ytmusicLiked.length)}</span>
             </button>
-            <button
-              type="button"
-              data-ripple
-              className="mcard sl anim-in"
-              style={{ '--i': 1 } as Vars}
-              onClick={() => go({ name: 'playlist', id: YTMUSIC_SAVED_ID })}
-            >
-              <PlaylistCover p={{ id: YTMUSIC_SAVED_ID, name: t('ytmusicSaved'), ids: [], created: 0 }} className="mcard-cover" />
-              <span className="mcard-title">{t('ytmusicSaved')}</span>
-              <span className="mcard-sub">{tracksLabel(ytmusicSaved.length)}</span>
-            </button>
+            {ytmusicPlaylists.map((p, i) => (
+              <YtMusicCoverCard key={`ytmusic-pl:${p.playlistId}`} playlistId={p.playlistId} title={p.title} trackCount={p.trackCount} index={i + 1} />
+            ))}
           </HRow>
         </Section>
       )}

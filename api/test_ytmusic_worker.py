@@ -60,11 +60,6 @@ class FakeYTMusic:
             ]
         }
 
-    def get_library_songs(self, limit=None):
-        return [
-            {"videoId": "saved-1", "title": "Saved", "artists": [], "duration": "1:28"},
-        ]
-
 
 class WorkerTests(unittest.TestCase):
     def test_headers_require_cookie_and_keep_or_derive_authorization(self):
@@ -145,7 +140,15 @@ class WorkerTests(unittest.TestCase):
             self.assertEqual(result["playlists"][0]["playlistId"], "PL1")
             self.assertEqual(result["playlists"][0]["trackCount"], 2)
             self.assertEqual(result["likedSongs"][0]["videoId"], "liked-1")
-            self.assertEqual(result["savedSongs"][0]["videoId"], "saved-1")
+            self.assertNotIn("savedSongs", result)
+
+    @patch.object(worker, "YTMusic", FakeYTMusic)
+    def test_playlist_artwork_resolves_thumbnail(self):
+        with tempfile.TemporaryDirectory() as directory:
+            data_dir = Path(directory)
+            worker.handle({"method": "auth.save", "params": {"headers": HEADERS}}, data_dir)
+            art = worker.handle({"method": "playlist.artwork", "params": {"playlistId": "PL1"}}, data_dir)
+            self.assertEqual(art, "https://img.test/mix.jpg")
 
     @patch.object(worker, "YTMusic", FakeYTMusic)
     def test_playlist_tracks_returns_normalized_tracks(self):

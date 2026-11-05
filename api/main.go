@@ -708,7 +708,23 @@ func (s *service) RPCTracksMine(_ emptyParams) ([]soundcloudTrackCard, error) {
 	if s.auth.Token == "" {
 		return nil, errors.New("сначала подключите аккаунт SoundCloud")
 	}
-	return s.fetchMyTracks(s.auth.Token, s.auth.Profile.ID)
+	tracks, err := s.fetchMyTracks(s.auth.Token, s.auth.Profile.ID)
+	if err != nil && errors.Is(err, errTokenRejected) {
+		// Токен отклонён двумя хостами (web и official) — сессия устарела.
+		// Пробуем ре-валидацию профиля; если и он не проходит — явно
+		// сообщаем о необходимости повторного логина.
+		if revalidated, refreshErr := s.RPCAuthRefresh(emptyParams{}); refreshErr == nil && revalidated.Authorized {
+			retried, retryErr := s.fetchMyTracks(s.auth.Token, s.auth.Profile.ID)
+			if retryErr == nil {
+				return retried, nil
+			}
+			return nil, retryErr
+		}
+		s.auth = authState{}
+		_ = s.clearAuth()
+		return nil, errors.New("сессия SoundCloud устарела — войдите снова")
+	}
+	return tracks, err
 }
 
 func (s *service) RPCPlaylistsMine(_ emptyParams) ([]soundcloudPlaylistCard, error) {
@@ -1987,7 +2003,7 @@ func (s *service) fetchMyTracks(token string, userID int64) ([]soundcloudTrackCa
 	log.Printf("tracks.mine stage=start user_id=%d", userID)
 	// The Python entrypoint displays get_user_likes(), not get_user_tracks().
 	// Match its endpoint and query so the desktop shows the same library items.
-	for _, base := range []string{webAPIBase, officialAPIBase} {
+	for _, base := range s.apiBases() {
 		endpoint := fmt.Sprintf("%s/users/%d/likes?limit=200&linked_partitioning=true", strings.TrimRight(base, "/"), userID)
 		log.Printf("tracks.mine stage=request host=%s path=/users/%d/likes", hostForLog(base), userID)
 		pageURL := endpoint
@@ -2038,7 +2054,16 @@ func (s *service) fetchMyTracks(token string, userID int64) ([]soundcloudTrackCa
 			log.Printf("tracks.mine stage=response host=%s page=%d status=%d content_type=%q", hostForLog(base), pageCount, resp.StatusCode, resp.Header.Get("Content-Type"))
 			if resp.StatusCode != http.StatusOK {
 				resp.Body.Close()
-				lastErr = fmt.Errorf("SoundCloud вернул HTTP %d при загрузке страницы лайков %d", resp.StatusCode, pageCount)
+				// 401/403: токен отклонён этим хостом (истёкший web-токен
+				// или токен другого типа). Если страницы ещё не прочитаны —
+				// пробуем следующий базовый URL; иначе сообщаем.
+				// 401/403: токен отклонён этим хостом. На первой странице —
+				// пробуем следующий базовый URL; дальше — сообщаем.
+				if (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) && pageCount == 0 {
+					lastErr = errTokenRejected
+				} else {
+					lastErr = fmt.Errorf("SoundCloud вернул HTTP %d при загрузке страницы лайков %d", resp.StatusCode, pageCount)
+				}
 				log.Printf("tracks.mine stage=http_error host=%s page=%d status=%d", hostForLog(base), pageCount, resp.StatusCode)
 				failed = true
 				break

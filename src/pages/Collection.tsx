@@ -5,7 +5,7 @@ import { TrackList } from '../components/TrackList';
 import { useStore } from '../lib/util';
 import { durLabel, t, tracksLabel } from '../lib/i18n';
 import {
-  getTrack, library, loadSoundCloudPlaylistTracks, loadYtMusicLibrary, loadYtMusicPlaylistTracks,
+  getTrack, library, loadSoundCloudPlaylistTracks, loadYtMusicLibrary, loadYtMusicPlaylistArtwork, loadYtMusicPlaylistTracks,
   reloadSoundCloudPlaylistTracks, reloadYtMusicPlaylistTracks,
 } from '../state/library';
 import { player, playQueue, shufflePlay, toggle } from '../state/player';
@@ -24,7 +24,7 @@ export default function Collection({ kind, id }: { kind: 'favorites' | 'playlist
   const ytPlaylist = useStore(library, (s) => ytPlaylistId ? s.ytmusicPlaylists.find((p) => p.playlistId === ytPlaylistId) : undefined);
   const cachedYtTracks = useStore(library, (s) => ytPlaylistId ? s.ytmusicPlaylistTracks[ytPlaylistId] ?? null : null);
   const ytmusicLiked = useStore(library, (s) => s.ytmusicLiked);
-  const ytmusicSaved = useStore(library, (s) => s.ytmusicSaved);
+  const ytmusicArtCache = useStore(library, (s) => s.ytmusicPlaylistArt);
   const ytmusicLibraryLoading = useStore(library, (s) => s.ytmusicLibraryLoading);
   const ytmusicLibraryError = useStore(library, (s) => s.ytmusicLibraryError);
   const cache = useStore(library, (s) => s.cache);
@@ -35,14 +35,18 @@ export default function Collection({ kind, id }: { kind: 'favorites' | 'playlist
   const [ytLoading, setYtLoading] = useState(false);
   const [ytError, setYtError] = useState('');
 
-  const ytCollectionTracks = ytCollection?.kind === 'liked' ? ytmusicLiked : ytCollection?.kind === 'saved' ? ytmusicSaved : cachedYtTracks ?? [];
-  const ytCollectionName = ytCollection?.kind === 'liked' ? t('ytmusicLiked') : ytCollection?.kind === 'saved' ? t('ytmusicSaved') : ytPlaylist?.title;
+  const ytCollectionTracks = ytCollection?.kind === 'liked' ? ytmusicLiked : cachedYtTracks ?? [];
+  const ytCollectionName = ytCollection?.kind === 'liked' ? t('ytmusicLiked') : ytPlaylist?.title;
+  const ytArt = ytPlaylistId ? ytmusicArtCache[ytPlaylistId] ?? ytPlaylist?.artworkUrl ?? undefined : undefined;
+  useEffect(() => {
+    if (ytPlaylistId && !(ytPlaylistId in ytmusicArtCache)) void loadYtMusicPlaylistArtwork(ytPlaylistId);
+  }, [ytPlaylistId, ytmusicArtCache]);
   const ytPl = ytCollection && (ytCollection.kind !== 'playlist' || ytPlaylist) ? {
     id: id!,
     name: ytCollectionName ?? t('notFound'),
     ids: ytCollectionTracks.map((track) => track.id),
     created: 0,
-    artworkUrl: ytPlaylist?.artworkUrl ?? undefined,
+    artworkUrl: ytArt,
   } : undefined;
 
   const pl = localPlaylist ?? (remotePlaylist ? {
@@ -81,7 +85,7 @@ export default function Collection({ kind, id }: { kind: 'favorites' | 'playlist
   }, [kind, liked, soundcloudLiked, pl, cache]);
   const playingHere = useStore(player, (s) => s.playing && ids.includes(s.queue[s.index]));
 
-  const virtualCollection = ytCollection?.kind === 'liked' || ytCollection?.kind === 'saved';
+  const virtualCollection = ytCollection?.kind === 'liked';
   const loading = remoteLoading || ytLoading
     || Boolean(ytPlaylistId && !cachedYtTracks && !ytError)
     || Boolean(virtualCollection && ytmusicLibraryLoading && !ids.length);
