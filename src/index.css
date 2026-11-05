@@ -157,7 +157,7 @@ html[data-theme=light] { color-scheme: light; }
   .side-brand { height: 76px; display: flex; align-items: center; gap: 10px; padding: 0 24px; flex-shrink: 0; }
   .side-scroll { flex: 1 1 auto; position: relative; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; padding: 2px 0 14px; scrollbar-width: none; min-height: 0; }
   .side-scroll::-webkit-scrollbar { display: none; }
-  .side-bottom { flex: 0 0 auto; padding: 6px 0 12px; border-top: 1px solid color-mix(in oklab, var(--md-outline-variant) 35%, transparent); }
+  .side-bottom { flex: 0 0 auto; display: flex; flex-direction: column; padding: 6px 0 12px; border-top: 1px solid color-mix(in oklab, var(--md-outline-variant) 35%, transparent); }
   .nav-item {
     position: relative; z-index: 1; display: flex; align-items: center; gap: 2px; flex-shrink: 0;
     height: 52px; margin: 2px 16px; border-radius: 26px; color: var(--md-on-surface-variant); text-align: left;
