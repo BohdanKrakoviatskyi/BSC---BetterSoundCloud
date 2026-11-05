@@ -31,6 +31,7 @@ export const library = createStore({
   ytmusicProfile: null as YtMusicProfile | null,
   cache: {} as Record<string, Track>,
   recent: [] as string[],
+  _libraryCachedAt: 0,
 });
 
 /** Only keep external track metadata that is still referenced somewhere. */
@@ -42,6 +43,16 @@ function pruned(s: ReturnType<typeof library.get>) {
 }
 persist('lyra.lib.v1', library, (s) => ({
   liked: s.liked, disliked: s.disliked, playlists: s.playlists, cache: pruned(s), recent: s.recent,
+  soundcloudLiked: s.soundcloudLiked,
+  soundcloudPlaylists: s.soundcloudPlaylists,
+  soundcloudPlaylistTracks: s.soundcloudPlaylistTracks,
+  ytmusicLiked: s.ytmusicLiked,
+  ytmusicPlaylists: s.ytmusicPlaylists,
+  ytmusicPlaylistArt: s.ytmusicPlaylistArt,
+  ytmusicPlaylistTracks: s.ytmusicPlaylistTracks,
+  ytmusicAuthorized: s.ytmusicAuthorized,
+  ytmusicProfile: s.ytmusicProfile,
+  _libraryCachedAt: Date.now(),
 }));
 
 const storedLibrary = library.get();
@@ -53,6 +64,11 @@ library.set({
   playlists: storedLibrary.playlists.map((playlist) => ({ ...playlist, ids: playlist.ids.filter(keepTrack) })),
   cache: Object.fromEntries(Object.entries(storedLibrary.cache).filter(([id]) => keepTrack(id))),
 });
+
+registerTracks(storedLibrary.soundcloudLiked ?? []);
+registerTracks(storedLibrary.ytmusicLiked ?? []);
+for (const tracks of Object.values(storedLibrary.soundcloudPlaylistTracks ?? {})) registerTracks(tracks);
+for (const tracks of Object.values(storedLibrary.ytmusicPlaylistTracks ?? {})) registerTracks(tracks);
 
 const obsoletePlaylistNames = new Set([
   'вечерний чилл', 'evening chill', 'заряд энергии', 'energy boost', 'ночная дорога', 'night drive',
@@ -67,7 +83,26 @@ const ytmusicPlaylistLoads = new Map<string, Promise<Track[]>>();
 const ytmusicArtworkLoads = new Map<string, Promise<string | null>>();
 
 export function loadSoundCloudLibrary(force = false): Promise<void> {
-  if (libraryLoad) return force ? libraryLoad.then(() => loadSoundCloudLibrary()) : libraryLoad;
+  if (libraryLoad) return force ? libraryLoad.then(() => loadSoundCloudLibrary(true)) : libraryLoad;
+  const cached = library.get();
+  if (!force && cached.soundcloudLiked.length > 0 && cached.soundcloudPlaylists.length > 0) {
+    // Have cached data, just verify auth in background
+    return (async () => {
+      try {
+        const auth = await soundCloudAuthStatus();
+        if (!auth.authorized) {
+          clearSoundCloudLibrary();
+          return;
+        }
+        // If cache is old (more than 1 hour), refresh in background
+        if (Date.now() - (cached._libraryCachedAt || 0) > 3600000) {
+          void loadSoundCloudLibrary(true);
+        }
+      } catch {
+        // ignore auth check errors, use cache
+      }
+    })();
+  }
   library.set({ soundcloudLibraryLoading: true, soundcloudLibraryError: '' });
   libraryLoad = (async () => {
     try {
@@ -77,7 +112,7 @@ export function loadSoundCloudLibrary(force = false): Promise<void> {
         return;
       }
       const [likesResult, playlistsResult] = await Promise.allSettled([soundCloudTracksMine(), soundCloudPlaylistsMine()]);
-      const liked = likesResult.status === 'fulfilled' ? likesResult.value.map(mapSoundCloudTrack) : [];
+      const liked = likesResult.status === 'fulfilled' ? likesResult.value.map(mapSoundCloudTrack) : cached.soundcloudLiked;
       const playlists: SoundCloudPlaylist[] = playlistsResult.status === 'fulfilled'
         ? playlistsResult.value.map((playlist) => ({
             id: playlist.id,
@@ -88,18 +123,20 @@ export function loadSoundCloudLibrary(force = false): Promise<void> {
             trackCount: playlist.trackCount,
             username: playlist.user?.username || auth.profile?.username || 'SoundCloud',
           }))
-        : [];
+        : cached.soundcloudPlaylists;
       registerTracks(liked);
       library.set({
         soundcloudLiked: liked,
         soundcloudPlaylists: playlists,
-        soundcloudPlaylistTracks: {},
-        soundcloudLibraryError: likesResult.status === 'rejected'
+        soundcloudLibraryError: likesResult.status === 'rejected' && playlistsResult.status === 'rejected'
           ? String(likesResult.reason)
+          : likesResult.status === 'rejected' ? String(likesResult.reason)
           : playlistsResult.status === 'rejected' ? String(playlistsResult.reason) : '',
       });
     } catch (error) {
-      clearSoundCloudLibrary();
+      if (!library.get().soundcloudLiked.length) {
+        clearSoundCloudLibrary();
+      }
       library.set({ soundcloudLibraryError: error instanceof Error ? error.message : String(error) });
     } finally {
       library.set({ soundcloudLibraryLoading: false });
@@ -110,6 +147,8 @@ export function loadSoundCloudLibrary(force = false): Promise<void> {
 }
 
 export function clearSoundCloudLibrary() {
+  libraryLoad = undefined;
+  playlistLoads.clear();
   library.set({
     soundcloudLiked: [], soundcloudPlaylists: [], soundcloudPlaylistTracks: {},
     soundcloudLibraryLoading: false, soundcloudLibraryError: '',
@@ -139,7 +178,26 @@ export function loadSoundCloudPlaylistTracks(urn: string): Promise<Track[]> {
 }
 
 export function loadYtMusicLibrary(force = false): Promise<void> {
-  if (ytmusicLoad) return force ? ytmusicLoad.then(() => loadYtMusicLibrary()) : ytmusicLoad;
+  if (ytmusicLoad) return force ? ytmusicLoad.then(() => loadYtMusicLibrary(true)) : ytmusicLoad;
+  const cached = library.get();
+  if (!force && cached.ytmusicLiked.length > 0 && cached.ytmusicPlaylists.length > 0) {
+    return (async () => {
+      try {
+        const auth = await ytMusicAuthStatus();
+        if (ytmusicEpoch !== ytmusicEpoch) return;
+        if (!auth.authorized) {
+          clearYtMusicLibrary();
+          return;
+        }
+        library.set({ ytmusicAuthorized: true, ytmusicProfile: auth.profile ?? cached.ytmusicProfile });
+        if (Date.now() - (cached._libraryCachedAt || 0) > 3600000) {
+          void loadYtMusicLibrary(true);
+        }
+      } catch {
+        // ignore, use cache
+      }
+    })();
+  }
   const epoch = ytmusicEpoch;
   library.set({ ytmusicLibraryLoading: true, ytmusicLibraryError: '' });
   const request = (async () => {
@@ -150,7 +208,7 @@ export function loadYtMusicLibrary(force = false): Promise<void> {
         clearYtMusicLibrary();
         return;
       }
-      library.set({ ytmusicAuthorized: true, ytmusicProfile: auth.profile ?? library.get().ytmusicProfile });
+      library.set({ ytmusicAuthorized: true, ytmusicProfile: auth.profile ?? cached.ytmusicProfile });
       const result = await ytMusicLibrarySync();
       if (epoch !== ytmusicEpoch) return;
       const liked = mapYtMusicTracks(result.likedSongs);
@@ -158,9 +216,7 @@ export function loadYtMusicLibrary(force = false): Promise<void> {
       library.set({
         ytmusicLiked: liked,
         ytmusicPlaylists: result.playlists,
-        ytmusicPlaylistArt: {},
-        ytmusicPlaylistTracks: {},
-        ytmusicProfile: result.profile ?? auth.profile ?? null,
+        ytmusicProfile: result.profile ?? auth.profile ?? cached.ytmusicProfile ?? null,
         ytmusicLibraryError: '',
       });
     } catch (error) {
