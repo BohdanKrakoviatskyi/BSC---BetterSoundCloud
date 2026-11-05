@@ -166,8 +166,11 @@ html[data-theme=light] { color-scheme: light; }
   .nav-item:active { transform: scale(.97); }
   .nav-ic { width: 56px; height: 52px; display: grid; place-items: center; flex-shrink: 0; }
   .nav-item:active .nav-ic > * { transform: scale(.86); }
-  .nav-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 550; font-size: 15px; padding-right: 14px; transition: opacity .25s, transform var(--sp-def-d) var(--sp-def); }
-  .nav-sub { display: block; font-size: 12px; font-weight: 450; color: var(--md-on-surface-variant); }
+  .nav-label { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; font-weight: 550; font-size: 15px; padding-right: 14px; transition: opacity .25s, transform var(--sp-def-d) var(--sp-def); }
+  .nav-label-main { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .nav-label-prefix { display: inline-flex; align-items: center; flex: 0 0 auto; }
+  .nav-label-prefix img, .nav-label-prefix svg { width: 14px; height: 14px; object-fit: contain; border-radius: 3px; display: block; }
+  .nav-sub { display: block; font-size: 12px; font-weight: 450; color: var(--md-on-surface-variant); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .nav-item[aria-current=page] { color: var(--md-on-secondary-container); background: var(--md-secondary-container); }
   .nav-item[aria-current=page] .icon { --fill: 1; }
   .nav-item[aria-current=page] .nav-label { font-weight: 750; }

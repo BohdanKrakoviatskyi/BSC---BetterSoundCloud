@@ -68,7 +68,7 @@ const S = {
   yourPlaylists: ['Ваши плейлисты', 'Your playlists'],
   soundcloudLibrary: ['Библиотека SoundCloud', 'SoundCloud library'],
   soundcloudLibrarySub: ['Понравившиеся треки и плейлисты', 'Liked tracks and playlists'],
-  soundcloudLiked: ['Понравившиеся', 'Liked tracks'],
+  soundcloudLiked: ['Понравившиеся', 'Liked songs'],
   soundcloudLoading: ['Загружаем SoundCloud…', 'Loading SoundCloud…'],
   soundcloudTracks: ['Треки SoundCloud', 'SoundCloud tracks'],
   ytmusicLibrary: ['Библиотека YouTube Music', 'YouTube Music library'],

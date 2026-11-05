@@ -5,12 +5,14 @@ import { PlaylistCover, Eq } from './Cover';
 import { cx, useStore } from '../lib/util';
 import { t, tracksLabel } from '../lib/i18n';
 import { markResizing } from '../lib/motion';
-import { library } from '../state/library';
+import { library, loadYtMusicPlaylistArtwork } from '../state/library';
 import { player } from '../state/player';
 import { YTMUSIC_LIKED_ID, ytmusicPlaylistId } from '../lib/ytmusic-library';
+import { SOUNDCLOUD_LIKED_ID } from '../lib/soundcloud-library';
 import { appearance } from '../state/appearance';
 import { go, openDialog, routeKey, ui, type Route } from '../state/ui';
-import { loadYtMusicPlaylistArtwork } from '../state/library';
+import soundcloudLogo from '../assets/soundcloud.svg';
+import youtubeMusicLogo from '../assets/youtube-music.svg';
 
 function YtMusicPlaylistCover({ playlistId, title, artworkUrl }: { playlistId: string; title: string; artworkUrl?: string | null }) {
   const artCache = useStore(library, (s) => s.ytmusicPlaylistArt);
@@ -21,8 +23,8 @@ function YtMusicPlaylistCover({ playlistId, title, artworkUrl }: { playlistId: s
   return <PlaylistCover p={{ id: playlistId, name: title, ids: [], created: 0, artworkUrl: art ?? artworkUrl ?? undefined }} className="h-10 w-10 rounded-[12px]" />;
 }
 
-function NavItem({ k, active, expanded, label, sub, icon, art, onClick, playing, className }: {
-  k: string; active: boolean; expanded: boolean; label: string; sub?: string; icon?: IconName; art?: ReactNode; onClick: () => void; playing?: boolean; className?: string;
+function NavItem({ k, active, expanded, label, labelPrefix, sub, icon, art, onClick, playing, className }: {
+  k: string; active: boolean; expanded: boolean; label: string; labelPrefix?: ReactNode; sub?: string; icon?: IconName; art?: ReactNode; onClick: () => void; playing?: boolean; className?: string;
 }) {
   return (
     <button
@@ -37,7 +39,10 @@ function NavItem({ k, active, expanded, label, sub, icon, art, onClick, playing,
     >
       <span className="nav-ic">{art ?? (icon && <Icon name={icon} />)}</span>
       <span className="nav-label fade-x">
-        {label}
+        <span className="nav-label-main">
+          {labelPrefix && <span className="nav-label-prefix">{labelPrefix}</span>}
+          <span className="truncate">{label}</span>
+        </span>
         {sub && <span className="nav-sub">{sub}</span>}
       </span>
       {playing && <Eq on className="fade-x mr-4" />}
@@ -59,6 +64,7 @@ export function Sidebar({ mode }: { mode: 'inline' | 'drawer' }) {
   const route = useStore(ui, (s) => s.route);
   const playlists = useStore(library, (s) => s.playlists);
   const soundcloudPlaylists = useStore(library, (s) => s.soundcloudPlaylists);
+  const soundcloudLiked = useStore(library, (s) => s.soundcloudLiked);
   const ytmusicPlaylists = useStore(library, (s) => s.ytmusicPlaylists);
   const ytmusicLiked = useStore(library, (s) => s.ytmusicLiked);
   const ytmusicConnected = useStore(library, (s) => s.ytmusicAuthorized);
@@ -67,11 +73,12 @@ export function Sidebar({ mode }: { mode: 'inline' | 'drawer' }) {
   const listRef = useRef<HTMLDivElement>(null);
   const [ind, setInd] = useState<{ y: number; h: number } | null>(null);
   const active = routeKey(route);
+  const showSoundCloud = soundcloudLiked.length > 0 || soundcloudPlaylists.length > 0;
 
   useLayoutEffect(() => {
     const el = listRef.current?.querySelector<HTMLElement>(`[data-key="${CSS.escape(active)}"]`);
     setInd(el ? { y: el.offsetTop, h: el.offsetHeight } : null);
-  }, [active, playlists.length, soundcloudPlaylists.length, ytmusicPlaylists.length, ytmusicConnected, expanded]);
+  }, [active, playlists.length, soundcloudPlaylists.length, soundcloudLiked.length, ytmusicPlaylists.length, ytmusicLiked.length, ytmusicConnected, expanded]);
 
   const nav = (r: Route) => go(r);
   const toggleExpanded = () => {
@@ -101,19 +108,64 @@ export function Sidebar({ mode }: { mode: 'inline' | 'drawer' }) {
           <span className="label-up fade-x">{t('playlists')}</span>
           <IconButton icon="add" label={t('newPlaylist')} size="sm" variant="tonal" tip="right" onClick={() => openDialog({ kind: 'create' })} />
         </div>
-        {soundcloudPlaylists.map((p) => (
-          <NavItem
-            key={`sc:${p.id}`}
-            k={'pl:scpl:' + p.id}
-            label={p.name}
-            sub={tracksLabel(p.trackCount)}
-            active={active === 'pl:scpl:' + p.id}
-            expanded={expanded}
-            playing={playing && !!curId && (library.get().soundcloudPlaylistTracks[p.urn] ?? []).some((track) => track.id === curId) && active === 'pl:scpl:' + p.id}
-            art={<PlaylistCover p={{ id: p.id, name: p.name, ids: [], created: 0, artworkUrl: p.artworkUrl }} className="h-10 w-10 rounded-[12px]" />}
-            onClick={() => nav({ name: 'playlist', id: `scpl:${p.id}` })}
-          />
-        ))}
+        {ytmusicConnected && (
+          <>
+            <NavItem
+              k={'pl:' + YTMUSIC_LIKED_ID}
+              icon="favorite"
+              label={t('ytmusicLiked')}
+              labelPrefix={<img src={soundcloudLogo} alt="" aria-hidden="true" />}
+              sub={tracksLabel(ytmusicLiked.length)}
+              active={active === 'pl:' + YTMUSIC_LIKED_ID}
+              expanded={expanded}
+              playing={playing && !!curId && ytmusicLiked.some((track) => track.id === curId) && active === 'pl:' + YTMUSIC_LIKED_ID}
+              onClick={() => nav({ name: 'playlist', id: YTMUSIC_LIKED_ID })}
+            />
+            {ytmusicPlaylists.map((p) => (
+              <NavItem
+                key={`yt:${p.playlistId}`}
+                k={'pl:' + ytmusicPlaylistId(p.playlistId)}
+                label={p.title}
+                labelPrefix={<img src={soundcloudLogo} alt="" aria-hidden="true" />}
+                sub={tracksLabel(p.trackCount)}
+                active={active === 'pl:' + ytmusicPlaylistId(p.playlistId)}
+                expanded={expanded}
+                playing={playing && !!curId && (library.get().ytmusicPlaylistTracks[p.playlistId] ?? []).some((track) => track.id === curId) && active === 'pl:' + ytmusicPlaylistId(p.playlistId)}
+                art={<YtMusicPlaylistCover playlistId={p.playlistId} title={p.title} artworkUrl={p.artworkUrl} />}
+                onClick={() => nav({ name: 'playlist', id: ytmusicPlaylistId(p.playlistId) })}
+              />
+            ))}
+          </>
+        )}
+        {showSoundCloud && (
+          <>
+            <NavItem
+              k={'pl:' + SOUNDCLOUD_LIKED_ID}
+              icon="favorite"
+              label={t('soundcloudLiked')}
+              labelPrefix={<img src={youtubeMusicLogo} alt="" aria-hidden="true" />}
+              sub={tracksLabel(soundcloudLiked.length)}
+              active={active === 'pl:' + SOUNDCLOUD_LIKED_ID}
+              expanded={expanded}
+              playing={false}
+              onClick={() => nav({ name: 'playlist', id: SOUNDCLOUD_LIKED_ID })}
+            />
+            {soundcloudPlaylists.map((p) => (
+              <NavItem
+                key={`sc:${p.id}`}
+                k={'pl:scpl:' + p.id}
+                label={p.name}
+                labelPrefix={<img src={youtubeMusicLogo} alt="" aria-hidden="true" />}
+                sub={tracksLabel(p.trackCount)}
+                active={active === 'pl:scpl:' + p.id}
+                expanded={expanded}
+                playing={playing && !!curId && (library.get().soundcloudPlaylistTracks[p.urn] ?? []).some((track) => track.id === curId) && active === 'pl:scpl:' + p.id}
+                art={<PlaylistCover p={{ id: p.id, name: p.name, ids: [], created: 0, artworkUrl: p.artworkUrl }} className="h-10 w-10 rounded-[12px]" />}
+                onClick={() => nav({ name: 'playlist', id: `scpl:${p.id}` })}
+              />
+            ))}
+          </>
+        )}
         {playlists.map((p) => (
           <NavItem
             key={p.id}
@@ -127,33 +179,6 @@ export function Sidebar({ mode }: { mode: 'inline' | 'drawer' }) {
             onClick={() => nav({ name: 'playlist', id: p.id })}
           />
         ))}
-        {ytmusicConnected && (
-          <>
-            <NavItem
-              k={'pl:' + YTMUSIC_LIKED_ID}
-              icon="favorite"
-              label={t('ytmusicLiked')}
-              sub={tracksLabel(ytmusicLiked.length)}
-              active={active === 'pl:' + YTMUSIC_LIKED_ID}
-              expanded={expanded}
-              playing={playing && !!curId && ytmusicLiked.some((track) => track.id === curId) && active === 'pl:' + YTMUSIC_LIKED_ID}
-              onClick={() => nav({ name: 'playlist', id: YTMUSIC_LIKED_ID })}
-            />
-            {ytmusicPlaylists.map((p) => (
-              <NavItem
-                key={`yt:${p.playlistId}`}
-                k={'pl:' + ytmusicPlaylistId(p.playlistId)}
-                label={p.title}
-                sub={tracksLabel(p.trackCount)}
-                active={active === 'pl:' + ytmusicPlaylistId(p.playlistId)}
-                expanded={expanded}
-                playing={playing && !!curId && (library.get().ytmusicPlaylistTracks[p.playlistId] ?? []).some((track) => track.id === curId) && active === 'pl:' + ytmusicPlaylistId(p.playlistId)}
-                art={<YtMusicPlaylistCover playlistId={p.playlistId} title={p.title} artworkUrl={p.artworkUrl} />}
-                onClick={() => nav({ name: 'playlist', id: ytmusicPlaylistId(p.playlistId) })}
-              />
-            ))}
-          </>
-        )}
       </div>
       <div className="side-bottom">
         <NavItem k="providers" icon="music_note" label={t('providers')} active={active === 'providers'} expanded={expanded} onClick={() => nav({ name: 'providers' })} />
