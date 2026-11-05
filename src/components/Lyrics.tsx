@@ -65,6 +65,9 @@ function SyncedLyrics({ lines, variant }: { lines: LyricLine[]; variant: 'panel'
   const [h, setH] = useState(0);
   const idle = useRef(0);
   const touchY = useRef(0);
+  const leadGap = variant === 'panel' && !!lines[0]?.gap;
+  const firstText = leadGap ? Math.max(1, lines.findIndex((l) => !l.gap)) : 0;
+  const intro = leadGap && active < firstText;
 
   useEffect(
     () =>
@@ -94,11 +97,15 @@ function SyncedLyrics({ lines, variant }: { lines: LyricLine[]; variant: 'panel'
   }, []);
 
   useLayoutEffect(() => {
-    const el = refs.current[Math.max(active, 0)];
+    const el = refs.current[intro ? firstText : Math.max(active, 0)];
     if (!el || !box.current) return;
+    if (intro) {
+      setY(el.offsetTop);
+      return;
+    }
     const anchor = variant === 'imm' ? 0.4 : 0.3;
     setY(el.offsetTop + el.offsetHeight / 2 - box.current.clientHeight * anchor);
-  }, [active, h, variant, lines]);
+  }, [active, h, variant, lines, intro, firstText]);
 
   const scrollBy = (dy: number) => {
     const H = box.current?.clientHeight ?? 0;
@@ -118,6 +125,7 @@ function SyncedLyrics({ lines, variant }: { lines: LyricLine[]; variant: 'panel'
       className="lyrics"
       data-v={variant}
       data-manual={isManual}
+      data-intro={intro}
       onWheel={(e) => scrollBy(e.deltaY)}
       onTouchStart={(e) => (touchY.current = e.touches[0].clientY)}
       onTouchMove={(e) => {
@@ -136,6 +144,8 @@ function SyncedLyrics({ lines, variant }: { lines: LyricLine[]; variant: 'panel'
                 refs.current[i] = el;
               }}
               className="lyric"
+              data-gap={l.gap && variant === 'panel' ? (i === 0 ? 'lead' : 'mid') : undefined}
+              data-wait={intro && i === firstText ? true : undefined}
               data-state={i === active ? 'active' : d < 0 ? 'past' : 'future'}
               style={{ '--d': clamp(d, 0, 10), '--dist': Math.min(Math.abs(d), 5) } as Vars}
               onClick={() => {
@@ -143,7 +153,9 @@ function SyncedLyrics({ lines, variant }: { lines: LyricLine[]; variant: 'panel'
                 if (!player.get().playing) toggle();
               }}
             >
-              {l.gap ? (
+              {l.gap && variant === 'panel' ? (
+                i === 0 ? null : <span className="lyric-pulse" aria-label="♪" />
+              ) : l.gap ? (
                 <span className="lyric-dots" aria-label="♪">
                   <i />
                   <i />
@@ -180,9 +192,13 @@ export function Lyrics({ track, variant }: { track: Track | null; variant: 'pane
   const st = useLyrics(track);
   if (!track) return null;
   if (st.status === 'loading')
-    return (
+    return variant === 'panel' ? (
+      <div className="lyrics-loading" role="progressbar" aria-label={t('lyricsLoading')} aria-busy="true">
+        <span />
+      </div>
+    ) : (
       <div className="lyrics-state">
-        <Loader size={variant === 'imm' ? 64 : 44} />
+        <Loader size={64} />
         <span>{t('lyricsLoading')}</span>
       </div>
     );
